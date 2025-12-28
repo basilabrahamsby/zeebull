@@ -57,7 +57,7 @@ class PublicPackageBookingOut(BaseModel):
 def get_public_rooms(db: Session = Depends(get_db), skip: int = 0, limit: int = 100):
     """Get all available rooms without authentication"""
     try:
-        rooms = db.query(Room).filter(Room.status == "Available").offset(skip).limit(limit).all()
+        rooms = db.query(Room).options(joinedload(Room.images)).filter(Room.status == "Available").offset(skip).limit(limit).all()
         return rooms
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching rooms: {str(e)}")
@@ -67,7 +67,7 @@ def get_public_rooms(db: Session = Depends(get_db), skip: int = 0, limit: int = 
 def get_public_packages(db: Session = Depends(get_db), skip: int = 0, limit: int = 100):
     """Get all packages without authentication"""
     try:
-        packages = db.query(Package).offset(skip).limit(limit).all()
+        packages = db.query(Package).options(joinedload(Package.images)).offset(skip).limit(limit).all()
         return packages
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching packages: {str(e)}")
@@ -77,7 +77,10 @@ def get_public_packages(db: Session = Depends(get_db), skip: int = 0, limit: int
 def get_public_food_items(db: Session = Depends(get_db)):
     """Get all food items without authentication"""
     try:
-        food_items = db.query(FoodItem).all()
+        food_items = db.query(FoodItem).options(
+            joinedload(FoodItem.images),
+            joinedload(FoodItem.category)
+        ).all()
         return food_items
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching food items: {str(e)}")
@@ -97,7 +100,7 @@ def get_public_food_categories(db: Session = Depends(get_db)):
 def get_public_services(db: Session = Depends(get_db)):
     """Get all services without authentication"""
     try:
-        services = db.query(Service).all()
+        services = db.query(Service).options(joinedload(Service.images)).all()
         return services
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching services: {str(e)}")
