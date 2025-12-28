@@ -4113,6 +4113,24 @@ export default function App() {
                             Powered by <span className="font-semibold">TeqMates</span>
                         </a>
                     </div>
+                    {/* DEBUG SECTION */}
+                    <div className="mt-8 bg-black text-white p-4 text-xs font-mono overflow-auto max-h-60 border-t-2 border-red-500">
+                        <h3 className="font-bold text-red-400">🔍 Image Path Debugger</h3>
+                        <div>Origin: {window.location.origin}</div>
+                        <div>Media Base URL: {getMediaBaseUrl()}</div>
+                        <div>
+                            Sample Food Item:
+                            {foodItems.length > 0 ? (
+                                <div>
+                                    Raw: {JSON.stringify(foodItems[0].images?.[0]?.image_url)}
+                                    <br />
+                                    Computed: {getImageUrl(foodItems[0].images?.[0]?.image_url)}
+                                    <br />
+                                    <img src={getImageUrl(foodItems[0].images?.[0]?.image_url)} className="w-20 h-20 border mt-2" alt="Debug" onError={(e) => { e.target.style.border = '2px solid red'; }} />
+                                </div>
+                            ) : 'No food items loaded'}
+                        </div>
+                    </div>
                 </footer>
             </div>
         </>
