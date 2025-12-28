@@ -706,6 +706,7 @@ const Inventory = () => {
   }, []);
   const [activeTab, setActiveTab] = useState("items");
   const [loading, setLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
 
   // Items state
@@ -1138,6 +1139,7 @@ const Inventory = () => {
   // Item handlers
   const handleItemSubmit = async (e) => {
     e.preventDefault();
+    setIsSubmitting(true);
     try {
       const formData = new FormData();
 
@@ -1226,6 +1228,8 @@ const Inventory = () => {
         message: "Failed to submit item: " + (error.response?.data?.detail || error.message),
         type: "error"
       });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -2628,9 +2632,9 @@ const Inventory = () => {
                                 onChange={(e) => handleRequisitionStatusChange(req.id, e.target.value)}
                                 className={`w-full px-3 py-2 text-sm border rounded-lg ${req.status === 'approved' ? 'bg-green-50 text-green-700 border-green-200' :
                                   req.status === 'issued' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                                  req.status === 'rejected' ? 'bg-red-50 text-red-700 border-red-200' :
-                                    req.status === 'completed' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                                      'bg-yellow-50 text-yellow-700 border-yellow-200'
+                                    req.status === 'rejected' ? 'bg-red-50 text-red-700 border-red-200' :
+                                      req.status === 'completed' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                                        'bg-yellow-50 text-yellow-700 border-yellow-200'
                                   }`}
                               >
                                 <option value="pending">Pending</option>
@@ -3553,6 +3557,7 @@ const Inventory = () => {
           units={units}
           setShowUnitForm={setShowUnitForm}
           onSubmit={handleItemSubmit}
+          isSubmitting={isSubmitting}
           onClose={() => {
             setShowItemForm(false);
             setEditingItem(null);

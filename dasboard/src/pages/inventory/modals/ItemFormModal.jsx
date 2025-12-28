@@ -14,6 +14,7 @@ const ItemFormModal = ({
     setShowUnitForm,
     onSubmit,
     onClose,
+    isSubmitting = false,
 }) => {
     // Fetch locations if not provided
     const [fetchedLocations, setFetchedLocations] = useState([]);
@@ -602,14 +603,23 @@ const ItemFormModal = ({
                             type="button"
                             onClick={onClose}
                             className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-medium transition-colors"
+                            disabled={isSubmitting}
                         >
                             Cancel
                         </button>
                         <button
                             type="submit"
-                            className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium transition-colors shadow-sm"
+                            disabled={isSubmitting}
+                            className={`px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium transition-colors shadow-sm ${isSubmitting ? 'opacity-70 cursor-not-allowed' : ''}`}
                         >
-                            Create Item
+                            {isSubmitting ? (
+                                <span className="flex items-center gap-2">
+                                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                    Creating...
+                                </span>
+                            ) : (
+                                "Create Item"
+                            )}
                         </button>
                     </div>
                 </form>
