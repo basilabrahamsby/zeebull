@@ -37,6 +37,21 @@ echo "Deploying Frontend to $APP_DIR/html..."
 sudo rm -rf $APP_DIR/html/*
 sudo cp -r build/* $APP_DIR/html/
 
+# 3.5. Userend Build (Guest Interface)
+echo "[3.5/7] Building Userend (Guest Interface)..."
+cd $REPO_DIR/userend
+# Install dependencies if package.json changed
+if [ -f "package.json" ]; then
+    npm install --legacy-peer-deps
+fi
+# Build
+npm run build
+# Deploy to webroot
+echo "Deploying Userend to $APP_DIR/userend_html..."
+sudo mkdir -p $APP_DIR/userend_html
+sudo rm -rf $APP_DIR/userend_html/*
+sudo cp -r build/* $APP_DIR/userend_html/
+
 # 4. Backend Setup
 echo "[4/7] Setting up Backend..."
 # Copy new backend files to application directory

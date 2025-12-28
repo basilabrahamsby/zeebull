@@ -12,12 +12,12 @@ export const getMediaBaseUrl = () => {
     return "http://localhost:8011";
   }
   if (typeof window !== "undefined" && isResortDeployment()) {
-    return `${window.location.origin}/resortfiles`;
+    return `${window.location.origin}/inventory/uploads`;
   }
   if (process.env.REACT_APP_MEDIA_BASE_URL) {
     return process.env.REACT_APP_MEDIA_BASE_URL;
   }
-  return "https://teqmates.com";
+  return "https://teqmates.com/inventory/uploads";
 };
 
 export const getApiBaseUrl = () => {
@@ -26,10 +26,10 @@ export const getApiBaseUrl = () => {
     return "http://localhost:8011/api";
   }
   if (typeof window !== "undefined" && isResortDeployment()) {
-    return `${window.location.origin}/resoapi/api`;
+    return `${window.location.origin}/inventoryapi/api`;
   }
   if (process.env.REACT_APP_API_BASE_URL) {
     return process.env.REACT_APP_API_BASE_URL;
   }
-  return "https://teqmates.com/resoapi/api";
+  return "https://teqmates.com/inventoryapi/api";
 };
