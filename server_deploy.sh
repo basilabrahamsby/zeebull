@@ -33,10 +33,15 @@ fi
 # Build
 npm run build
 # Deploy to webroot
-echo "Deploying Frontend to $APP_DIR/html..."
-sudo mkdir -p $APP_DIR/html
-sudo rm -rf $APP_DIR/html/*
-sudo cp -r build/* $APP_DIR/html/
+echo "Deploying Frontend to /var/www/html/inventory..."
+TARGET_DIR="/var/www/html/inventory"
+sudo mkdir -p $TARGET_DIR
+sudo rm -rf $TARGET_DIR/*
+sudo cp -r build/* $TARGET_DIR/
+# Create symlink for uploads to ensure they are accessible via Nginx default root
+echo "Linking uploads directory..."
+sudo ln -sf "$APP_DIR/ResortApp/uploads" "$TARGET_DIR/uploads"
+sudo chmod -R 755 $TARGET_DIR
 
 # 3.5. Userend Build (Guest Interface)
 echo "[3.5/7] Building Userend (Guest Interface)..."
@@ -48,10 +53,12 @@ fi
 # Build
 npm run build
 # Deploy to webroot
-echo "Deploying Userend to $APP_DIR/userend_html..."
-sudo mkdir -p $APP_DIR/userend_html
-sudo rm -rf $APP_DIR/userend_html/*
-sudo cp -r build/* $APP_DIR/userend_html/
+echo "Deploying Userend to /var/www/html/orchid..."
+TARGET_USER_DIR="/var/www/html/orchid"
+sudo mkdir -p $TARGET_USER_DIR
+sudo rm -rf $TARGET_USER_DIR/*
+sudo cp -r build/* $TARGET_USER_DIR/
+sudo chmod -R 755 $TARGET_USER_DIR
 
 # 4. Backend Setup
 echo "[4/7] Setting up Backend..."
