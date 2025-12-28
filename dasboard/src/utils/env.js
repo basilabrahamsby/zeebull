@@ -33,7 +33,7 @@ export const getMediaBaseUrl = () => {
 
   // For production deployments
   if (typeof window !== "undefined" && isInventoryDeployment()) {
-    return `${window.location.origin}/inventory/uploads`;
+    return `${window.location.origin}/inventory`;
   }
   if (typeof window !== "undefined" && isOrchidDeployment()) {
     return `${window.location.origin}/orchidfiles`;
