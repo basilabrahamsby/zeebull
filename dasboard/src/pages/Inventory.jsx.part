@@ -1,0 +1,67 @@
+  // Fetch Transactions with Pagination and Filters
+  const fetchTransactions = async (pageArg = 0, reset = false) => {
+    // If we are already loading and it's not a reset (load more), prevent double fetch
+    // Actually, simple isLoading check is enough in UI but good here too
+    if (isTransactionLoading && !reset) return;
+
+    setIsTransactionLoading(true);
+    try {
+      const limit = 50; 
+      const skip = pageArg * limit;
+
+      let query = `/inventory/transactions?limit=${limit}&skip=${skip}`;
+
+      // Add filters
+      if (transactionFilters.type && transactionFilters.type !== "all") query += `&type=${transactionFilters.type}`;
+      if (transactionFilters.category && transactionFilters.category !== "all") query += `&category=${transactionFilters.category}`;
+      if (transactionFilters.search) query += `&search=${transactionFilters.search}`;
+
+      // Date Logic
+      if (transactionFilters.dateRange !== "all") {
+        const now = new Date();
+        let start = new Date();
+        if (transactionFilters.dateRange === "today") start.setHours(0, 0, 0, 0);
+        else if (transactionFilters.dateRange === "week") start.setDate(now.getDate() - 7);
+        else if (transactionFilters.dateRange === "month") start.setMonth(now.getMonth() - 1);
+        else if (transactionFilters.dateRange === "custom") {
+          if (transactionFilters.startDate) start = new Date(transactionFilters.startDate);
+        }
+
+        if (transactionFilters.dateRange !== "custom" || transactionFilters.startDate) {
+          query += `&start_date=${start.toISOString()}`;
+        }
+        if (transactionFilters.endDate) {
+          const end = new Date(transactionFilters.endDate);
+          end.setHours(23, 59, 59, 999);
+          query += `&end_date=${end.toISOString()}`;
+        }
+      }
+
+      const res = await API.get(query);
+      const newTransactions = res.data || [];
+
+      setHasMoreTransactions(newTransactions.length === limit);
+
+      if (reset) {
+        setTransactions(newTransactions);
+      } else {
+        setTransactions((prev) => [...prev, ...newTransactions]);
+      }
+      setTransactionPage(pageArg);
+    } catch (error) {
+      console.error("Error fetching transactions:", error);
+    } finally {
+      setIsTransactionLoading(false);
+    }
+  };
+
+  // Re-fetch when filters change (debouncing is handled in child component's effect that updates state)
+  useEffect(() => {
+     if (activeTab === "transactions") {
+         fetchTransactions(0, true);
+     }
+  }, [transactionFilters]);
+
+  const handleLoadMoreTransactions = () => {
+      fetchTransactions(transactionPage + 1, false);
+  };

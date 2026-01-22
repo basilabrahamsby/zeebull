@@ -1,5 +1,6 @@
+# app/main.py - Trigger Reload
 from fastapi import FastAPI, Request, HTTPException
-# Force Reload Fix 11 (Variable Name Fix)
+# Force Reload Fix 14 (Trigger Reload for Bill Filter Fix)
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -41,6 +42,9 @@ from app.api import (
     account,
     gst_reports,
     notification,
+    notification,
+    activity,
+    frontend, # Added frontend module
 )
 from app.api import reports_module
 
@@ -181,6 +185,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Temporarily disabled - requires PyJWT installation
+# from app.core.middleware import ActivityLoggingMiddleware
+# app.add_middleware(ActivityLoggingMiddleware)
+
+
 # Performance monitoring and caching middleware
 class PerformanceMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
@@ -276,8 +285,9 @@ app.include_router(account.router, prefix="/api", tags=["Accounts"])
 app.include_router(gst_reports.router, prefix="/api", tags=["GST Reports"])
 app.include_router(reports_module.router, prefix="/api", tags=["Reports Module"])
 app.include_router(attendance.router, prefix="/api", tags=["Attendance"])
-# Notification system removed for performance
-# app.include_router(notification.router, prefix="/api", tags=["Notifications"])
+# Notification system re-enabled
+app.include_router(notification.router, prefix="/api", tags=["Notifications"])
+app.include_router(activity.router, prefix="/api/activity", tags=["Activity Logs"])
 
 # Include comprehensive reports router if it was imported successfully
 if comprehensive_reports is not None:
@@ -324,6 +334,9 @@ if public_module is not None:
         traceback.print_exc()
 else:
     print("[ERROR] Public router not imported, skipping registration")
+
+# Include frontend router (Resort Info, Gallery, etc.)
+app.include_router(frontend.router, prefix="/api", tags=["Frontend"])
 
 
 # Root route - Landing Page

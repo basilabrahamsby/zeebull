@@ -26,6 +26,10 @@ class Employee(BaseModel):
     # ✅ It must include 'user_id' to match the database model.
     user_id: Optional[int] = None
     
+    # Status fields
+    current_status: Optional[str] = "Off Duty"
+    is_clocked_in: bool = False
+    
     class Config:
         # Use from_attributes for Pydantic V2 and above
         from_attributes = True
@@ -36,6 +40,7 @@ class LeaveBase(BaseModel):
     from_date: date
     to_date: date
     reason: str
+    leave_type: Optional[str] = "Paid"
 
 class LeaveCreate(LeaveBase):
     pass
@@ -53,3 +58,25 @@ class EmployeeStatusOverview(BaseModel):
     on_sick_leave: List[Employee]
     on_unpaid_leave: List[Employee]
     class Config: from_attributes = True
+
+class SalaryPaymentBase(BaseModel):
+    month: str
+    year: int
+    month_number: int
+    basic_salary: float
+    allowances: float = 0.0
+    deductions: float = 0.0
+    payment_date: Optional[date] = None
+    payment_method: Optional[str] = "cash"
+    notes: Optional[str] = None
+
+class SalaryPaymentCreate(SalaryPaymentBase):
+    pass
+
+class SalaryPaymentOut(SalaryPaymentBase):
+    id: int
+    employee_id: int
+    net_salary: float
+    payment_status: str
+    class Config:
+        from_attributes = True

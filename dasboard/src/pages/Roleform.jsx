@@ -194,7 +194,8 @@ const RoleForm = () => {
         setForm({ name: "", permissions: [] });
         await fetchRoles();
       } else {
-        setError(editRoleId ? "Failed to update role" : "Failed to create role");
+        const errorMsg = err.response?.data?.detail || err.message || (editRoleId ? "Failed to update role" : "Failed to create role");
+        setError(errorMsg);
       }
     }
     setLoading(false);

@@ -9,6 +9,8 @@ class NotificationBase(BaseModel):
     message: str
     entity_type: Optional[str] = None
     entity_id: Optional[int] = None
+    recipient_id: Optional[int] = None
+
 
 class NotificationCreate(NotificationBase):
     pass

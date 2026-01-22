@@ -69,7 +69,7 @@
     "build": "craco build && npm run copy-assets",
     "test": "craco test",
     "eject": "react-scripts eject",
-    "copy-assets": "cp -r public/assets build/ || xcopy public\\assets build\\assets /E /I /H /Y 2>nul || true",
+    "copy-assets": "echo Skipping copy-assets",
     "lint": "eslint src --ext .js,.jsx,.ts,.tsx",
     "lint:fix": "eslint src --ext .js,.jsx,.ts,.tsx --fix",
     "format": "prettier --write src/**/*.{js,jsx,ts,tsx,json,css,md}"
@@ -90,5 +90,5 @@
       "last 1 safari version"
     ]
   },
-  "homepage": "/inventory"
+  "homepage": "/orchid/admin"
 }

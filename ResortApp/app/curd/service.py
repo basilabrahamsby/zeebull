@@ -9,7 +9,7 @@ from app.models.booking import Booking, BookingRoom
 from app.models.Package import PackageBooking, PackageBookingRoom
 from app.models.employee import Employee
 from app.models.room import Room
-from app.schemas.service import ServiceCreate, AssignedServiceCreate, AssignedServiceUpdate, ServiceInventoryItemBase
+from app.curd.notification import notify_service_assigned, notify_service_status_changed
 
 def create_service(
     db: Session,
@@ -628,6 +628,14 @@ def create_assigned_service(db: Session, assigned: AssignedServiceCreate):
                 raise ValueError(f"Room relationship not loaded for room_id={assigned_dict['room_id']}")
             
             print(f"[DEBUG] Relationships loaded: service={db_assigned.service.name}, employee={db_assigned.employee.name}, room={db_assigned.room.number}")
+            
+            # Notify about assignment
+            try:
+                recipient_id = db_assigned.employee.user_id if db_assigned.employee else None
+                notify_service_assigned(db, db_assigned.service.name, db_assigned.employee.name, db_assigned.room.number, db_assigned.id, recipient_id=recipient_id)
+            except Exception as e:
+                 print(f"Notification error: {e}")
+
             return db_assigned
         except Exception as rel_error:
             print(f"[ERROR] Error loading relationships: {str(rel_error)}")
@@ -714,7 +722,13 @@ def update_assigned_service_status(db: Session, assigned_id: int, update_data: A
         assigned.billing_status = update_data.billing_status
         print(f"[DEBUG] Updated billing_status for service {assigned_id}: {assigned.billing_status}")
     
-    # If status changed to completed, set completed time and handle inventory returns
+    # Notify about status change
+    if new_status != str(old_status):
+        try:
+            recipient_id = assigned.employee.user_id if assigned.employee else None
+            notify_service_status_changed(db, assigned.service.name, new_status, assigned.id, recipient_id=recipient_id)
+        except Exception as e:
+             print(f"Notification error: {e}")
     if new_status == "completed" and str(old_status) != "completed":
         # Set completed time (last_used_at)
         assigned.last_used_at = datetime.utcnow()
@@ -798,8 +812,7 @@ def update_assigned_service_status(db: Session, assigned_id: int, update_data: A
                 
                 # Process inventory returns if provided
                 if update_data.inventory_returns and len(update_data.inventory_returns) > 0:
-                    with open("c:/releasing/orchid/debug_service.log", "a") as f:
-                        f.write(f"\n[{datetime.utcnow()}] Processing {len(update_data.inventory_returns)} returns for Svc {assigned_id}\n")
+                    print(f"[DEBUG] Processing {len(update_data.inventory_returns)} returns for Svc {assigned_id}")
                     
                     print(f"[DEBUG] Processing {len(update_data.inventory_returns)} inventory returns")
                     
@@ -829,8 +842,7 @@ def update_assigned_service_status(db: Session, assigned_id: int, update_data: A
                     
                     for return_item in update_data.inventory_returns:
                         try:
-                            with open("c:/releasing/orchid/debug_service.log", "a") as f:
-                                f.write(f"  - Item {return_item.assignment_id}, Qty {return_item.quantity_returned}\n")
+                            print(f"[DEBUG]   - Item {return_item.assignment_id}, Qty {return_item.quantity_returned}")
 
                             assignment = db.query(EmployeeInventoryAssignment).filter(
                                 EmployeeInventoryAssignment.id == return_item.assignment_id,
@@ -838,7 +850,6 @@ def update_assigned_service_status(db: Session, assigned_id: int, update_data: A
                             ).first()
                             
                             if not assignment:
-                                with open("c:/releasing/orchid/debug_service.log", "a") as f: f.write("    ! Assignment not found\n")
                                 print(f"[WARNING] Inventory assignment {return_item.assignment_id} not found for service {assigned_id}")
                                 continue
                             
@@ -900,7 +911,7 @@ def update_assigned_service_status(db: Session, assigned_id: int, update_data: A
                                     except ImportError:
                                         pass
                                     except Exception as ls_error:
-                                        with open("c:/releasing/orchid/debug_service.log", "a") as f: f.write(f"    ! LocStock Error: {str(ls_error)}\n")
+                                        print(f"[ERROR] LocStock Error: {str(ls_error)}")
                                 
                                 # Create return transaction
                                 try:
@@ -917,23 +928,21 @@ def update_assigned_service_status(db: Session, assigned_id: int, update_data: A
                                         created_by=None
                                     )
                                     db.add(transaction)
-                                    with open("c:/releasing/orchid/debug_service.log", "a") as f: f.write("    + Transaction Created\n")
+                                    print(f"[DEBUG] + Transaction Created for return")
                                 except Exception as tx_err:
-                                    with open("c:/releasing/orchid/debug_service.log", "a") as f: f.write(f"    ! Tx Error: {str(tx_err)}\n")
+                                    print(f"[ERROR] Tx Error: {str(tx_err)}")
                                     raise tx_err
 
                             else:
-                                with open("c:/releasing/orchid/debug_service.log", "a") as f: f.write(f"    ! Item {assignment.item_id} not found\n")
+                                print(f"[WARNING] Item {assignment.item_id} not found for return")
                         except Exception as loop_err:
-                             with open("c:/releasing/orchid/debug_service.log", "a") as f: f.write(f"    ! Loop Error: {str(loop_err)}\n")
+                             print(f"[ERROR] Loop Error in return processing: {str(loop_err)}")
                              raise loop_err
                 
         except ImportError:
-            with open("c:/releasing/orchid/debug_service.log", "a") as f: f.write("! ImportError\n")
             print("[WARNING] EmployeeInventoryAssignment model not found, skipping inventory return processing")
         except Exception as e:
-            with open("c:/releasing/orchid/debug_service.log", "a") as f: f.write(f"! FATAL: {str(e)}\n{traceback.format_exc()}\n")
-            print(f"[ERROR] Error processing inventory returns: {str(e)}")
+            print(f"[ERROR] Fatal error processing inventory returns: {str(e)}")
             print(traceback.format_exc())
             # Don't fail the status update if return processing fails
     

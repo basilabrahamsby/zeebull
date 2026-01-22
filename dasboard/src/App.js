@@ -26,6 +26,8 @@ import EmployeeManagement from "./pages/EmployeeManagement.jsx";
 import EmployeeDashboard from "./pages/EmployeeDashboard.jsx";
 import Inventory from "./pages/Inventory.jsx";
 import Settings from "./pages/Settings.jsx";
+import ActivityLogs from "./pages/ActivityLogs.jsx";
+import Laundry from "./pages/Laundry.jsx";
 
 const getRouterBasename = () => {
   if (typeof window === "undefined") {
@@ -33,8 +35,14 @@ const getRouterBasename = () => {
   }
   const path = window.location.pathname || "";
   // Check path first to determine basename, even on localhost
+  if (path.startsWith("/orchid/admin")) {
+    return "/orchid/admin";
+  }
   if (path.startsWith("/orchidadmin")) {
     return "/orchidadmin";
+  }
+  if (path.startsWith("/inventory/admin")) {
+    return "/inventory/admin";
   }
   if (path.startsWith("/inventory")) {
     return "/inventory";
@@ -47,11 +55,12 @@ const getRouterBasename = () => {
   if (hostname === "localhost" || hostname === "127.0.0.1" || hostname.startsWith("192.168.") || hostname.startsWith("10.")) {
     return "";
   }
-  return "/admin";
+  return "/orchid/admin";
 };
 
 function App() {
   const basename = getRouterBasename();
+  console.log("App component initializing with basename:", basename);
   return (
     <Router basename={basename}>
       <NotificationProvider>
@@ -205,10 +214,26 @@ function App() {
             }
           />
           <Route
+            path="/laundry"
+            element={
+              <ProtectedRoute requiredPermission="/inventory">
+                <Laundry />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/settings"
             element={
               <ProtectedRoute requiredPermission="/settings">
                 <Settings />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/activity-logs"
+            element={
+              <ProtectedRoute requiredPermission="/activity-logs">
+                <ActivityLogs />
               </ProtectedRoute>
             }
           />

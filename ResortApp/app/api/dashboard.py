@@ -1,9 +1,11 @@
 from fastapi import APIRouter, Depends
+from typing import Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import func, Date, or_
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 
 from app.utils.auth import get_db, get_current_user
+from app.models.user import User
 from app.models.checkout import Checkout
 from app.models.room import Room
 from app.models.booking import Booking, BookingRoom
@@ -13,7 +15,7 @@ from app.models.food_item import FoodItem
 from app.models.expense import Expense
 from app.models.employee import Employee
 from app.models.service import Service, AssignedService
-from app.models.inventory import InventoryItem, InventoryCategory, PurchaseMaster, Vendor
+from app.models.inventory import InventoryItem, InventoryCategory, PurchaseMaster, Vendor, StockIssue, StockIssueDetail, AssetRegistry, Location
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
@@ -220,6 +222,29 @@ def get_chart_data(db: Session = Depends(get_db), current_user: dict = Depends(g
         "weekly_performance": weekly_performance,
     }
 
+@router.get("/vendors/{vendor_id}/transactions")
+def get_vendor_transactions(
+    vendor_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get all transactions (Purchases) for a specific vendor.
+    """
+    purchases = db.query(PurchaseMaster).filter(PurchaseMaster.vendor_id == vendor_id).order_by(PurchaseMaster.purchase_date.desc()).all()
+    
+    results = []
+    for p in purchases:
+        results.append({
+            "id": p.id,
+            "date": p.purchase_date,
+            "number": p.purchase_number,
+            "amount": float(p.total_amount or 0),
+            "status": p.payment_status or "Due",
+            "remarks": p.remarks
+        })
+    return results
+
 @router.get("/reports")
 def get_reports_data(db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     """
@@ -275,11 +300,18 @@ def get_date_range(period: str):
 
 
 @router.get("/summary")
-def get_summary(period: str = "all", db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+def get_summary(
+    period: str = "all",
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
     """
     Provides a comprehensive summary of KPIs for a given period (day, week, month, all).
     """
-    start_date, end_date = get_date_range(period)
+    if period != "custom":
+        start_date, end_date = get_date_range(period)
 
     def apply_date_filter(query, date_column):
         """Applies a date range filter to a SQLAlchemy query if dates are provided."""
@@ -392,6 +424,29 @@ def get_summary(period: str = "all", db: Session = Depends(get_db), current_user
         inventory_categories_count = 0
         inventory_departments_count = 0
 
+    # Low Stock and Sellable Item Counts
+    low_stock_count = 0
+    sellable_items_count = 0
+    try:
+        low_stock_count = db.query(func.count(InventoryItem.id)).filter(
+            InventoryItem.current_stock <= InventoryItem.min_stock_level,
+            InventoryItem.current_stock > 0
+        ).scalar() or 0
+        sellable_items_count = db.query(func.count(InventoryItem.id)).filter(
+            InventoryItem.is_sellable_to_guest == True
+        ).scalar() or 0
+    except:
+        pass
+
+    # Inventory Value and Item Count
+    total_inventory_value = 0
+    inventory_items_count = 0
+    try:
+        total_inventory_value = db.query(func.sum(func.abs(InventoryItem.current_stock) * InventoryItem.unit_price)).scalar() or 0
+        inventory_items_count = db.query(func.count(InventoryItem.id)).scalar() or 0
+    except:
+        pass
+
     # Service Revenue KPI - Total service charges from assigned services
     total_service_revenue = 0
     try:
@@ -437,6 +492,77 @@ def get_summary(period: str = "all", db: Session = Depends(get_db), current_user
     except:
         vendor_count = 0
 
+    # Total Revenue (Checkout Grand Total)
+    total_revenue = 0
+    # GST / Tax Calculations
+    total_output_tax = 0.0
+    total_input_tax = 0.0
+
+    try:
+        # Use cast to Date for reliable comparison
+        revenue_query = apply_date_filter(db.query(Checkout), func.cast(Checkout.checkout_date, Date))
+        total_revenue = revenue_query.with_entities(func.sum(Checkout.grand_total)).scalar() or 0
+        total_output_tax = revenue_query.with_entities(func.sum(Checkout.tax_amount)).scalar() or 0.0
+        
+        print(f"Dashboard: Revenue found: {total_revenue}")
+
+        # Input Tax from Purchases
+        in_tax_query = apply_date_filter(db.query(PurchaseMaster), PurchaseMaster.purchase_date)
+        # Sum of CGST + SGST + IGST
+        total_input_tax = in_tax_query.with_entities(func.sum(PurchaseMaster.cgst + PurchaseMaster.sgst + PurchaseMaster.igst)).scalar() or 0.0
+        
+        # Fallback: If no realized revenue, estimate from Active Bookings (like in charts)
+        if total_revenue == 0:
+            print("Dashboard: Revenue is 0, attempting estimate from Bookings")
+            try:
+                # Estimate Room Revenue
+                room_est_query = apply_date_filter(db.query(Booking), Booking.check_in)
+                bookings_sample = room_est_query.limit(200).all()
+                
+                est_room_rev = 0.0
+                booking_ids = [b.id for b in bookings_sample]
+                
+                if booking_ids:
+                    # Get rooms for these bookings
+                    booking_rooms = db.query(BookingRoom).filter(BookingRoom.booking_id.in_(booking_ids)).all()
+                    room_ids = list(set([br.room_id for br in booking_rooms if br.room_id]))
+                    rooms_map = {}
+                    if room_ids:
+                         rooms = db.query(Room).filter(Room.id.in_(room_ids)).all()
+                         rooms_map = {r.id: r for r in rooms}
+                    
+                    for b in bookings_sample:
+                        nights = max(1, (b.check_out - b.check_in).days)
+                        for br in booking_rooms:
+                            if br.booking_id == b.id and br.room_id in rooms_map:
+                                room = rooms_map[br.room_id]
+                                if room and room.price:
+                                    est_room_rev += float(room.price) * nights
+                
+                total_revenue += est_room_rev
+                print(f"Dashboard: Added estimated room revenue: {est_room_rev}")
+
+            except Exception as ex:
+                print(f"Dashboard: Estimation failed: {ex}")
+
+    except Exception as e:
+        print(f"Error calculating revenue/tax: {e}")
+        total_revenue = 0
+
+    # Revenue by Payment Mode
+    revenue_by_mode = {}
+    try:
+        # Fix: Use payment_method instead of payment_mode (schema mismatch)
+        # Fix: Use Date cast for filter
+        rev_mode_q = apply_date_filter(db.query(Checkout.payment_method, func.sum(Checkout.grand_total)), func.cast(Checkout.checkout_date, Date))
+        rev_mode_q = rev_mode_q.group_by(Checkout.payment_method)
+        results = rev_mode_q.all()
+        for mode, amount in results:
+            if mode:
+                revenue_by_mode[mode] = float(amount or 0)
+    except Exception as e:
+        print(f"Error calculating revenue by mode: {e}")
+
     kpis = {
         "room_bookings": room_bookings_count,
         "package_bookings": package_bookings_count,
@@ -445,7 +571,11 @@ def get_summary(period: str = "all", db: Session = Depends(get_db), current_user
         "assigned_services": services_count,
         "completed_services": completed_services_count,
         "total_service_revenue": float(total_service_revenue) if total_service_revenue else 0,
-        
+        "total_revenue": float(total_revenue), 
+        "revenue_by_mode": revenue_by_mode, # Included
+        "total_output_tax": float(total_output_tax),
+        "total_input_tax": float(total_input_tax), 
+
         "food_orders": food_orders_count,
         "food_items_available": food_items_available,
         
@@ -460,6 +590,10 @@ def get_summary(period: str = "all", db: Session = Depends(get_db), current_user
         "total_purchases": float(total_purchases) if total_purchases else 0,
         "purchase_count": purchase_count,
         "vendor_count": vendor_count,
+        "low_stock_items_count": low_stock_count,
+        "sellable_items_count": sellable_items_count,
+        "total_inventory_value": float(total_inventory_value) if total_inventory_value else 0,
+        "inventory_items": inventory_items_count,
     }
 
     # Department-wise KPIs (Assets, Income, Expenses)
@@ -854,3 +988,327 @@ def get_department_details(department_name: str, db: Session = Depends(get_db)):
         traceback.print_exc()
         
     return details
+
+
+@router.get("/transactions")
+def get_transactions(
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get combined list of recent financial transactions (Income & Expense).
+    """
+    transactions = []
+    
+    try:
+        # 1. Income (Checkouts)
+        checkouts = db.query(Checkout).order_by(Checkout.checkout_date.desc()).limit(limit).all()
+        for c in checkouts:
+            transactions.append({
+                "id": f"INC-{c.id}",
+                "type": "Income",
+                "category": "Checkout",
+                "description": f"Room {c.room_number} - {c.guest_name}",
+                "amount": float(c.grand_total or 0),
+                "date": c.checkout_date,
+                "is_income": True
+            })
+
+        # 2. Expenses
+        expenses = db.query(Expense).order_by(Expense.date.desc()).limit(limit).all()
+        for e in expenses:
+            transactions.append({
+                "id": f"EXP-{e.id}",
+                "type": "Expense",
+                "category": e.category,
+                "description": e.description or "General Expense",
+                "amount": float(e.amount or 0),
+                "date": datetime.combine(e.date, datetime.min.time()) if isinstance(e.date, date) else e.date,
+                "is_income": False
+            })
+            
+        # 3. Purchases
+        purchases = db.query(PurchaseMaster).order_by(PurchaseMaster.purchase_date.desc()).limit(limit).all()
+        for p in purchases:
+            transactions.append({
+                "id": f"PUR-{p.id}",
+                "type": "Expense",
+                "category": "Inventory Purchase",
+                "description": f"PO {p.purchase_number} - {p.vendor.name if p.vendor else 'Unknown'}",
+                "amount": float(p.total_amount or 0),
+                "date": datetime.combine(p.purchase_date, datetime.min.time()) if isinstance(p.purchase_date, date) else p.purchase_date,
+                "is_income": False
+            })
+
+        # Sort
+        transactions.sort(key=lambda x: x['date'] or datetime.min, reverse=True)
+    except Exception as e:
+        print(f"Error fetching transactions: {e}")
+        
+    return transactions[:limit]
+
+
+@router.get("/pnl")
+def get_pnl(
+    period: str = "month",
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get P&L Statement data.
+    """
+    if period != "custom":
+        start_date, end_date = get_date_range(period)
+    
+    def apply_date_filter(query, date_column):
+        if start_date:
+            query = query.filter(date_column >= start_date)
+        if end_date:
+            query = query.filter(date_column < end_date)
+        return query
+
+    # Revenue
+    revenue_q = apply_date_filter(db.query(Checkout), Checkout.checkout_date)
+    room_rev = float(revenue_q.with_entities(func.sum(Checkout.room_total)).scalar() or 0)
+    food_rev = float(revenue_q.with_entities(func.sum(Checkout.food_total)).scalar() or 0)
+    service_rev = float(revenue_q.with_entities(func.sum(Checkout.service_total)).scalar() or 0)
+    other_rev = float(revenue_q.with_entities(func.sum(Checkout.package_total)).scalar() or 0)
+    total_rev = room_rev + food_rev + service_rev + other_rev
+    
+    # Expenses
+    # Operational
+    exp_q = apply_date_filter(db.query(Expense.category, func.sum(Expense.amount)).group_by(Expense.category), Expense.date)
+    expenses_by_cat = [{"category": c, "amount": float(a or 0)} for c, a in exp_q.all()]
+    total_ops_exp = sum(e['amount'] for e in expenses_by_cat)
+    
+    # Purchases
+    purch_q = apply_date_filter(db.query(PurchaseMaster), PurchaseMaster.purchase_date)
+    total_purchase = float(purch_q.with_entities(func.sum(PurchaseMaster.total_amount)).scalar() or 0)
+    
+    total_exp = total_ops_exp + total_purchase
+
+    # Revenue Breakdown by Payment Mode
+    payment_breakdown = {}
+    try:
+        # Fix: Use payment_method instead of payment_mode
+        mode_q = apply_date_filter(db.query(Checkout.payment_method, func.sum(Checkout.grand_total)), func.cast(Checkout.checkout_date, Date))
+        results = mode_q.group_by(Checkout.payment_method).all()
+        for mode, amt in results:
+            if mode: 
+                payment_breakdown[mode] = float(amt or 0)
+    except Exception as e:
+        print(f"Error in PnL payment mode breakdown: {e}")
+    
+    return {
+        "revenue": {
+            "room": room_rev,
+            "food": food_rev,
+            "service": service_rev,
+            "other": other_rev,
+            "total": total_rev,
+            "by_mode": payment_breakdown
+        },
+        "expenses": {
+            "operational": expenses_by_cat,
+            "purchases": total_purchase,
+            "total": total_exp
+        },
+        "net_profit": total_rev - total_exp
+    }
+
+@router.get("/department/{dept_name}")
+def get_department_details(
+    dept_name: str,
+    period: str = "month",
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if period != "custom":
+        start_date, end_date = get_date_range(period)
+    
+    def apply_date(q, col):
+        if start_date: 
+            q = q.filter(col >= start_date)
+        if end_date: 
+            q = q.filter(col <= end_date)
+        return q
+
+    # 1. Expenses
+    exp_q = db.query(func.sum(Expense.amount)).filter(Expense.department == dept_name)
+    exp_q = apply_date(exp_q, Expense.date)
+    total_expenses = exp_q.scalar() or 0.0
+
+    # 2. Income (Approximation)
+    total_income = 0.0
+    if dept_name == "Restaurant":
+         inc_q = db.query(func.sum(FoodOrder.total_amount)).filter(FoodOrder.status != "Cancelled")
+         if start_date: inc_q = inc_q.filter(func.date(FoodOrder.created_at) >= start_date)
+         if end_date: inc_q = inc_q.filter(func.date(FoodOrder.created_at) <= end_date)
+         total_income = inc_q.scalar() or 0.0
+    
+    # 3. Assets (Fixed assets in this department)
+    total_assets = 0.0
+    try:
+        # Fixed assets explicitly marked
+        fixed_assets_query = db.query(
+            func.sum(func.abs(InventoryItem.current_stock) * InventoryItem.unit_price)
+        ).join(InventoryCategory).filter(
+            InventoryCategory.parent_department == dept_name,
+            InventoryItem.is_asset_fixed == True,
+            InventoryItem.current_stock != 0
+        )
+        fixed_assets = fixed_assets_query.scalar() or 0
+        
+        # High-value items (likely assets even if not marked)
+        high_value_query = db.query(
+            func.sum(func.abs(InventoryItem.current_stock) * InventoryItem.unit_price)
+        ).join(InventoryCategory).filter(
+            InventoryCategory.parent_department == dept_name,
+            InventoryItem.is_asset_fixed == False,
+            InventoryItem.unit_price >= 10000,
+            InventoryItem.current_stock != 0
+        )
+        high_value_assets = high_value_query.scalar() or 0
+        
+        total_assets = float(fixed_assets) + float(high_value_assets)
+    except Exception as e:
+        print(f"Error calculating assets for {dept_name}: {e}")
+        total_assets = 0.0
+    
+    # 4. Capital Investment (Inventory purchases for this department)
+    # Use same logic as summary endpoint for consistency
+    capital_investment = 0.0
+    try:
+        from app.models.inventory import PurchaseDetail
+        purchase_query = db.query(PurchaseDetail).join(PurchaseMaster)
+        purchase_query = apply_date(purchase_query, PurchaseMaster.purchase_date)
+        
+        # Join with InventoryItem and InventoryCategory to filter by department
+        dept_purchases = purchase_query.join(
+            InventoryItem, PurchaseDetail.item_id == InventoryItem.id
+        ).join(
+            InventoryCategory, InventoryItem.category_id == InventoryCategory.id
+        ).filter(
+            InventoryCategory.parent_department == dept_name
+        ).with_entities(func.sum(PurchaseDetail.total_amount)).scalar() or 0
+        
+        capital_investment = float(dept_purchases) if dept_purchases else 0.0
+    except Exception as e:
+        print(f"Error calculating capital investment for {dept_name}: {e}")
+        capital_investment = 0.0
+    
+    # 5. Inventory Consumption (Stock Issued to Dept locations)
+    inventory_consumption = 0.0
+    try:
+        locs = db.query(Location.id).filter(Location.name.ilike(f"%{dept_name}%")).all()
+        loc_ids = [l[0] for l in locs]
+        
+        if loc_ids:
+            cons_q = db.query(func.sum(StockIssueDetail.quantity * InventoryItem.unit_price))\
+                .select_from(StockIssueDetail)\
+                .join(StockIssue)\
+                .join(InventoryItem)\
+                .filter(StockIssue.destination_location_id.in_(loc_ids))
+            
+            cons_q = apply_date(cons_q, StockIssue.created_at)
+            inventory_consumption = cons_q.scalar() or 0.0
+    except Exception as e:
+        print(f"Error calculating inventory consumption for {dept_name}: {e}")
+        inventory_consumption = 0.0
+
+    return {
+        "department": dept_name,
+        "income": round(float(total_income), 2),
+        "expenses": round(float(total_expenses), 2),
+        "regular_expenses": round(float(total_expenses), 2),
+        "inventory_consumption": round(float(inventory_consumption), 2),
+        "capital_investment": round(capital_investment, 2),
+        "assets": round(total_assets, 2)
+    }
+
+@router.get("/vendors/stats")
+def get_vendor_stats(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    vendors = db.query(Vendor).all()
+    stats = []
+    
+    for v in vendors:
+        # 1. Total Purchases (Amount owed to vendor)
+        purch_total = db.query(func.sum(PurchaseMaster.total_amount))\
+            .filter(PurchaseMaster.vendor_id == v.id)\
+            .scalar() or 0.0
+            
+        # 2. Total Payments (Expenses linked to Vendor - payments made)
+        # Note: Expense model doesn't have a status field
+        pay_total = db.query(func.sum(Expense.amount))\
+            .filter(Expense.vendor_id == v.id)\
+            .scalar() or 0.0
+            
+        # Balance = What we owe (purchases) - What we've paid (expenses)
+        balance = float(purch_total) - float(pay_total)
+        
+        if purch_total > 0 or pay_total > 0:
+            stats.append({
+                "id": v.id,
+                "name": v.name,
+                "company_name": v.company_name,
+                "total_purchases": round(float(purch_total), 2),
+                "total_payments": round(float(pay_total), 2),
+                "balance": round(balance, 2)
+            })
+            
+    stats.sort(key=lambda x: x['balance'], reverse=True)
+    return stats
+
+@router.get("/financial-trends")
+def get_financial_trends(db: Session = Depends(get_db)):
+    """
+    Returns monthly revenue, expense, and profit for the last 6 months.
+    """
+    trends = []
+    today = date.today()
+    
+    for i in range(5, -1, -1):
+        # Calculate month date (approx)
+        month_date = date(today.year, today.month, 1)
+        # Go back i months
+        y = month_date.year
+        m = month_date.month - i
+        while m <= 0:
+            m += 12
+            y -= 1
+        
+        start_date = date(y, m, 1)
+        next_m = m + 1
+        next_y = y
+        if next_m > 12:
+            next_m = 1
+            next_y += 1
+        end_date = date(next_y, next_m, 1)
+        
+        label = start_date.strftime("%b %Y")
+        
+        # Queries (Optimized/Simplified)
+        rev = float(db.query(func.sum(Checkout.grand_total)).filter(Checkout.checkout_date >= start_date, Checkout.checkout_date < end_date).scalar() or 0.0)
+        
+        exp = float(db.query(func.sum(Expense.amount)).filter(Expense.date >= start_date, Expense.date < end_date).scalar() or 0.0)
+        purch = float(db.query(func.sum(PurchaseMaster.total_amount)).filter(PurchaseMaster.purchase_date >= start_date, PurchaseMaster.purchase_date < end_date).scalar() or 0.0)
+        
+        total_exp = exp + purch
+        profit = rev - total_exp
+        
+        trends.append({
+            "month": label,
+            "revenue": round(float(rev), 2),
+            "expense": round(float(total_exp), 2),
+            "profit": round(float(profit), 2)
+        })
+        
+    return trends

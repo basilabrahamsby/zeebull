@@ -62,6 +62,11 @@ def create_employee_with_image(
     # ✅ Changed from image to image_url
     image_url: str,
     user_id: int,
+    # Leave balances with defaults
+    paid_leave_balance: int = 12,
+    sick_leave_balance: int = 12,
+    long_leave_balance: int = 5,
+    wellness_leave_balance: int = 5,
 ):
     # This part of the code is responsible for creating the new Employee object.
     new_employee = Employee(
@@ -72,6 +77,10 @@ def create_employee_with_image(
         # ✅ Pass image_url to the correct model field
         image_url=image_url,
         user_id=user_id,
+        paid_leave_balance=paid_leave_balance,
+        sick_leave_balance=sick_leave_balance,
+        long_leave_balance=long_leave_balance,
+        wellness_leave_balance=wellness_leave_balance,
     )
     db.add(new_employee)
     db.commit()

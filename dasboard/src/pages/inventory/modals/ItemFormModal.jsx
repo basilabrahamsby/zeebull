@@ -10,37 +10,11 @@ const ItemFormModal = ({
     categories,
     vendors,
     units,
-    locations = [], // Add locations prop with default empty array
     setShowUnitForm,
     onSubmit,
     onClose,
     isSubmitting = false,
 }) => {
-    // Fetch locations if not provided
-    const [fetchedLocations, setFetchedLocations] = useState([]);
-    const hasFetchedRef = React.useRef(false);
-
-    useEffect(() => {
-        // Only fetch once if locations prop is empty and we haven't fetched yet
-        if (locations.length === 0 && !hasFetchedRef.current) {
-            hasFetchedRef.current = true;
-            const fetchLocations = async () => {
-                try {
-                    const response = await API.get('/inventory/locations');
-                    setFetchedLocations(response.data || []);
-                } catch (error) {
-                    console.error('[ItemFormModal] Error fetching locations:', error);
-                    setFetchedLocations([]);
-                }
-            };
-            fetchLocations();
-        }
-    }, []);
-
-    // Use provided locations or fetched locations
-    const availableLocations = locations.length > 0 ? locations : fetchedLocations;
-    console.log('[ItemFormModal] Available locations:', availableLocations);
-
     // Get selected category name for conditional logic
     const selectedCategory = categories.find(
         (cat) => cat.id === parseInt(form.category_id),
@@ -59,20 +33,7 @@ const ItemFormModal = ({
     const isConsumable =
         categoryName.includes("consumable") || categoryName.includes("guest");
 
-    // Storage location options - use API locations if available, otherwise fallback to hardcoded
-    const storageLocations = availableLocations.length > 0
-        ? availableLocations.map(loc => loc.name || `${loc.building} - ${loc.room_area}`)
-        : [
-            "Cold Storage",
-            "Dry Store",
-            "Housekeeping Closet",
-            "Server Room",
-            "Warehouse A",
-            "Warehouse B",
-            "Main Store",
-            "Kitchen Store",
-            "Office Store",
-        ];
+    const allowsDecimal = form.unit === "kg" || form.unit === "liter" || form.unit?.toLowerCase().includes("kilogram") || form.unit?.toLowerCase().includes("litr");
 
     // Sub-category options based on main category
     const getSubCategories = () => {
@@ -255,24 +216,6 @@ const ItemFormModal = ({
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                                 />
                             </div>
-                            <div className="md:col-span-2">
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Item Image
-                                </label>
-                                <input
-                                    type="file"
-                                    accept="image/*"
-                                    onChange={(e) =>
-                                        setForm({ ...form, image: e.target.files[0] || null })
-                                    }
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                                />
-                                {form.image && (
-                                    <p className="text-xs text-gray-500 mt-1">
-                                        Selected: {form.image.name}
-                                    </p>
-                                )}
-                            </div>
                         </div>
                     </div>
 
@@ -291,16 +234,19 @@ const ItemFormModal = ({
                                 </label>
                                 <input
                                     type="number"
-                                    step="0.01"
+                                    step={allowsDecimal ? "0.01" : "1"}
                                     min="0"
                                     value={form.initial_stock || ""}
-                                    onChange={(e) =>
+                                    onChange={(e) => {
+                                        const val = e.target.value;
                                         setForm({
                                             ...form,
-                                            initial_stock: e.target.value ? parseFloat(e.target.value) : "",
-                                        })
-                                    }
-                                    placeholder="Leave empty for 0 stock"
+                                            initial_stock: val === ""
+                                                ? ""
+                                                : (allowsDecimal ? parseFloat(val) : parseInt(val)) || 0,
+                                        });
+                                    }}
+                                    placeholder={allowsDecimal ? "0.00" : "0"}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                                 />
                             </div>
@@ -310,40 +256,24 @@ const ItemFormModal = ({
                                 </label>
                                 <input
                                     type="number"
-                                    step="0.01"
+                                    step={allowsDecimal ? "0.01" : "1"}
                                     min="0"
                                     value={form.min_stock_level}
-                                    onChange={(e) =>
+                                    onChange={(e) => {
+                                        const val = e.target.value;
                                         setForm({
                                             ...form,
-                                            min_stock_level: parseFloat(e.target.value) || 0,
-                                        })
-                                    }
-                                    placeholder="0.00"
+                                            min_stock_level: allowsDecimal
+                                                ? (parseFloat(val) || 0)
+                                                : (parseInt(val) || 0),
+                                        });
+                                    }}
+                                    placeholder={allowsDecimal ? "0.00" : "0"}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                                 />
                                 <p className="text-xs text-gray-500 mt-1">
                                     System alerts when stock hits this
                                 </p>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Storage Location
-                                </label>
-                                <select
-                                    value={form.location || ""}
-                                    onChange={(e) =>
-                                        setForm({ ...form, location: e.target.value })
-                                    }
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                                >
-                                    <option value="">Select Location</option>
-                                    {storageLocations.map((loc) => (
-                                        <option key={loc} value={loc}>
-                                            {loc}
-                                        </option>
-                                    ))}
-                                </select>
                             </div>
                             <div className="flex items-center pt-6">
                                 <label className="flex items-center cursor-pointer">

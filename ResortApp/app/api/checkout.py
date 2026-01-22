@@ -17,7 +17,8 @@ from app.schemas.checkout import BillSummary, BillBreakdown, CheckoutFull, Check
 from app.utils.checkout_helpers import (
     calculate_late_checkout_fee, process_consumables_audit, process_asset_damage_check,
     deduct_room_consumables, trigger_linen_cycle, create_checkout_verification,
-    process_split_payments, generate_invoice_number, calculate_gst_breakdown
+    process_split_payments, generate_invoice_number, calculate_gst_breakdown,
+    calculate_consumable_charge
 )
 
 router = APIRouter(prefix="/bill", tags=["checkout"])
@@ -1005,34 +1006,60 @@ async def handleCompleteCheckoutRequest(
                                 ).limit(1).update({"is_active": False})
                                 print(f"[CHECKOUT] Deactivated Asset Mapping for {inv_item.name} in Room {checkout_request.room_number}")
 
-                    # STEP 5: Calculate charges for used items (if payable)
-                    if used_qty > 0:
-                        # CRITICAL: Only charge usage for items marked as sellable OR items with a price but NO limit
-                        limit = inv_item.complimentary_limit or 0
-                        chargeable_qty = max(0, used_qty - limit)
-                        
-                        # Complimentary items (Amenities like water) usually have is_sellable_to_guest=False
-                        # If it's NOT sellable, we only charge if it's explicitly over the limit
-                        is_sellable = getattr(inv_item, 'is_sellable_to_guest', True)
-                        
-                        if chargeable_qty > 0 and (is_sellable or limit > 0):
-                            # PRICE LOGIC:
-                            # 1. Use selling_price (MRP) if available
-                            # 2. Fallback to unit_price + GST (Investment recovery)
-                            price_to_use = float(inv_item.selling_price or 0.0)
-                            if price_to_use > 0:
-                                usage_charge = price_to_use * chargeable_qty
-                                print(f"[CHECKOUT] Usage charge for {inv_item.name}: {chargeable_qty} x ₹{price_to_use} (Selling Price)")
-                            else:
-                                price_base = float(inv_item.unit_price or 0.0)
-                                gst_multiplier = 1.0 + (float(inv_item.gst_rate or 0.0) / 100.0)
-                                price_to_use = price_base * gst_multiplier
-                                usage_charge = price_to_use * chargeable_qty
-                                print(f"[CHECKOUT] Usage charge for {inv_item.name}: {chargeable_qty} x ₹{price_to_use} (Unit Price + GST)")
 
+                    # --- CALCULATE VALID COMPLIMENTARY LIMIT FROM ISSUES ---
+                    # We need to know how many "Complimentary" items were issued to this room during the stay.
+                    # We scan StockIssueDetails for this room/booking.
+                    
+                    calculated_limit = 0
+                    if checkout_request.booking_id:
+                        from app.models.booking import Booking
+                        booking = db.query(Booking).filter(Booking.id == checkout_request.booking_id).first()
+                        if booking:
+                            # Sum up issued quantity where is_payable is False (Complimentary)
+                            # Filter by issue_date >= check_in to avoid counting previous guests' history
+                            # Also filter by destination = room_loc_id
+                            
+                            comp_issued_qty = (db.query(func.sum(StockIssueDetail.issued_quantity))
+                                .join(StockIssue)
+                                .filter(
+                                    StockIssue.destination_location_id == room_loc_id,
+                                    StockIssueDetail.item_id == item.item_id,
+                                    StockIssue.issue_date >= booking.check_in,
+                                    or_(StockIssueDetail.is_payable == False, StockIssueDetail.is_payable == None)
+                                )
+                                .scalar()) or 0.0
+                            
+                            calculated_limit = float(comp_issued_qty)
+                            print(f"[CHECKOUT] Found {calculated_limit} complimentary units issued for {inv_item.name} since {booking.check_in}")
+                    else:
+                        # Fallback if no booking ID (unlikely for occupied room, but safe fallback)
+                        # Maybe use Master Data or 0? 
+                        # User implies "assigned" limit matters. If we can't find assignment, use 0 or Master.
+                        calculated_limit = float(inv_item.complimentary_limit or 0.0)
+
+                    # Store this calculated limit in the item dict so billing logic sees it
+                    item_dict['complimentary_limit'] = calculated_limit
+                    limit = calculated_limit
+
+                    # STEP 5: Calculate charges for used items using unified helper logic
+                    if used_qty > 0:
+                        # Limit is already calculated above as 'calculated_limit'
+                        
+                        # Use central helper for consistent calculation
+                        usage_charge, price_to_use, actual_chargeable_qty = calculate_consumable_charge(inv_item, used_qty, limit_from_audit=limit)
+                        
+                        if usage_charge > 0:
                             item_dict['total_charge'] = item_dict.get('total_charge', 0) + usage_charge
-                            item_dict['payable_usage_qty'] = chargeable_qty
+                            item_dict['payable_usage_qty'] = actual_chargeable_qty
                             item_dict['unit_price'] = price_to_use 
+                            print(f"[CHECKOUT] Applied usage charge for {inv_item.name}: {actual_chargeable_qty} x ₹{price_to_use}")
+                        else:
+                            # Item is complimentary or under limit
+                            item_dict['total_charge'] = item_dict.get('total_charge', 0) + 0.0
+                            item_dict['payable_usage_qty'] = 0.0
+                            item_dict['unit_price'] = price_to_use
+                            print(f"[CHECKOUT] {inv_item.name} is COMPLIMENTARY/under limit (Used: {used_qty}, Limit: {limit})")
 
             # --- CHARGE CALCULATION (Missing/Damage) ---
             # ALWAYS charge for missing/damaged items using the best available price + tax
@@ -1861,6 +1888,7 @@ def get_checkout_details(checkout_id: int, db: Session = Depends(get_db), curren
                     "created_at": ass.assigned_at.isoformat() if ass.assigned_at else None
                 })
     
+    
     return {
         "id": checkout.id,
         "booking_id": checkout.booking_id,
@@ -2340,8 +2368,10 @@ def _calculate_bill_for_single_room(db: Session, room_number: str):
             else:
                 # Keep highest rental price seen or most recent
                 if float(d.rental_price or 0.0) > 0:
-                    rental_map[iid]["rental_price"] = float(d.rental_price or 0.0)
+                    rental_map[iid]["rental_price"] = max(rental_map[iid]["rental_price"], float(d.rental_price or 0.0))
 
+    print(f"DEBUG BILL CALC SINGLE START Room {room_number}")
+    
     # 2. Process Audit Data
     aggregated_audit = {} # item_id -> aggregated_item_data
     generic_assets = [] # Items without item_id
@@ -2360,16 +2390,26 @@ def _calculate_bill_for_single_room(db: Session, room_number: str):
                     "damage_qty": 0.0,
                     "missing_qty": 0.0,
                     "allocated_stock": 0.0,
-                    "provided_bad_charge": 0.0
+                    "provided_bad_charge": 0.0,
+                    "complimentary_qty": 0.0
                 }
             
-            aggregated_audit[iid]["used_qty"] += float(item_data.get('used_qty', 0))
-            aggregated_audit[iid]["damage_qty"] += float(item_data.get('damage_qty', 0))
-            aggregated_audit[iid]["missing_qty"] += float(item_data.get('missing_qty', 0))
-            aggregated_audit[iid]["provided_bad_charge"] += float(item_data.get('damage_charge', 0) or item_data.get('missing_item_charge', 0) or item_data.get('total_charge', 0) or 0)
+            aggregated_audit[iid]["used_qty"] = max(aggregated_audit[iid]["used_qty"], float(item_data.get('used_qty', 0)))
+            aggregated_audit[iid]["damage_qty"] = max(aggregated_audit[iid]["damage_qty"], float(item_data.get('damage_qty', 0)))
+            aggregated_audit[iid]["missing_qty"] = max(aggregated_audit[iid]["missing_qty"], float(item_data.get('missing_qty', 0)))
+            aggregated_audit[iid]["provided_bad_charge"] = max(aggregated_audit[iid]["provided_bad_charge"], float(item_data.get('damage_charge', 0) or item_data.get('missing_item_charge', 0) or item_data.get('total_charge', 0) or 0))
+            aggregated_audit[iid]["complimentary_qty"] = max(aggregated_audit[iid]["complimentary_qty"], float(item_data.get('complimentary_qty', item_data.get('complimentary_limit', 0)) or 0))
             aggregated_audit[iid]["allocated_stock"] = max(aggregated_audit[iid]["allocated_stock"], float(item_data.get('allocated_stock', 0)))
 
+            # DEBUG: Print item details (Short)
+            if "coca" in str(item_data.get('item_name', '')).lower():
+                _tmp_inv = db.query(InventoryItem).filter(InventoryItem.id == iid).first()
+                _tmp_price = _tmp_inv.selling_price if _tmp_inv else "N/A"
+                _master_limit = _tmp_inv.complimentary_limit if _tmp_inv else "N/A"
+                print(f"DEBUG_COCA: Data={item_data} MasterLimit={_master_limit} SellPrice={_tmp_price}")
+
     # Process Aggregated Audit
+    print(f"!!! AGGREGATED AUDIT ITEMS: {list(aggregated_audit.keys())}")
     for item_id, item_data in aggregated_audit.items():
         used_qty = item_data['used_qty']
         damage_qty = item_data['damage_qty']
@@ -2399,60 +2439,139 @@ def _calculate_bill_for_single_room(db: Session, room_number: str):
         usage_charge = 0.0
         rental_unit_price = rm.get("rental_price", 0) or (selling_price if is_rentable else 0)
         
-        if used_qty > 0 or allocated_stock > 0:
-            limit = inv_item.complimentary_limit or 0
+        if used_qty > 0 or allocated_stock > 0 or missing_qty > 0:
+            limit = float(item_data.get('complimentary_qty', 0))
+            
+            # RE-CALCULATION FOR EXISTING BAD DATA
+            # If limit is 0, we check if we can fetch a more accurate limit from Stock History (Logic from handleCompleteCheckoutRequest)
+            # This fixes 'Get Bill' for requests that were completed with old buggy code.
+            if limit == 0 and checkout_request.booking_id:
+                # We need to perform the same StockIssue query here to 'repair' the limit view
+                from app.models.booking import Booking
+                from app.models.inventory import StockIssue, StockIssueDetail
+                
+                # We assume booking is linked. If not, we can try to fetch it or rely on existing 0
+                # Using a sub-query style or simple query (we are inside a function, imports are fine)
+                # But we need 'room_loc_id' which isn't explicitly available easily here except via room number lookup
+                # Let's try to infer room location id from room number
+                current_room_obj = db.query(Room).filter(Room.number == room_number).first()
+                current_booking_obj = db.query(Booking).filter(Booking.id == checkout_request.booking_id).first()
+                if current_room_obj and current_booking_obj and current_room_obj.inventory_location_id:
+                     # Relax date filter: Include items issued up to 1 day before check-in (Room Prep)
+                     # Convert check_in_dateto datetime if needed, or just subtract timedelta
+                     from datetime import timedelta
+                     cutoff_date = current_booking_obj.check_in_date - timedelta(days=1)
+                     
+                     comp_issued_qty = (db.query(func.sum(StockIssueDetail.issued_quantity))
+                        .join(StockIssue)
+                        .filter(
+                            StockIssue.destination_location_id == current_room_obj.inventory_location_id,
+                            StockIssueDetail.item_id == item_id,
+                            StockIssue.issue_date >= cutoff_date,
+                            or_(StockIssueDetail.is_payable == False, StockIssueDetail.is_payable == None)
+                        )
+                        .scalar()) or 0.0
+                     if comp_issued_qty > 0:
+                        # User said "you should set any limit" - implied: USE the found history limit!
+                        limit = float(comp_issued_qty)
+                        print(f"DEBUG RE-CALC LIMIT: Item {inv_item.name} Limit increased to {limit} from StockHistory (Since {cutoff_date})")
+
+            # Fallback: If still 0, check Master Data
+            if limit == 0:
+                 limit = float(inv_item.complimentary_limit or 0)
             if is_rentable:
-                usage_charge = max(used_qty, allocated_stock) * rental_unit_price
-            elif is_amenity:
-                if used_qty > max(2, limit):
-                    usage_charge = (used_qty - limit) * replacement_price
-            elif (getattr(inv_item, 'is_sellable_to_guest', True) or limit > 0):
-                usage_charge = max(0, used_qty - limit) * replacement_price
+                # Rentable Assets: charge rent only on existing, non-damaged items
+                total_audited_qty = max(used_qty, allocated_stock)
+                loss_qty = damage_qty + missing_qty
+                
+                if rental_unit_price > 0:
+                    rent_eligible_qty = max(0, total_audited_qty - loss_qty)
+                    usage_charge = rent_eligible_qty * rental_unit_price
+                else:
+                    usage_charge = total_audited_qty * rental_unit_price
+
+            elif is_amenity or (getattr(inv_item, 'is_sellable_to_guest', False) or limit > 0):
+                # Consumables / Amenities: Rely ONLY on used_qty (which represents total gone)
+                # This fixes the issue where calculated 'missing' is added to 'used', causing double counting.
+                total_consumed = used_qty 
+                
+                # FIX: Clamp total consumed to allocated stock to prevent double counting (Used + Missing > Allocated)
+                if allocated_stock > 0:
+                     total_consumed = min(total_consumed, allocated_stock)
+                
+                # Use central helper for consistent calculation (includes default 2 for amenities)
+                usage_charge, replacement_price, chargeable_qty = calculate_consumable_charge(inv_item, total_consumed, limit_from_audit=limit)
+                
+                # Since missing is handled in usage_charge for these items, we zero it out to prevent double-charging in bad_charge logic
+                missing_qty = 0 
+
 
         # 4. Calculate Damage / Missing Charge (BAD CHARGE)
+        # Note: missing_qty is 0 for consumables now as it's merged into usage
         calc_bad_charge = (damage_qty + missing_qty) * replacement_price
-        bad_charge = max(calc_bad_charge, float(item_data.get('provided_bad_charge', 0)))
-
-        # Append to sections
+        provided_bad_charge = float(item_data.get('provided_bad_charge', 0))
+        
+        if (is_amenity or (not is_rentable and not is_fixed_asset)) and damage_qty == 0 and missing_qty == 0:
+            bad_charge = 0.0
+        else:
+            bad_charge = max(calc_bad_charge, provided_bad_charge)
+        
+        total_item_charge = usage_charge + bad_charge
         if is_fixed_asset or is_rentable:
+            # ... (Rentable display logic remains same)
             display_qty = max(used_qty, allocated_stock)
-            charges.inventory_usage.append({
-                "date": checkout_request.completed_at or datetime.now(),
-                "item_name": clean_name,
-                "category": inv_item.category.name if inv_item.category else "Asset/Rental",
-                "quantity": display_qty,
-                "unit": inv_item.unit or "pcs",
-                "rental_price": rental_unit_price if is_rentable else (usage_charge / display_qty if display_qty > 0 else 0),
-                "rental_charge": usage_charge,
-                "is_rental": True,
-                "is_payable": (usage_charge > 0 or is_rentable),
-                "notes": "Verified from audit"
-            })
+            should_show_in_usage = (usage_charge > 0) or (used_qty > 0 and (damage_qty + missing_qty) < display_qty)
+            
+            if should_show_in_usage:
+                charges.inventory_usage.append({
+                    "date": checkout_request.completed_at or datetime.now(),
+                    "item_name": clean_name,
+                    "category": inv_item.category.name if inv_item.category else "Asset/Rental",
+                    "quantity": display_qty,
+                    "unit": inv_item.unit or "pcs",
+                    "rental_price": rental_unit_price if is_rentable else (usage_charge / display_qty if display_qty > 0 else 0),
+                    "rental_charge": usage_charge,
+                    "is_rental": True,
+                    "is_payable": (usage_charge > 0),
+                    "notes": "Verified from audit"
+                })
+            
             if usage_charge > 0:
                 charges.inventory_charges = (charges.inventory_charges or 0) + usage_charge
 
             if bad_charge > 0:
                 charges.asset_damage_charges = (charges.asset_damage_charges or 0) + bad_charge
+                label_suffix = " (Damaged)" if damage_qty > 0 else " (Missing)"
+                if damage_qty > 0 and missing_qty > 0: label_suffix = " (Damaged/Missing)"
                 charges.asset_damages.append({
-                    "item_name": f"{clean_name} (Damaged/Missing)",
+                    "item_name": f"{clean_name}{label_suffix}",
                     "replacement_cost": bad_charge,
                     "notes": f"Damaged: {damage_qty}, Missing: {missing_qty}"
                 })
         else:
-            # Consumables
-            total_qty = used_qty + missing_qty + damage_qty
-            total_item_charge = usage_charge + bad_charge
+            # Consumables Display
+            # FIX: Clamp display quantity to allocated stock as well to match billing logic
+            # For Consumables, we rely ONLY on used_qty to match billing calculation (ignoring missing_qty to prevent double count)
+            raw_total = used_qty 
+            total_qty = raw_total
+            if allocated_stock > 0:
+                total_qty = min(raw_total, allocated_stock)
+            
             if total_qty > 0 or total_item_charge > 0:
-                label = clean_name if total_qty <= 1 else f"{clean_name} (x{int(total_qty)})"
+                # For consumables, if everything is just consumption, keep label clean
+                label = clean_name
+                # REMOVED label quantity suffix as frontend handles it
                 
-                # Consumables include both usage and damage in one line usually, but let's separate if needed
-                # For now, keep consumables consolidated but sum charges correctly
+                # Only show breakdown if there's actual damage
+                if damage_qty > 0:
+                    label += f" ({int(total_qty - damage_qty)} Used, {int(damage_qty)} Damaged)"
+                
                 charges.consumables_charges = (charges.consumables_charges or 0) + total_item_charge
                 charges.consumables_items.append({
                     "item_id": item_id,
                     "item_name": label,
                     "actual_consumed": total_qty,
-                    "complimentary_limit": inv_item.complimentary_limit or 0,
+                    "complimentary_limit": limit,
                     "charge_per_unit": total_item_charge / total_qty if total_qty > 0 else replacement_price,
                     "total_charge": total_item_charge
                 })
@@ -2469,6 +2588,7 @@ def _calculate_bill_for_single_room(db: Session, room_number: str):
                 "notes": asset_data.get('notes', 'Asset damage')
             })
 
+
     # 5. Stock Issues NOT in Audit
     stock_issues = (db.query(StockIssue)
                     .options(joinedload(StockIssue.details).joinedload(StockIssueDetail.item))
@@ -2477,18 +2597,30 @@ def _calculate_bill_for_single_room(db: Session, room_number: str):
                     .all())
     
     for issue in stock_issues:
+
         for detail in issue.details:
             if not detail.item: continue
             clean_name = re.sub(r'\s*\(\s*[xX]\d+[^)]*\)', '', detail.item.name).strip()
             item_key = f"{clean_name.lower()}_{detail.item_id}"
-            if (int(detail.item_id) in processed_ids) or (item_key in seen_item_keys): continue
             
-            # processed_ids.add(int(detail.item_id)) # Don't add if we're just checking for extra charges?
-            # Actually, we should add it if we process it here.
+            if (int(detail.item_id) in processed_ids) or (item_key in seen_item_keys): continue
             
             r_price = float(detail.rental_price or 0.0)
             u_charge = 0.0
-            if r_price > 0:
+            
+            # Heuristic Fix: Check if this item is already listed in asset damages
+            # If so, do not charge rent here (Stock Issue Fallback)
+            is_damaged_in_bill = False
+            for dmg in charges.asset_damages:
+                # dmg['item_name'] usually has suffix " (Damaged)" or " (Missing)"
+                if clean_name in dmg['item_name']:
+                     is_damaged_in_bill = True
+                     break
+            
+            if is_damaged_in_bill:
+                print(f"[BILLING] Waiving fallback rent for {clean_name} as it is in damages")
+                u_charge = 0.0
+            elif r_price > 0:
                 u_charge = r_price * detail.issued_quantity
             elif getattr(detail, 'is_payable', False):
                 p = float(detail.item.selling_price or detail.item.unit_price or 0.0)
@@ -2532,15 +2664,34 @@ def _calculate_bill_for_single_room(db: Session, room_number: str):
                 
     # Summary & GST
     charges.room_gst = (charges.room_charges or 0) * (0.05 if (room.price or 0) < 5000 else (0.12 if (room.price or 0) <= 7500 else 0.18))
-    charges.package_gst = (charges.package_charges or 0) * 0.12
-    charges.food_gst = (charges.food_charges or 0) * 0.05
-    charges.service_gst = (charges.service_charges or 0) * 0.18
-    charges.consumables_gst = (charges.consumables_charges or 0) * 0.05
-    charges.inventory_gst = (charges.inventory_charges or 0) * 0.18
-    charges.asset_damage_gst = (charges.asset_damage_charges or 0) * 0.18
     
+    # Package GST Logic (Tiered)
+    if is_package:
+        p_price = package.price if package else 0
+        p_rate = 0
+        if is_whole_property:
+             p_rate = p_price / max(1, stay_days)
+        else:
+             p_rate = p_price
+        
+        pkg_gst_rate = 0.18
+        if p_rate < 5000: pkg_gst_rate = 0.05
+        elif p_rate <= 7500: pkg_gst_rate = 0.12
+        charges.package_gst = (charges.package_charges or 0) * pkg_gst_rate
+    else:
+        charges.package_gst = 0
+
+    charges.food_gst = (charges.food_charges or 0) * 0.05
+    charges.service_gst = (charges.service_charges or 0) * 0.05
+    charges.consumables_gst = (charges.consumables_charges or 0) * 0.05
+    charges.inventory_gst = (charges.inventory_charges or 0) * 0.05
+    charges.asset_damage_gst = 0.0 # Removed as per request (was 0.05)
+    
+    # Total calculation
     charges.total_gst = sum([charges.room_gst or 0, charges.food_gst or 0, charges.service_gst or 0, charges.package_gst or 0, charges.consumables_gst or 0, charges.inventory_gst or 0, charges.asset_damage_gst or 0])
     charges.total_due = sum([charges.room_charges or 0, charges.food_charges or 0, charges.service_charges or 0, charges.package_charges or 0, charges.consumables_charges or 0, charges.inventory_charges or 0, charges.asset_damage_charges or 0])
+
+
     
     # Add advance deposit info to charges
     charges.advance_deposit = getattr(booking, 'advance_deposit', 0.0) or 0.0
@@ -2861,47 +3012,58 @@ def _calculate_bill_for_entire_booking(db: Session, room_number: str):
             aggregated_room_audit[iid]["provided_bad_charge"] += float(item_data.get('damage_charge', 0) or item_data.get('missing_item_charge', 0) or item_data.get('total_charge', 0) or 0)
             aggregated_room_audit[iid]["allocated_stock"] = max(aggregated_room_audit[iid]["allocated_stock"], float(item_data.get('allocated_stock', 0)))
 
-        # Process Aggregated Audit for this room
+        # Process Aggregated Room Audit
         for item_id, item_data in aggregated_room_audit.items():
             used_qty = item_data['used_qty']
             damage_qty = item_data['damage_qty']
             missing_qty = item_data['missing_qty']
             allocated_stock = item_data['allocated_stock']
             
+            # Fetch Latest Master Info
             inv_item = db.query(InventoryItem).options(joinedload(InventoryItem.category)).filter(InventoryItem.id == item_id).first()
             if not inv_item: continue
 
-            clean_name = re.sub(r'\s*\(\s*[xX]\d+[^)]*\)', '', inv_item.name).strip()
-            item_key = (checkout_request.room_number, clean_name.lower(), item_id)
-            if item_key in seen_item_keys: continue
-            seen_item_keys.add(item_key)
-            processed_ids.add((checkout_request.room_number, item_id))
+            room_processed_ids.add((r_num, item_id))
+            # processed_ids.add(item_id) # For global tracking if needed - removed as it was causing issues
             
-            # Classification
+            clean_name = re.sub(r'\s*\(\s*[xX]\d+[^)]*\)', '', inv_item.name).strip()
+            item_key = f"{clean_name.lower()}_{item_id}"
+            if (r_num, item_key) in seen_item_keys: continue
+            seen_item_keys.add((r_num, item_key))
+            
+            # Master Prices
             selling_price = float(inv_item.selling_price or 0.0)
             replacement_price = selling_price if selling_price > 0 else (float(inv_item.unit_price or 0.0) * (1.0 + float(inv_item.gst_rate or 0.0) / 100.0))
             
+            # Classification
             rm = rental_map.get(item_id, {})
+            is_rentable = rm.get("rental_price", 0) > 0 or "rental" in (inv_item.category.name if inv_item.category else "").lower() or any(kw in clean_name.lower() for kw in ["tv", "bike", "cycle", "equipment"])
             is_fixed_asset = inv_item.is_asset_fixed or rm.get("is_asset", False)
-            cat_name = (inv_item.category.name if inv_item.category else "").lower()
-            is_rentable = "rental" in cat_name or (selling_price > 0 and is_fixed_asset) or any(kw in clean_name.lower() for kw in ["tv", "bike", "cycle", "equipment"])
             is_amenity = any(kw in clean_name.lower() for kw in ["water", "soap", "shampoo", "amenity"])
             
-            # Usage Charge
+            # 2. Calculate Rental/Usage Charge
             usage_charge = 0.0
             rental_unit_price = rm.get("rental_price", 0) or (selling_price if is_rentable else 0)
             
             if used_qty > 0 or allocated_stock > 0:
                 limit = inv_item.complimentary_limit or 0
                 if is_rentable:
-                    usage_charge = max(used_qty, allocated_stock) * rental_unit_price
-                elif is_amenity:
-                    if used_qty > max(2, limit):
-                        usage_charge = (used_qty - limit) * replacement_price
-                elif (getattr(inv_item, 'is_sellable_to_guest', True) or limit > 0):
-                    usage_charge = max(0, used_qty - limit) * replacement_price
+                    # User Request: No rental charge if item is damaged/missing (for rentable assets)
+                    total_audited_qty = max(used_qty, allocated_stock)
+                    
+                    # We identify "Rentable Asset" by rental_unit_price > 0
+                    if rental_unit_price > 0:
+                        # Subtract damaged and missing from the quantity that is charged rent
+                        rent_eligible_qty = max(0, total_audited_qty - (damage_qty + missing_qty))
+                        usage_charge = rent_eligible_qty * rental_unit_price
+                    else:
+                        usage_charge = total_audited_qty * rental_unit_price
+                elif is_amenity or (getattr(inv_item, 'is_sellable_to_guest', False) or limit > 0):
+                    # Use central helper for consistent calculation
+                    usage_charge, replacement_price, chargeable_qty = calculate_consumable_charge(inv_item, used_qty, limit_from_audit=limit)
 
-            # Damage Charge
+
+            # 3. Calculate Damage/Missing Charge
             calc_bad_charge = (damage_qty + missing_qty) * replacement_price
             bad_charge = max(calc_bad_charge, float(item_data.get('provided_bad_charge', 0)))
 
@@ -2909,8 +3071,8 @@ def _calculate_bill_for_entire_booking(db: Session, room_number: str):
                 display_qty = max(used_qty, allocated_stock)
                 charges.inventory_usage.append({
                     "date": checkout_request.completed_at or datetime.now(),
-                    "item_name": clean_name,
-                    "room_number": checkout_request.room_number,
+                    "room_number": r_num,
+                    "item_name": f"Room {r_num}: {clean_name}",
                     "category": inv_item.category.name if inv_item.category else "Asset/Rental",
                     "quantity": display_qty,
                     "unit": inv_item.unit or "pcs",
@@ -2918,24 +3080,33 @@ def _calculate_bill_for_entire_booking(db: Session, room_number: str):
                     "rental_charge": usage_charge,
                     "is_rental": True,
                     "is_payable": (usage_charge > 0 or is_rentable),
-                    "notes": f"Room {checkout_request.room_number}"
+                    "notes": f"Room {r_num} Audit"
                 })
                 if usage_charge > 0:
                     charges.inventory_charges = (charges.inventory_charges or 0) + usage_charge
-
+                
                 if bad_charge > 0:
                     charges.asset_damage_charges = (charges.asset_damage_charges or 0) + bad_charge
+                    label_suffix = " (Damaged)" if damage_qty > 0 else " (Missing)"
+                    if damage_qty > 0 and missing_qty > 0: label_suffix = " (Damaged/Missing)"
                     charges.asset_damages.append({
-                        "item_name": f"{clean_name} (Damaged/Missing - Room {checkout_request.room_number})",
+                        "item_name": f"Room {r_num}: {clean_name}{label_suffix}",
                         "replacement_cost": bad_charge,
-                        "notes": f"Damaged: {damage_qty}, Missing: {missing_qty}"
+                        "notes": f"Room {r_num} - Damaged: {damage_qty}, Missing: {missing_qty}"
                     })
             else:
                 # Consumables
                 total_qty = used_qty + missing_qty + damage_qty
                 total_item_charge = usage_charge + bad_charge
                 if total_qty > 0 or total_item_charge > 0:
-                    label = f"{clean_name} (Room {checkout_request.room_number})" if total_qty <= 1 else f"{clean_name} (x{int(total_qty)}) (Room {checkout_request.room_number})"
+                    label_suffix = ""
+                    if damage_qty > 0: label_suffix = " (Damaged)"
+                    elif missing_qty > 0: label_suffix = " (Missing)"
+                    
+                    label = f"Room {r_num}: {clean_name}"
+                    if total_qty > 1: label += f" (x{int(total_qty)})"
+                    label += label_suffix
+                    
                     charges.consumables_charges = (charges.consumables_charges or 0) + total_item_charge
                     charges.consumables_items.append({
                         "item_id": item_id,
@@ -2946,35 +3117,40 @@ def _calculate_bill_for_entire_booking(db: Session, room_number: str):
                         "total_charge": total_item_charge
                     })
 
-        # Process Generic Assets
+        # Process Generic Assets (No item_id)
         for asset_data in generic_assets:
             replacement_cost = float(asset_data.get('replacement_cost', 0))
             if replacement_cost > 0:
                 item_name = asset_data.get('item_name', 'Damaged Asset')
                 charges.asset_damage_charges = (charges.asset_damage_charges or 0) + replacement_cost
                 charges.asset_damages.append({
-                    "item_name": f"{item_name} (Damaged - Room {checkout_request.room_number})",
+                    "item_name": f"Room {r_num}: {item_name} (Damaged)",
                     "replacement_cost": replacement_cost,
                     "notes": asset_data.get('notes', 'Asset damage')
                 })
 
-    # 4.7. Extra Stock Issues NOT in Audit (covering all rooms)
-    all_stock_issues = (db.query(StockIssue)
-                        .options(joinedload(StockIssue.details).joinedload(StockIssueDetail.item))
-                        .join(Room, StockIssue.destination_location_id == Room.inventory_location_id)
-                        .filter(Room.id.in_(room_ids),
-                                StockIssue.issue_date >= check_in_datetime - timedelta(hours=24))
-                        .all())
+    # 5. Stock Issues NOT in Audit (Across all rooms)
+    stock_issues = (db.query(StockIssue)
+                    .options(joinedload(StockIssue.details).joinedload(StockIssueDetail.item))
+                    .filter(StockIssue.destination_location_id.in_(
+                        db.query(Room.inventory_location_id).filter(Room.id.in_(room_ids))
+                    ),
+                    StockIssue.issue_date >= check_in_datetime - timedelta(hours=24))
+                    .all())
     
-    for issue in all_stock_issues:
-        room_num = db.query(Room.number).filter(Room.inventory_location_id == issue.destination_location_id).scalar() or "Unknown"
+    for issue in stock_issues:
+        r_num = next((r.number for r in all_rooms if r.inventory_location_id == issue.destination_location_id), "Unknown")
         for detail in issue.details:
             if not detail.item: continue
             clean_name = re.sub(r'\s*\(\s*[xX]\d+[^)]*\)', '', detail.item.name).strip()
-            item_key = (room_num, clean_name.lower(), detail.item_id)
+            item_key = f"{clean_name.lower()}_{detail.item_id}"
             
-            if ((room_num, int(detail.item_id)) in processed_ids) or (item_key in seen_item_keys):
+            # Check per-room tracking
+            if ((r_num, int(detail.item_id)) in room_processed_ids) or ((r_num, item_key) in seen_item_keys):
                 continue
+            
+            room_processed_ids.add((r_num, int(detail.item_id)))
+            seen_item_keys.add((r_num, item_key))
             
             r_price = float(detail.rental_price or 0.0)
             u_charge = 0.0
@@ -2991,14 +3167,10 @@ def _calculate_bill_for_entire_booking(db: Session, room_number: str):
                 rep_price = s_price if s_price > 0 else (float(detail.item.unit_price or 0.0) * (1.0 + float(detail.item.gst_rate or 0.0) / 100.0))
                 bad_charge = detail.issued_quantity * rep_price
 
-            if u_charge > 0 or bad_charge > 0:
-                seen_item_keys.add(item_key)
-                processed_ids.add((room_num, int(detail.item_id)))
-
             charges.inventory_usage.append({
                 "date": issue.issue_date,
-                "item_name": f"{clean_name} (Room {room_num})",
-                "room_number": room_num,
+                "item_name": f"Room {r_num}: {clean_name}",
+                "room_number": r_num,
                 "category": detail.item.category.name if detail.item.category else "N/A",
                 "quantity": detail.issued_quantity,
                 "unit": detail.unit or "pcs",
@@ -3006,16 +3178,17 @@ def _calculate_bill_for_entire_booking(db: Session, room_number: str):
                 "rental_charge": u_charge,
                 "is_rental": r_price > 0,
                 "is_payable": u_charge > 0,
-                "notes": "Issued stock"
+                "notes": "Issued stock (unverified)"
             })
             if u_charge > 0:
                 charges.inventory_charges = (charges.inventory_charges or 0) + u_charge
+            
             if bad_charge > 0:
                 charges.asset_damage_charges = (charges.asset_damage_charges or 0) + bad_charge
                 charges.asset_damages.append({
-                    "item_name": f"{clean_name} (Damaged - Room {room_num})",
+                    "item_name": f"Room {r_num}: {clean_name} (Damaged)",
                     "replacement_cost": bad_charge,
-                    "notes": "Logged in system"
+                    "notes": f"Room {r_num} - Damaged stock issue"
                 })
 
 
@@ -3067,7 +3240,7 @@ def _calculate_bill_for_entire_booking(db: Session, room_number: str):
     # Service GST: Calculate based on individual service rates
     charges.service_gst = 0.0
     for ass in unbilled_services:
-        gst_rate = getattr(ass.service, 'gst_rate', 0.18) or 0.18
+        gst_rate = 0.05 # Fixed 5% for all services as per new rule
         amount = ass.override_charges if ass.override_charges is not None else ass.service.charges
         charges.service_gst += amount * gst_rate
         
@@ -3077,11 +3250,11 @@ def _calculate_bill_for_entire_booking(db: Session, room_number: str):
     
     # Inventory GST: 18% (default for most inventory items)
     if charges.inventory_charges and charges.inventory_charges > 0:
-        charges.inventory_gst = charges.inventory_charges * 0.18
+        charges.inventory_gst = charges.inventory_charges * 0.05
 
-    # Asset Damage GST: 18%
+    # Asset Damage GST: 0% (Removed as per request)
     if charges.asset_damage_charges and charges.asset_damage_charges > 0:
-        charges.asset_damage_gst = charges.asset_damage_charges * 0.18
+        charges.asset_damage_gst = 0.0
     
     # Total GST
     charges.total_gst = (charges.room_gst or 0) + (charges.food_gst or 0) + (charges.service_gst or 0) + (charges.package_gst or 0) + (charges.consumables_gst or 0) + (charges.inventory_gst or 0) + (charges.asset_damage_gst or 0)
@@ -4027,9 +4200,6 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, db: Ses
                 if checkout_request.inventory_data:
                     from app.models.inventory import InventoryItem
                     for item_data in checkout_request.inventory_data:
-                        item_id = item_data.get('item_id')
-                        used_qty = float(item_data.get('used_qty', 0))
-                        
                         if used_qty > 0:
                             inv_item = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
                             if inv_item and inv_item.is_sellable_to_guest:

@@ -45,6 +45,7 @@ import CategoriesTable from "./inventory/components/CategoriesTable";
 import VendorsTable from "./inventory/components/VendorsTable";
 import PurchasesTable from "./inventory/components/PurchasesTable";
 import ItemFormModal from "./inventory/modals/ItemFormModal";
+import LaundryManagementTab from "./inventory/components/LaundryManagementTab";
 import UnitFormModal from "./inventory/modals/UnitFormModal";
 import ItemHistoryModal from "./inventory/modals/ItemHistoryModal";
 
@@ -52,9 +53,30 @@ import ItemHistoryModal from "./inventory/modals/ItemHistoryModal";
 
 // Location Stock Details Modal  
 function LocationStockDetailsModal({ locationData, onClose }) {
-  if (!locationData) return null;
+  const [itemFilter, setItemFilter] = useState("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
 
-  const visibleItems = locationData.items?.filter(item => (item.location_stock || 0) > 0) || [];
+  const uniqueItems = useMemo(() => {
+    if (!locationData?.items) return [];
+    const items = locationData.items.map(i => i.item_name).filter(Boolean);
+    return [...new Set(items)].sort();
+  }, [locationData]);
+
+  const uniqueCategories = useMemo(() => {
+    if (!locationData?.items) return [];
+    const cats = locationData.items.map(i => i.category_name).filter(Boolean);
+    return [...new Set(cats)].sort();
+  }, [locationData]);
+
+  const visibleItems = useMemo(() => {
+    if (!locationData?.items) return [];
+    return locationData.items
+      .filter(item => (item.location_stock || 0) !== 0)
+      .filter(item => itemFilter === "all" || item.item_name === itemFilter)
+      .filter(item => categoryFilter === "all" || item.category_name === categoryFilter);
+  }, [locationData, itemFilter, categoryFilter]);
+
+  if (!locationData) return null;
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[10000] p-4">
@@ -255,6 +277,38 @@ function LocationStockDetailsModal({ locationData, onClose }) {
             <h3 className="text-lg font-semibold text-gray-800 mb-3">
               Items & Stock
             </h3>
+
+            {/* Filter Section - Matching Assets Model */}
+            <div className="bg-gray-50 rounded-lg p-4 mb-4 border border-gray-200">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Filter by Item</label>
+                  <select
+                    value={itemFilter}
+                    onChange={(e) => setItemFilter(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                  >
+                    <option value="all">All Items</option>
+                    {uniqueItems.map(name => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Filter by Category</label>
+                  <select
+                    value={categoryFilter}
+                    onChange={(e) => setCategoryFilter(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                  >
+                    <option value="all">All Categories</option>
+                    {uniqueCategories.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
@@ -477,6 +531,13 @@ function TransactionDetailsModal({
   const category = categories.find((c) => c.id === item?.category_id);
 
   // Helper to get transaction type label and color
+  const handleTransactionFilterChange = (newFilters) => {
+    setTransactionFilters(newFilters);
+  };
+
+  const handleLoadMoreTransactions = () => {
+    fetchTransactions(transactionPage + 1, false);
+  };
   const getTypeInfo = () => {
     if (transaction.transaction_type === "in") {
       return { label: "Purchase (In)", color: "bg-green-100 text-green-800" };
@@ -490,6 +551,8 @@ function TransactionDetailsModal({
         }
       }
       return { label, color: "bg-blue-100 text-blue-800" };
+    } else if (transaction.transaction_type === "waste_spoilage") {
+      return { label: "Waste/Spoilage", color: "bg-red-100 text-red-800" };
     } else if (transaction.transaction_type === "transfer_out") {
       // Extract destination location from notes
       let label = "Transfer Out";
@@ -724,6 +787,7 @@ const Inventory = () => {
   const [selectedLocationStock, setSelectedLocationStock] = useState(null);
   const [locationStockDetails, setLocationStockDetails] = useState(null);
   const [recipes, setRecipes] = useState([]);
+  const [laundryLogs, setLaundryLogs] = useState([]);
   const [foodItems, setFoodItems] = useState([]);
   const [showRecipeModal, setShowRecipeModal] = useState(false);
   const [editingRecipe, setEditingRecipe] = useState(null);
@@ -737,14 +801,176 @@ const Inventory = () => {
     ingredients: [],
   });
   const [transactionFilters, setTransactionFilters] = useState({
-    type: "all", // all, purchase, usage, waste, adjustment
+    type: "all",
     category: "all",
-    dateRange: "all", // today, week, month, custom, all
+    dateRange: "all",
     startDate: "",
     endDate: "",
+    search: "",
   });
+  const [transactionPage, setTransactionPage] = useState(0);
+  const [hasMoreTransactions, setHasMoreTransactions] = useState(true);
+  const [isTransactionLoading, setIsTransactionLoading] = useState(false);
+
   const [selectedTransaction, setSelectedTransaction] = useState(null);
   const [showTransactionDetails, setShowTransactionDetails] = useState(false);
+
+  // Asset filter and backend-paginated infinite scroll
+  const [assetItemFilter, setAssetItemFilter] = useState("all");
+  const [assetLocationFilter, setAssetLocationFilter] = useState("all");
+  const [assetPage, setAssetPage] = useState(0);
+  const [hasMoreAssets, setHasMoreAssets] = useState(true);
+  const [loadingMoreAssets, setLoadingMoreAssets] = useState(false);
+  const assetsPerPage = 50;
+
+  // Fetch asset mappings with pagination
+  const fetchAssetMappings = useCallback(async (page = 0, reset = false) => {
+    if (loadingMoreAssets) return;
+
+    setLoadingMoreAssets(true);
+    try {
+      const skip = page * assetsPerPage;
+      const res = await API.get(`/inventory/asset-mappings?skip=${skip}&limit=${assetsPerPage}`);
+      const newData = res.data || [];
+
+      if (reset) {
+        setAssetMappings(newData);
+      } else {
+        setAssetMappings(prev => [...prev, ...newData]);
+      }
+
+      setHasMoreAssets(newData.length === assetsPerPage);
+      setAssetPage(page);
+    } catch (error) {
+      console.error("Error fetching asset mappings:", error);
+    } finally {
+      setLoadingMoreAssets(false);
+    }
+  }, [loadingMoreAssets]);
+
+  // Filtered assets (client-side filtering)
+  const filteredAssets = useMemo(() => {
+    let filtered = assetMappings;
+
+    if (assetItemFilter !== "all") {
+      filtered = filtered.filter(m => m.item_name === assetItemFilter);
+    }
+
+    if (assetLocationFilter !== "all") {
+      filtered = filtered.filter(m => m.location_name === assetLocationFilter);
+    }
+
+    return filtered;
+  }, [assetMappings, assetItemFilter, assetLocationFilter]);
+
+  // Infinite scroll handler for assets
+  const handleAssetScroll = useCallback((e) => {
+    const bottom = e.target.scrollHeight - e.target.scrollTop <= e.target.clientHeight + 100;
+    if (bottom && hasMoreAssets && !loadingMoreAssets) {
+      fetchAssetMappings(assetPage + 1, false);
+    }
+  }, [hasMoreAssets, loadingMoreAssets, assetPage, fetchAssetMappings]);
+
+  // Get unique item names and locations for filter dropdowns
+  const uniqueAssetItems = useMemo(() => {
+    const items = new Set(assetMappings.map(m => m.item_name).filter(Boolean));
+    return Array.from(items).sort();
+  }, [assetMappings]);
+
+  const uniqueAssetLocations = useMemo(() => {
+    const locs = new Set(assetMappings.map(m => m.location_name).filter(Boolean));
+    return Array.from(locs).sort();
+  }, [assetMappings]);
+
+  // Initial load when Assets tab becomes active
+  // Initial load when Assets tab becomes active
+  useEffect(() => {
+    if (activeTab === "assets" && assetMappings.length === 0 && !loadingMoreAssets) {
+      fetchAssetMappings(0, true);
+    }
+  }, [activeTab]);
+
+  // Reset when filters change
+  useEffect(() => {
+    if (activeTab === "assets") {
+      setAssetMappings([]);
+      setAssetPage(0);
+      setHasMoreAssets(true);
+      fetchAssetMappings(0, true);
+    }
+  }, [assetItemFilter, assetLocationFilter]);
+
+  // Fetch Transactions with Pagination and Filters
+  const fetchTransactions = async (pageArg = 0, reset = false) => {
+    // If we are already loading and it's not a reset (load more), prevent double fetch
+    if (isTransactionLoading && !reset) return;
+
+    setIsTransactionLoading(true);
+    try {
+      const limit = 50;
+      const skip = pageArg * limit;
+
+      let query = `/inventory/transactions?limit=${limit}&skip=${skip}`;
+
+      // Add filters
+      if (transactionFilters.type && transactionFilters.type !== "all") query += `&type=${transactionFilters.type}`;
+      if (transactionFilters.category && transactionFilters.category !== "all") query += `&category=${transactionFilters.category}`;
+      if (transactionFilters.search) query += `&search=${transactionFilters.search}`;
+
+      // Date Logic
+      if (transactionFilters.dateRange !== "all") {
+        const now = new Date();
+        let start = new Date();
+        if (transactionFilters.dateRange === "today") start.setHours(0, 0, 0, 0);
+        else if (transactionFilters.dateRange === "week") start.setDate(now.getDate() - 7);
+        else if (transactionFilters.dateRange === "month") start.setMonth(now.getMonth() - 1);
+        else if (transactionFilters.dateRange === "custom") {
+          if (transactionFilters.startDate) start = new Date(transactionFilters.startDate);
+        }
+
+        if (transactionFilters.dateRange !== "custom" || transactionFilters.startDate) {
+          query += `&start_date=${start.toISOString()}`;
+        }
+        if (transactionFilters.endDate) {
+          const end = new Date(transactionFilters.endDate);
+          end.setHours(23, 59, 59, 999);
+          query += `&end_date=${end.toISOString()}`;
+        }
+      }
+
+      const res = await API.get(query);
+      const newTransactions = res.data || [];
+
+      setHasMoreTransactions(newTransactions.length === limit);
+
+      if (reset) {
+        setTransactions(newTransactions);
+      } else {
+        setTransactions((prev) => [...prev, ...newTransactions]);
+      }
+      setTransactionPage(pageArg);
+    } catch (error) {
+      console.error("Error fetching transactions:", error);
+    } finally {
+      setIsTransactionLoading(false);
+    }
+  };
+
+  const handleTransactionFilterChange = (newFilters) => {
+    setTransactionFilters(newFilters);
+  };
+
+  const handleLoadMoreTransactions = () => {
+    fetchTransactions(transactionPage + 1, false);
+  };
+
+  // Re-fetch when filters change
+  useEffect(() => {
+    if (activeTab === "transactions") {
+      fetchTransactions(0, true);
+    }
+  }, [transactionFilters]);
+
 
   // Form states
   const [showItemForm, setShowItemForm] = useState(false);
@@ -832,9 +1058,7 @@ const Inventory = () => {
     unit_price: 0,
     selling_price: "",
     gst_rate: 0,
-    location: "",
     barcode: "",
-    image: null,
     is_perishable: false,
     track_serial_number: false,
     is_sellable_to_guest: false,
@@ -949,6 +1173,15 @@ const Inventory = () => {
     ],
   });
 
+  const fetchLaundryLogs = useCallback(async () => {
+    try {
+      const res = await API.get("/inventory/laundry/items");
+      setLaundryLogs(res.data || []);
+    } catch (error) {
+      console.error("Error fetching laundry logs:", error);
+    }
+  }, []);
+
   // Optimized: Fetch essential data once on mount (categories, vendors, locations, items, purchases, waste)
   // This ensures Summary Cards are populated immediately regardless of the starting tab.
   useEffect(() => {
@@ -993,7 +1226,7 @@ const Inventory = () => {
     setLoading(true);
     try {
       // Use smaller limits for better performance, add pagination later if needed
-      const limit = activeTab === "locations" ? 10000 : 500; // Locations need all for room sync
+      const limit = (activeTab === "locations" || activeTab === "transactions") ? 5000 : 1000; // Increased limit for transactions to show full history
 
       if (activeTab === "items") {
         const res = await API.get(`/inventory/items?limit=${limit}`);
@@ -1010,8 +1243,7 @@ const Inventory = () => {
         const res = await API.get(`/inventory/purchases?limit=${limit}`);
         setPurchases(res.data || []);
       } else if (activeTab === "transactions") {
-        const res = await API.get(`/inventory/transactions?limit=${limit}`);
-        setTransactions(res.data || []);
+        fetchTransactions(0, true);
       } else if (activeTab === "requisitions") {
         const res = await API.get(`/inventory/requisitions?limit=${limit}`);
         setRequisitions(res.data || []);
@@ -1034,8 +1266,9 @@ const Inventory = () => {
         const res = await API.get("/inventory/locations?limit=10000");
         setLocations(res.data || []);
       } else if (activeTab === "assets") {
-        const res = await API.get(`/inventory/asset-mappings?limit=${limit}`);
-        setAssetMappings(res.data || []);
+        fetchAssetMappings(0, true);
+      } else if (activeTab === "laundry") {
+        fetchLaundryLogs();
       } else if (activeTab === "location-stock") {
         const res = await API.get("/inventory/stock-by-location");
         setLocationStock(res.data || []);
@@ -1103,7 +1336,7 @@ const Inventory = () => {
     } finally {
       setLoading(false);
     }
-  }, [activeTab, categories.length, vendors.length, locations.length, selectedLocationStock]);
+  }, [activeTab, categories.length, vendors.length, locations.length, selectedLocationStock, fetchAssetMappings]);
 
   // Summary calculations
   const summary = {
@@ -1145,30 +1378,26 @@ const Inventory = () => {
 
       // Add all form fields to FormData
       Object.keys(itemForm).forEach((key) => {
-        if (key === "image") {
-          if (itemForm.image) {
-            formData.append("image", itemForm.image);
-          }
-        } else if (
-          key === "max_stock_level" ||
-          key === "selling_price" ||
-          key === "maintenance_schedule_days" ||
-          key === "complimentary_limit" ||
-          key === "ingredient_yield_percentage" ||
-          key === "preferred_vendor_id" ||
-          key === "lead_time_days"
+        const value = itemForm[key];
+
+        // Skip null or undefined values to avoid sending "null" string
+        if (value === null || value === undefined) return;
+
+        // For specific optional numeric/ID fields, also skip empty strings
+        if (
+          (key === "max_stock_level" ||
+            key === "selling_price" ||
+            key === "maintenance_schedule_days" ||
+            key === "complimentary_limit" ||
+            key === "ingredient_yield_percentage" ||
+            key === "preferred_vendor_id" ||
+            key === "lead_time_days") &&
+          value === ""
         ) {
-          // Handle optional fields that might be empty strings
-          if (
-            itemForm[key] !== "" &&
-            itemForm[key] !== null &&
-            itemForm[key] !== undefined
-          ) {
-            formData.append(key, itemForm[key]);
-          }
-        } else {
-          formData.append(key, itemForm[key]);
+          return;
         }
+
+        formData.append(key, value);
       });
 
       if (editingItem) {
@@ -1202,9 +1431,7 @@ const Inventory = () => {
         unit_price: 0,
         selling_price: "",
         gst_rate: 0,
-        location: "",
         barcode: "",
-        image: null,
         is_perishable: false,
         track_serial_number: false,
         is_sellable_to_guest: false,
@@ -2138,6 +2365,7 @@ const Inventory = () => {
       await API.delete(url);
       addNotification({ title: "Success", message: "Asset unassigned successfully!", type: "success" });
       setShowUnassignModal(false);
+      setAssetMappings(prev => prev.filter(m => m.id !== unassignTargetId));
       fetchData();
     } catch (error) {
       console.error("Error unassigning asset:", error);
@@ -2249,6 +2477,8 @@ const Inventory = () => {
     );
   }, [assetMappings, searchTerm]);
 
+
+
   return (
     <DashboardLayout>
       <div className="bubbles-container">
@@ -2352,6 +2582,7 @@ const Inventory = () => {
               "waste",
               "locations",
               "assets",
+              "laundry",
               "location-stock",
               "recipe",
             ].map((tab) => (
@@ -2536,8 +2767,11 @@ const Inventory = () => {
                       items={items}
                       foodItems={foodItems}
                       categories={categories}
-                      filters={transactionFilters}
-                      setFilters={setTransactionFilters}
+                      onFilterChange={handleTransactionFilterChange} // We need to define this
+                      hasMore={hasMoreTransactions}
+                      isLoadingMore={isTransactionLoading}
+                      onLoadMore={handleLoadMoreTransactions}
+
                       onRefresh={fetchData}
                       onTransactionClick={(trans) => {
                         setSelectedTransaction(trans);
@@ -3148,85 +3382,157 @@ const Inventory = () => {
                 )}
                 {activeTab === "assets" && (
                   <>
+                    {/* Filter and Pagination Controls */}
+                    <div className="bg-white rounded-lg shadow p-4 mb-4">
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Filter by Item
+                          </label>
+                          <select
+                            value={assetItemFilter}
+                            onChange={(e) => {
+                              setAssetItemFilter(e.target.value);
+                              setAssetPage(1);
+                            }}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                          >
+                            <option value="all">All Items</option>
+                            {uniqueAssetItems.map(item => (
+                              <option key={item} value={item}>
+                                {item}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Filter by Location
+                          </label>
+                          <select
+                            value={assetLocationFilter}
+                            onChange={(e) => {
+                              setAssetLocationFilter(e.target.value);
+                            }}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                          >
+                            <option value="all">All Locations</option>
+                            {uniqueAssetLocations.map(loc => (
+                              <option key={loc} value={loc}>
+                                {loc}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Scroll Status */}
+                      <div className="flex items-center justify-between border-t pt-4">
+                        <div className="text-sm text-gray-600">
+                          Showing {filteredAssets.length} items {loadingMoreAssets && "(loading...)"}
+                        </div>
+                        {hasMoreAssets && !loadingMoreAssets && (
+                          <div className="text-sm text-indigo-600">
+                            Scroll down to load more...
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
                     {/* Mobile Card View */}
-                    <div className="md:hidden space-y-4">
-                      {filteredAssetMappings.length === 0 ? (
+                    <div
+                      className="md:hidden space-y-4 max-h-[600px] overflow-y-auto"
+                      onScroll={handleAssetScroll}
+                    >
+                      {filteredAssets.length === 0 && !loadingMoreAssets ? (
                         <div className="text-center py-8 text-gray-500">
                           No asset mappings found. Click "Assign Asset" to
                           create one.
                         </div>
                       ) : (
-                        filteredAssetMappings.map((mapping) => (
-                          <div
-                            key={mapping.id}
-                            className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm cursor-pointer hover:shadow-md transition-shadow"
-                            onClick={() => {
-                              setSelectedAsset(mapping);
-                              setShowAssetDetails(true);
-                            }}
-                          >
-                            <div className="flex justify-between items-start mb-2">
-                              <h3 className="font-semibold text-gray-900">
-                                {mapping.item_name || "N/A"}
-                              </h3>
-                              <span className="text-xs text-gray-500">
-                                {formatDateIST(
-                                  mapping.assigned_date || mapping.created_at,
-                                )}
-                              </span>
-                            </div>
-                            <div className="space-y-1 text-sm text-gray-600">
-                              <p>
-                                <span className="font-medium">Location:</span>{" "}
-                                {mapping.location_name || "-"}
-                              </p>
-                              <p>
-                                <span className="font-medium">Qty:</span>{" "}
-                                {mapping.quantity || 1}
-                              </p>
-                              {mapping.serial_number && (
+                        <>
+                          {filteredAssets.map((mapping) => (
+                            <div
+                              key={mapping.id}
+                              className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm cursor-pointer hover:shadow-md transition-shadow"
+                              onClick={() => {
+                                setSelectedAsset(mapping);
+                                setShowAssetDetails(true);
+                              }}
+                            >
+                              <div className="flex justify-between items-start mb-2">
+                                <h3 className="font-semibold text-gray-900">
+                                  {mapping.item_name || "N/A"}
+                                </h3>
+                                <span className="text-xs text-gray-500">
+                                  {formatDateIST(
+                                    mapping.assigned_date || mapping.created_at,
+                                  )}
+                                </span>
+                              </div>
+                              <div className="space-y-1 text-sm text-gray-600">
                                 <p>
-                                  <span className="font-medium">Serial #:</span>{" "}
-                                  {mapping.serial_number}
+                                  <span className="font-medium">Location:</span>{" "}
+                                  {mapping.location_name || "-"}
                                 </p>
-                              )}
+                                <p>
+                                  <span className="font-medium">Qty:</span>{" "}
+                                  {mapping.quantity || 1}
+                                </p>
+                                {mapping.serial_number && (
+                                  <p>
+                                    <span className="font-medium">Serial #:</span>{" "}
+                                    {mapping.serial_number}
+                                  </p>
+                                )}
+                              </div>
+                              <div className="flex gap-2 mt-3">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setEditingAssetMapping(mapping);
+                                    setAssetMappingForm({
+                                      location_id: mapping.location_id,
+                                      assets: [{
+                                        item_id: mapping.item_id,
+                                        serial_number: mapping.serial_number,
+                                        quantity: mapping.quantity || 1,
+                                        notes: mapping.notes
+                                      }]
+                                    });
+                                    setShowAssetMappingForm(true);
+                                  }}
+                                  className="flex-1 px-3 py-2 bg-indigo-600 text-white text-sm rounded hover:bg-indigo-700"
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleUnassignAsset(mapping.id);
+                                  }}
+                                  className="flex-1 px-3 py-2 bg-red-600 text-white text-sm rounded hover:bg-red-700">
+                                  Unassign
+                                </button>
+                              </div>
                             </div>
-                            <div className="flex gap-2 mt-3">
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setEditingAssetMapping(mapping);
-                                  setAssetMappingForm({
-                                    location_id: mapping.location_id,
-                                    assets: [{
-                                      item_id: mapping.item_id,
-                                      serial_number: mapping.serial_number,
-                                      quantity: mapping.quantity || 1,
-                                      notes: mapping.notes
-                                    }]
-                                  });
-                                  setShowAssetMappingForm(true);
-                                }}
-                                className="flex-1 px-3 py-2 bg-indigo-600 text-white text-sm rounded hover:bg-indigo-700"
-                              >
-                                Edit
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleUnassignAsset(mapping.id);
-                                }}
-                                className="flex-1 px-3 py-2 bg-red-600 text-white text-sm rounded hover:bg-red-700"
-                              >
-                                Unassign
-                              </button>
+                          ))}
+
+                          {/* Loading Indicator */}
+                          {loadingMoreAssets && (
+                            <div className="text-center py-4">
+                              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+                              <p className="text-sm text-gray-600 mt-2">Loading more...</p>
                             </div>
-                          </div>
-                        ))
+                          )}
+                        </>
                       )}
                     </div>
+
                     {/* Desktop Table View */}
-                    <div className="hidden md:block overflow-x-auto">
+                    <div className="hidden md:block overflow-x-auto max-h-[600px] overflow-y-auto" onScroll={handleAssetScroll}>
                       <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50">
                           <tr>
@@ -3251,7 +3557,7 @@ const Inventory = () => {
                           </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                          {filteredAssetMappings.length === 0 ? (
+                          {filteredAssets.length === 0 && !loadingMoreAssets ? (
                             <tr>
                               <td
                                 colSpan="5"
@@ -3262,73 +3568,93 @@ const Inventory = () => {
                               </td>
                             </tr>
                           ) : (
-                            filteredAssetMappings.map((mapping) => (
-                              <tr
-                                key={mapping.id}
-                                className="hover:bg-gray-50 cursor-pointer transition-colors"
-                                onClick={() => {
-                                  setSelectedAsset(mapping);
-                                  setShowAssetDetails(true);
-                                }}
-                              >
-                                <td className="px-2 sm:px-4 py-3 text-sm font-medium text-gray-900">
-                                  {mapping.item_name || "N/A"}
-                                </td>
-                                <td className="px-2 sm:px-4 py-3 text-sm text-gray-600 hidden md:table-cell">
-                                  {mapping.location_name || "-"}
-                                </td>
-                                <td className="px-2 sm:px-4 py-3 text-sm text-gray-600">
-                                  {mapping.quantity || 1}
-                                </td>
-                                <td className="px-2 sm:px-4 py-3 text-sm text-gray-600 hidden lg:table-cell">
-                                  {mapping.serial_number || "-"}
-                                </td>
-                                <td className="px-2 sm:px-4 py-3 text-sm text-gray-600">
-                                  {formatDateIST(
-                                    mapping.assigned_date || mapping.created_at,
-                                  )}
-                                </td>
-                                <td
-                                  className="px-2 sm:px-4 py-3"
-                                  onClick={(e) => e.stopPropagation()}
+                            <>
+                              {filteredAssets.map((mapping) => (
+                                <tr
+                                  key={mapping.id}
+                                  className="hover:bg-gray-50 cursor-pointer transition-colors"
+                                  onClick={() => {
+                                    setSelectedAsset(mapping);
+                                    setShowAssetDetails(true);
+                                  }}
                                 >
-                                  <div className="flex gap-2">
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setEditingAssetMapping(mapping);
-                                        setAssetMappingForm({
-                                          location_id: mapping.location_id,
-                                          assets: [{
-                                            item_id: mapping.item_id,
-                                            serial_number: mapping.serial_number,
-                                            quantity: mapping.quantity || 1,
-                                            notes: mapping.notes
-                                          }]
-                                        });
-                                        setShowAssetMappingForm(true);
-                                      }}
-                                      className="px-3 py-1 bg-indigo-600 text-white text-sm rounded hover:bg-indigo-700"
-                                    >
-                                      Edit
-                                    </button>
-                                    <button
-                                      onClick={() =>
-                                        handleUnassignAsset(mapping.id)
-                                      }
-                                      className="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700"
-                                    >
-                                      Unassign
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
-                            ))
+                                  <td className="px-2 sm:px-4 py-3 text-sm font-medium text-gray-900">
+                                    {mapping.item_name || "N/A"}
+                                  </td>
+                                  <td className="px-2 sm:px-4 py-3 text-sm text-gray-600 hidden md:table-cell">
+                                    {mapping.location_name || "-"}
+                                  </td>
+                                  <td className="px-2 sm:px-4 py-3 text-sm text-gray-600">
+                                    {mapping.quantity || 1}
+                                  </td>
+                                  <td className="px-2 sm:px-4 py-3 text-sm text-gray-600 hidden lg:table-cell">
+                                    {mapping.serial_number || "-"}
+                                  </td>
+                                  <td className="px-2 sm:px-4 py-3 text-sm text-gray-600">
+                                    {formatDateIST(
+                                      mapping.assigned_date || mapping.created_at,
+                                    )}
+                                  </td>
+                                  <td
+                                    className="px-2 sm:px-4 py-3"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <div className="flex gap-2">
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setEditingAssetMapping(mapping);
+                                          setAssetMappingForm({
+                                            location_id: mapping.location_id,
+                                            assets: [{
+                                              item_id: mapping.item_id,
+                                              serial_number: mapping.serial_number,
+                                              quantity: mapping.quantity || 1,
+                                              notes: mapping.notes
+                                            }]
+                                          });
+                                          setShowAssetMappingForm(true);
+                                        }}
+                                        className="px-3 py-1 bg-indigo-600 text-white text-sm rounded hover:bg-indigo-700"
+                                      >
+                                        Edit
+                                      </button>
+                                      <button
+                                        onClick={() =>
+                                          handleUnassignAsset(mapping.id)
+                                        }
+                                        className="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700"
+                                      >
+                                        Unassign
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+
+                              {/* Loading Row */}
+                              {loadingMoreAssets && (
+                                <tr>
+                                  <td colSpan="6" className="px-4 py-4 text-center">
+                                    <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-600"></div>
+                                    <span className="ml-2 text-sm text-gray-600">Loading more...</span>
+                                  </td>
+                                </tr>
+                              )}
+                            </>
                           )}
                         </tbody>
                       </table>
                     </div>
                   </>
+                )}
+                {activeTab === "laundry" && (
+                  <LaundryManagementTab
+                    logs={laundryLogs}
+                    onRefresh={fetchLaundryLogs}
+                    locations={locations}
+                    addNotification={addNotification}
+                  />
                 )}
                 {activeTab === "location-stock" && (
                   <LocationStockView
@@ -3515,518 +3841,556 @@ const Inventory = () => {
 
 
       {/* Unit Form Modal */}
-      {showUnitForm && (
-        <UnitFormModal
-          unit={newUnit}
-          setUnit={setNewUnit}
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (newUnit.value && newUnit.label) {
-              // Check if unit already exists
-              if (
-                !units.find(
-                  (u) => u.value.toLowerCase() === newUnit.value.toLowerCase(),
-                )
-              ) {
-                setUnits([
-                  ...units,
-                  { value: newUnit.value.toLowerCase(), label: newUnit.label },
-                ]);
-                setItemForm({ ...itemForm, unit: newUnit.value.toLowerCase() });
-                setNewUnit({ value: "", label: "" });
-                setShowUnitForm(false);
-              } else {
-                alert("Unit already exists!");
+      {
+        showUnitForm && (
+          <UnitFormModal
+            unit={newUnit}
+            setUnit={setNewUnit}
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (newUnit.value && newUnit.label) {
+                // Check if unit already exists
+                if (
+                  !units.find(
+                    (u) => u.value.toLowerCase() === newUnit.value.toLowerCase(),
+                  )
+                ) {
+                  setUnits([
+                    ...units,
+                    { value: newUnit.value.toLowerCase(), label: newUnit.label },
+                  ]);
+                  setItemForm({ ...itemForm, unit: newUnit.value.toLowerCase() });
+                  setNewUnit({ value: "", label: "" });
+                  setShowUnitForm(false);
+                } else {
+                  alert("Unit already exists!");
+                }
               }
-            }
-          }}
-          onClose={() => {
-            setShowUnitForm(false);
-            setNewUnit({ value: "", label: "" });
-          }}
-        />
-      )}
+            }}
+            onClose={() => {
+              setShowUnitForm(false);
+              setNewUnit({ value: "", label: "" });
+            }}
+          />
+        )
+      }
 
       {/* Item Form Modal */}
-      {showItemForm && (
-        <ItemFormModal
-          form={itemForm}
-          setForm={setItemForm}
-          categories={categories}
-          vendors={vendors}
-          units={units}
-          setShowUnitForm={setShowUnitForm}
-          onSubmit={handleItemSubmit}
-          isSubmitting={isSubmitting}
-          onClose={() => {
-            setShowItemForm(false);
-            setEditingItem(null);
-            setItemForm({
-              name: "",
-              item_code: "",
-              description: "",
-              category_id: "",
-              sub_category: "",
-              hsn_code: "",
-              unit: "pcs",
-              initial_stock: 0,
-              min_stock_level: 0,
-              max_stock_level: "",
-              unit_price: 0,
-              selling_price: "",
-              gst_rate: 0,
-              location: "",
-              barcode: "",
-              image: null,
-              is_perishable: false,
-              track_serial_number: false,
-              is_sellable_to_guest: false,
-              track_laundry_cycle: false,
-              is_asset_fixed: false,
-              maintenance_schedule_days: "",
-              complimentary_limit: "",
-              ingredient_yield_percentage: "",
-              preferred_vendor_id: "",
-              vendor_item_code: "",
-              lead_time_days: "",
-              is_active: true,
-            });
-          }}
-        />
-      )}
+      {
+        showItemForm && (
+          <ItemFormModal
+            form={itemForm}
+            setForm={setItemForm}
+            categories={categories}
+            vendors={vendors}
+            units={units}
+            setShowUnitForm={setShowUnitForm}
+            onSubmit={handleItemSubmit}
+            isSubmitting={isSubmitting}
+            onClose={() => {
+              setShowItemForm(false);
+              setEditingItem(null);
+              setItemForm({
+                name: "",
+                item_code: "",
+                description: "",
+                category_id: "",
+                sub_category: "",
+                hsn_code: "",
+                unit: "pcs",
+                initial_stock: 0,
+                min_stock_level: 0,
+                max_stock_level: "",
+                unit_price: 0,
+                selling_price: "",
+                gst_rate: 0,
+                barcode: "",
+                is_perishable: false,
+                track_serial_number: false,
+                is_sellable_to_guest: false,
+                track_laundry_cycle: false,
+                is_asset_fixed: false,
+                maintenance_schedule_days: "",
+                complimentary_limit: "",
+                ingredient_yield_percentage: "",
+                preferred_vendor_id: "",
+                vendor_item_code: "",
+                lead_time_days: "",
+                is_active: true,
+              });
+            }}
+          />
+        )
+      }
 
       {/* Category Form Modal */}
-      {showCategoryForm && (
-        <CategoryFormModal
-          form={categoryForm}
-          setForm={setCategoryForm}
-          onSubmit={handleCategorySubmit}
-          onClose={() => {
-            setShowCategoryForm(false);
-            setCategoryForm({
-              name: "",
-              description: "",
-              parent_department: "",
-              gst_tax_rate: 0,
-              classification: "",
-              hsn_sac_code: "",
-              default_gst_rate: 0,
-              cess_percentage: 0,
-              itc_eligibility: "Eligible",
-              is_capital_good: false,
-              is_perishable: false,
-              is_asset_fixed: false,
-              is_sellable: false,
-              track_laundry: false,
-              allow_partial_usage: false,
-              consumable_instant: false,
-            });
-          }}
-        />
-      )}
+      {
+        showCategoryForm && (
+          <CategoryFormModal
+            form={categoryForm}
+            setForm={setCategoryForm}
+            onSubmit={handleCategorySubmit}
+            onClose={() => {
+              setShowCategoryForm(false);
+              setCategoryForm({
+                name: "",
+                description: "",
+                parent_department: "",
+                gst_tax_rate: 0,
+                classification: "",
+                hsn_sac_code: "",
+                default_gst_rate: 0,
+                cess_percentage: 0,
+                itc_eligibility: "Eligible",
+                is_capital_good: false,
+                is_perishable: false,
+                is_asset_fixed: false,
+                is_sellable: false,
+                track_laundry: false,
+                allow_partial_usage: false,
+                consumable_instant: false,
+              });
+            }}
+          />
+        )
+      }
 
       {/* Vendor Form Modal */}
-      {showVendorForm && (
-        <VendorFormModal
-          form={vendorForm}
-          setForm={setVendorForm}
-          onSubmit={handleVendorSubmit}
-          isEditing={!!editingVendor}
-          onClose={() => {
-            setShowVendorForm(false);
-            setVendorForm({
-              name: "",
-              company_name: "",
-              gst_registration_type: "",
-              gst_number: "",
-              legal_name: "",
-              trade_name: "",
-              pan_number: "",
-              qmp_scheme: false,
-              msme_udyam_no: "",
-              contact_person: "",
-              email: "",
-              phone: "",
-              billing_address: "",
-              billing_state: "",
-              shipping_address: "",
-              distance_km: "",
-              address: "",
-              city: "",
-              state: "",
-              pincode: "",
-              country: "India",
-              is_msme_registered: false,
-              tds_apply: false,
-              rcm_applicable: false,
-              payment_terms: "",
-              preferred_payment_method: "",
-              account_holder_name: "",
-              bank_name: "",
-              account_number: "",
-              account_number_confirm: "",
-              ifsc_code: "",
-              branch_name: "",
-              upi_id: "",
-              upi_mobile_number: "",
-              notes: "",
-              is_active: true,
-            });
-          }}
-        />
-      )}
+      {
+        showVendorForm && (
+          <VendorFormModal
+            form={vendorForm}
+            setForm={setVendorForm}
+            onSubmit={handleVendorSubmit}
+            isEditing={!!editingVendor}
+            onClose={() => {
+              setShowVendorForm(false);
+              setVendorForm({
+                name: "",
+                company_name: "",
+                gst_registration_type: "",
+                gst_number: "",
+                legal_name: "",
+                trade_name: "",
+                pan_number: "",
+                qmp_scheme: false,
+                msme_udyam_no: "",
+                contact_person: "",
+                email: "",
+                phone: "",
+                billing_address: "",
+                billing_state: "",
+                shipping_address: "",
+                distance_km: "",
+                address: "",
+                city: "",
+                state: "",
+                pincode: "",
+                country: "India",
+                is_msme_registered: false,
+                tds_apply: false,
+                rcm_applicable: false,
+                payment_terms: "",
+                preferred_payment_method: "",
+                account_holder_name: "",
+                bank_name: "",
+                account_number: "",
+                account_number_confirm: "",
+                ifsc_code: "",
+                branch_name: "",
+                upi_id: "",
+                upi_mobile_number: "",
+                notes: "",
+                is_active: true,
+              });
+            }}
+          />
+        )
+      }
 
       {/* Purchase Details Modal */}
-      {showPurchaseDetails && selectedPurchase && (
-        <PurchaseDetailsModal
-          purchase={selectedPurchase}
-          onClose={() => {
-            setShowPurchaseDetails(false);
-            setSelectedPurchase(null);
-          }}
-          onUpdate={(updatedPurchase) => {
-            // Update the purchase in the list
-            setPurchases(
-              purchases.map((p) =>
-                p.id === updatedPurchase.id ? updatedPurchase : p,
-              ),
-            );
-            setSelectedPurchase(updatedPurchase);
-          }}
-        />
-      )}
+      {
+        showPurchaseDetails && selectedPurchase && (
+          <PurchaseDetailsModal
+            purchase={selectedPurchase}
+            onClose={() => {
+              setShowPurchaseDetails(false);
+              setSelectedPurchase(null);
+            }}
+            onUpdate={(updatedPurchase) => {
+              // Update the purchase in the list
+              setPurchases(
+                purchases.map((p) =>
+                  p.id === updatedPurchase.id ? updatedPurchase : p,
+                ),
+              );
+              setSelectedPurchase(updatedPurchase);
+            }}
+          />
+        )
+      }
 
       {/* Purchase Form Modal */}
-      {showPurchaseForm && (
-        <PurchaseFormModal
-          form={purchaseForm}
-          setForm={setPurchaseForm}
-          items={items}
-          foodItems={foodItems}
-          categories={categories}
-          vendors={vendors}
-          locations={locations}
-          purchases={purchases}
-          onSubmit={handlePurchaseSubmit}
-          onAddDetail={addPurchaseDetail}
-          onRemoveDetail={removePurchaseDetail}
-          onClose={() => {
-            setShowPurchaseForm(false);
-            setPurchaseForm({
-              purchase_number: "",
-              vendor_id: "",
-              purchase_date: getCurrentDateIST(),
-              expected_delivery_date: "",
-              invoice_number: "",
-              invoice_date: "",
-              gst_number: "",
-              payment_terms: "",
-              payment_status: "pending",
-              notes: "",
-              status: "draft",
-              details: [
-                {
-                  item_id: "",
-                  category: "",
-                  hsn_code: "",
-                  unit: "pcs",
-                  quantity: 0,
-                  unit_price: 0,
-                  gst_rate: 0,
-                  tax_inclusive: false,
-                  serial_batch: "",
-                  expiry_date: "",
-                  discount: 0,
-                },
-              ],
-            });
-          }}
-        />
-      )}
+      {
+        showPurchaseForm && (
+          <PurchaseFormModal
+            form={purchaseForm}
+            setForm={setPurchaseForm}
+            items={items}
+            foodItems={foodItems}
+            categories={categories}
+            vendors={vendors}
+            locations={locations}
+            purchases={purchases}
+            onSubmit={handlePurchaseSubmit}
+            onAddDetail={addPurchaseDetail}
+            onRemoveDetail={removePurchaseDetail}
+            onClose={() => {
+              setShowPurchaseForm(false);
+              setPurchaseForm({
+                purchase_number: "",
+                vendor_id: "",
+                purchase_date: getCurrentDateIST(),
+                expected_delivery_date: "",
+                invoice_number: "",
+                invoice_date: "",
+                gst_number: "",
+                payment_terms: "",
+                payment_status: "pending",
+                notes: "",
+                status: "draft",
+                details: [
+                  {
+                    item_id: "",
+                    category: "",
+                    hsn_code: "",
+                    unit: "pcs",
+                    quantity: 0,
+                    unit_price: 0,
+                    gst_rate: 0,
+                    tax_inclusive: false,
+                    serial_batch: "",
+                    expiry_date: "",
+                    discount: 0,
+                  },
+                ],
+              });
+            }}
+          />
+        )
+      }
 
       {/* Requisition Form Modal */}
-      {showRequisitionForm && (
-        <RequisitionFormModal
-          form={requisitionForm}
-          setForm={setRequisitionForm}
-          items={items}
-          foodItems={foodItems}
-          onSubmit={handleRequisitionSubmit}
-          onAddDetail={addRequisitionDetail}
-          onRemoveDetail={removeRequisitionDetail}
-          onClose={() => {
-            setShowRequisitionForm(false);
-            setRequisitionForm({
-              destination_department: "",
-              date_needed: "",
-              priority: "Normal",
-              notes: "",
-              details: [
-                {
-                  item_id: "",
-                  requested_quantity: 0,
-                  approved_quantity: null,
-                  unit: "pcs",
-                  notes: "",
-                },
-              ],
-            });
-          }}
-        />
-      )}
+      {
+        showRequisitionForm && (
+          <RequisitionFormModal
+            form={requisitionForm}
+            setForm={setRequisitionForm}
+            items={items}
+            foodItems={foodItems}
+            onSubmit={handleRequisitionSubmit}
+            onAddDetail={addRequisitionDetail}
+            onRemoveDetail={removeRequisitionDetail}
+            onClose={() => {
+              setShowRequisitionForm(false);
+              setRequisitionForm({
+                destination_department: "",
+                date_needed: "",
+                priority: "Normal",
+                notes: "",
+                details: [
+                  {
+                    item_id: "",
+                    requested_quantity: 0,
+                    approved_quantity: null,
+                    unit: "pcs",
+                    notes: "",
+                  },
+                ],
+              });
+            }}
+          />
+        )
+      }
 
       {/* Issue Form Modal */}
-      {showAdjustmentForm && (
-        <AdjustmentFormModal
-          form={adjustmentForm}
-          setForm={setAdjustmentForm}
-          items={items}
-          locations={locations}
-          onSubmit={handleAdjustmentSubmit}
-          onClose={() => setShowAdjustmentForm(false)}
-        />
-      )}
+      {
+        showAdjustmentForm && (
+          <AdjustmentFormModal
+            form={adjustmentForm}
+            setForm={setAdjustmentForm}
+            items={items}
+            locations={locations}
+            onSubmit={handleAdjustmentSubmit}
+            onClose={() => setShowAdjustmentForm(false)}
+          />
+        )
+      }
 
-      {showIssueForm && (
-        <IssueFormModal
-          form={issueForm}
-          setForm={setIssueForm}
-          items={items}
-          foodItems={foodItems}
-          locations={locations}
-          requisitions={requisitions}
-          onSubmit={handleIssueSubmit}
-          onAddDetail={addIssueDetail}
-          onRemoveDetail={removeIssueDetail}
-          onClose={() => {
-            setShowIssueForm(false);
-            setIssueForm({
-              requisition_id: "",
-              source_location_id: "",
-              destination_location_id: "",
-              issue_date: getCurrentDateIST(),
-              notes: "",
-              details: [
-                {
-                  item_id: "",
-                  issued_quantity: 0,
-                  unit: "pcs",
-                  batch_lot_number: "",
-                  cost: 0,
-                  notes: "",
-                },
-              ],
-            });
-          }}
-        />
-      )}
+      {
+        showIssueForm && (
+          <IssueFormModal
+            form={issueForm}
+            setForm={setIssueForm}
+            items={items}
+            foodItems={foodItems}
+            locations={locations}
+            requisitions={requisitions}
+            onSubmit={handleIssueSubmit}
+            onAddDetail={addIssueDetail}
+            onRemoveDetail={removeIssueDetail}
+            onClose={() => {
+              setShowIssueForm(false);
+              setIssueForm({
+                requisition_id: "",
+                source_location_id: "",
+                destination_location_id: "",
+                issue_date: getCurrentDateIST(),
+                notes: "",
+                details: [
+                  {
+                    item_id: "",
+                    issued_quantity: 0,
+                    unit: "pcs",
+                    batch_lot_number: "",
+                    cost: 0,
+                    notes: "",
+                  },
+                ],
+              });
+            }}
+          />
+        )
+      }
 
       {/* Waste Form Modal */}
-      {showWasteForm && (
-        <WasteLogFormModal
-          form={wasteForm}
-          setForm={setWasteForm}
-          items={items}
-          foodItems={foodItems}
-          locations={locations}
-          onSubmit={handleWasteSubmit}
-          onClose={() => {
-            setShowWasteForm(false);
-            setWasteForm({
-              item_id: "",
-              batch_number: "",
-              expiry_date: "",
-              quantity: 0,
-              unit: "pcs",
-              reason_code: "",
-              action_taken: "",
-              location_id: "",
-              waste_date: getCurrentDateIST(),
-              notes: "",
-              photo: null,
-            });
-          }}
-        />
-      )}
+      {
+        showWasteForm && (
+          <WasteLogFormModal
+            form={wasteForm}
+            setForm={setWasteForm}
+            items={items}
+            foodItems={foodItems}
+            locations={locations}
+            onSubmit={handleWasteSubmit}
+            onClose={() => {
+              setShowWasteForm(false);
+              setWasteForm({
+                item_id: "",
+                batch_number: "",
+                expiry_date: "",
+                quantity: 0,
+                unit: "pcs",
+                reason_code: "",
+                action_taken: "",
+                location_id: "",
+                waste_date: getCurrentDateIST(),
+                notes: "",
+                photo: null,
+              });
+            }}
+          />
+        )
+      }
 
       {/* Location Form Modal */}
-      {showLocationForm && (
-        <LocationFormModal
-          form={locationForm}
-          setForm={setLocationForm}
-          locations={locations}
-          onSubmit={handleLocationSubmit}
-          onClose={() => {
-            setShowLocationForm(false);
-            setLocationForm({
-              name: "",
-              location_type: "",
-              building: "",
-              floor: "",
-              room_area: "",
-              parent_location_id: "",
-              is_inventory_point: false,
-              description: "",
-              is_active: true,
-            });
-          }}
-        />
-      )}
+      {
+        showLocationForm && (
+          <LocationFormModal
+            form={locationForm}
+            setForm={setLocationForm}
+            locations={locations}
+            onSubmit={handleLocationSubmit}
+            onClose={() => {
+              setShowLocationForm(false);
+              setLocationForm({
+                name: "",
+                location_type: "",
+                building: "",
+                floor: "",
+                room_area: "",
+                parent_location_id: "",
+                is_inventory_point: false,
+                description: "",
+                is_active: true,
+              });
+            }}
+          />
+        )
+      }
 
       {/* Asset Mapping Form Modal */}
-      {showAssetMappingForm && (
-        <AssetMappingFormModal
-          form={assetMappingForm}
-          setForm={setAssetMappingForm}
-          items={items}
-          foodItems={foodItems}
-          locations={locations}
-          categories={categories}
-          isEditing={!!editingAssetMapping}
-          onSubmit={handleAssetMappingSubmit}
-          onClose={() => {
-            setShowAssetMappingForm(false);
-            setEditingAssetMapping(null);
-            setAssetMappingForm({
-              location_id: "",
-              assets: [{ item_id: "", serial_number: "", quantity: 1, notes: "" }],
-            });
-          }}
-        />
-      )}
+      {
+        showAssetMappingForm && (
+          <AssetMappingFormModal
+            form={assetMappingForm}
+            setForm={setAssetMappingForm}
+            items={items}
+            foodItems={foodItems}
+            locations={locations}
+            categories={categories}
+            isEditing={!!editingAssetMapping}
+            onSubmit={handleAssetMappingSubmit}
+            onClose={() => {
+              setShowAssetMappingForm(false);
+              setEditingAssetMapping(null);
+              setAssetMappingForm({
+                location_id: "",
+                assets: [{ item_id: "", serial_number: "", quantity: 1, notes: "" }],
+              });
+            }}
+          />
+        )
+      }
 
       {/* Requisition Details Modal */}
-      {showRequisitionDetails && selectedRequisition && (
-        <RequisitionDetailsModal
-          requisition={selectedRequisition}
-          items={items}
-          foodItems={foodItems}
-          onClose={() => {
-            setShowRequisitionDetails(false);
-            setSelectedRequisition(null);
-          }}
-        />
-      )}
+      {
+        showRequisitionDetails && selectedRequisition && (
+          <RequisitionDetailsModal
+            requisition={selectedRequisition}
+            items={items}
+            foodItems={foodItems}
+            onClose={() => {
+              setShowRequisitionDetails(false);
+              setSelectedRequisition(null);
+            }}
+          />
+        )
+      }
 
       {/* Issue Details Modal */}
-      {showIssueDetails && selectedIssue && (
-        <IssueDetailsModal
-          issue={selectedIssue}
-          items={items}
-          foodItems={foodItems}
-          locations={locations}
-          onClose={() => {
-            setShowIssueDetails(false);
-            setSelectedIssue(null);
-          }}
-        />
-      )}
+      {
+        showIssueDetails && selectedIssue && (
+          <IssueDetailsModal
+            issue={selectedIssue}
+            items={items}
+            foodItems={foodItems}
+            locations={locations}
+            onClose={() => {
+              setShowIssueDetails(false);
+              setSelectedIssue(null);
+            }}
+          />
+        )
+      }
 
       {/* Waste Log Details Modal */}
-      {showWasteLogDetails && selectedWasteLog && (
-        <WasteLogDetailsModal
-          wasteLog={selectedWasteLog}
-          items={items}
-          foodItems={foodItems}
-          locations={locations}
-          onClose={() => {
-            setShowWasteLogDetails(false);
-            setSelectedWasteLog(null);
-          }}
-        />
-      )}
+      {
+        showWasteLogDetails && selectedWasteLog && (
+          <WasteLogDetailsModal
+            wasteLog={selectedWasteLog}
+            items={items}
+            foodItems={foodItems}
+            locations={locations}
+            onClose={() => {
+              setShowWasteLogDetails(false);
+              setSelectedWasteLog(null);
+            }}
+          />
+        )
+      }
 
       {/* Location Details Modal */}
       {/* Item History Modal */}
-      {historyModalOpen && selectedHistoryItem && (
-        <ItemHistoryModal
-          isOpen={historyModalOpen}
-          item={selectedHistoryItem}
-          onClose={() => {
-            setHistoryModalOpen(false);
-            setSelectedHistoryItem(null);
-          }}
-        />
-      )}
+      {
+        historyModalOpen && selectedHistoryItem && (
+          <ItemHistoryModal
+            isOpen={historyModalOpen}
+            item={selectedHistoryItem}
+            onClose={() => {
+              setHistoryModalOpen(false);
+              setSelectedHistoryItem(null);
+            }}
+          />
+        )
+      }
 
       {/* Existing Location Details Modal */}
-      {showLocationDetails && selectedLocation && (
-        <LocationDetailsModal
-          location={selectedLocation}
-          onClose={() => {
-            setShowLocationDetails(false);
-            setSelectedLocation(null);
-          }}
-          refreshLocation={() => fetchData()}
-        />
-      )}
+      {
+        showLocationDetails && selectedLocation && (
+          <LocationDetailsModal
+            location={selectedLocation}
+            onClose={() => {
+              setShowLocationDetails(false);
+              setSelectedLocation(null);
+            }}
+            refreshLocation={() => fetchData()}
+          />
+        )
+      }
 
       {/* Asset Details Modal */}
-      {showAssetDetails && selectedAsset && (
-        <AssetDetailsModal
-          asset={selectedAsset}
-          items={items}
-          foodItems={foodItems}
-          locations={locations}
-          onClose={() => {
-            setShowAssetDetails(false);
-            setSelectedAsset(null);
-          }}
-        />
-      )}
+      {
+        showAssetDetails && selectedAsset && (
+          <AssetDetailsModal
+            asset={selectedAsset}
+            items={items}
+            foodItems={foodItems}
+            locations={locations}
+            onClose={() => {
+              setShowAssetDetails(false);
+              setSelectedAsset(null);
+            }}
+          />
+        )
+      }
 
       {/* Location Stock Details Modal */}
-      {locationStockDetails && (
-        <LocationStockDetailsModal
-          locationData={locationStockDetails}
-          onClose={() => {
-            setLocationStockDetails(null);
-            setSelectedLocationStock(null);
-          }}
-        />
-      )}
+      {
+        locationStockDetails && (
+          <LocationStockDetailsModal
+            locationData={locationStockDetails}
+            onClose={() => {
+              setLocationStockDetails(null);
+              setSelectedLocationStock(null);
+            }}
+          />
+        )
+      }
 
       {/* Recipe Form Modal */}
-      {showRecipeModal && (
-        <RecipeFormModal
-          form={recipeForm}
-          setForm={setRecipeForm}
-          foodItems={foodItems}
-          items={items}
-          editingRecipe={editingRecipe}
-          onSubmit={async (formData) => {
-            try {
-              if (editingRecipe) {
-                await API.put(`/recipes/${editingRecipe.id}`, formData);
-              } else {
-                await API.post("/recipes", formData);
+      {
+        showRecipeModal && (
+          <RecipeFormModal
+            form={recipeForm}
+            setForm={setRecipeForm}
+            foodItems={foodItems}
+            items={items}
+            editingRecipe={editingRecipe}
+            onSubmit={async (formData) => {
+              try {
+                if (editingRecipe) {
+                  await API.put(`/recipes/${editingRecipe.id}`, formData);
+                } else {
+                  await API.post("/recipes", formData);
+                }
+                setShowRecipeModal(false);
+                setEditingRecipe(null);
+                fetchData();
+              } catch (error) {
+                alert(
+                  "Failed to save recipe: " +
+                  (error.response?.data?.detail || error.message),
+                );
               }
+            }}
+            onClose={() => {
               setShowRecipeModal(false);
               setEditingRecipe(null);
-              fetchData();
-            } catch (error) {
-              alert(
-                "Failed to save recipe: " +
-                (error.response?.data?.detail || error.message),
-              );
-            }
-          }}
-          onClose={() => {
-            setShowRecipeModal(false);
-            setEditingRecipe(null);
-            setRecipeForm({
-              food_item_id: "",
-              name: "",
-              description: "",
-              servings: 1,
-              prep_time_minutes: "",
-              cook_time_minutes: "",
-              ingredients: [],
-            });
-          }}
-        />
-      )}
-    </DashboardLayout>
+              setRecipeForm({
+                food_item_id: "",
+                name: "",
+                description: "",
+                servings: 1,
+                prep_time_minutes: "",
+                cook_time_minutes: "",
+                ingredients: [],
+              });
+            }}
+          />
+        )
+      }
+    </DashboardLayout >
   );
 };
 
@@ -4036,147 +4400,82 @@ const SmartTransactionsTab = ({
   purchases,
   items,
   categories,
-  filters,
-  setFilters,
+  onFilterChange,
   onRefresh,
   onTransactionClick,
+  hasMore,
+  isLoadingMore,
+  onLoadMore
 }) => {
-  // Calculate dashboard metrics (all-time totals)
-  const calculateMetrics = () => {
-    // Total Purchases (from purchase masters - all time)
+  // State for specific tab logic
+  const [filters, setFilters] = useState({
+    type: "all",
+    category: "all",
+    dateRange: "all",
+    startDate: "",
+    endDate: "",
+    search: ""
+  });
+  const [expandedId, setExpandedId] = useState(null);
+
+  // Debounce search/filter updates to parent
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      onFilterChange(filters);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [filters]);
+
+  // Calculate dashboard metrics (Memoized)
+  const metrics = useMemo(() => {
+    // Total Purchases
     const totalPurchases = purchases
       .filter(p => p.status !== 'cancelled')
-      .reduce((sum, p) => {
-        return sum + (parseFloat(p.total_amount) || 0);
-      }, 0);
+      .reduce((sum, p) => sum + (parseFloat(p.total_amount) || 0), 0);
 
-    // Kitchen Consumption (Usage transactions - all time)
+    // Kitchen Consumption
     const kitchenUsage = transactions
-      .filter(
-        (t) =>
-          t.transaction_type === "out" &&
-          t.notes?.toLowerCase().includes("kitchen"),
-      )
-      .reduce((sum, t) => {
-        return sum + (parseFloat(t.total_amount) || 0);
-      }, 0);
+      .filter(t => t.transaction_type === "out" && t.notes?.toLowerCase().includes("kitchen"))
+      .reduce((sum, t) => sum + (parseFloat(t.total_amount) || 0), 0);
 
-    // Waste/Spoilage (Waste transactions - all time)
+    // Waste/Spoilage
     const wasteSpoilage = transactions
-      .filter(
-        (t) =>
-          t.transaction_type === "out" &&
-          (t.notes?.toLowerCase().includes("waste") ||
-            t.notes?.toLowerCase().includes("spoilage")),
-      )
-      .reduce((sum, t) => {
-        return sum + (parseFloat(t.total_amount) || 0);
-      }, 0);
+      .filter(t => t.transaction_type === "out" && (t.notes?.toLowerCase().includes("waste") || t.notes?.toLowerCase().includes("spoilage")))
+      .reduce((sum, t) => sum + (parseFloat(t.total_amount) || 0), 0);
 
-    // Current Stock Value (from items)
+    // Current Stock Value (Estimated from Items)
     const currentStockValue = items.reduce((sum, item) => {
-      return (
-        sum +
-        (parseFloat(item.current_stock) || 0) *
-        (parseFloat(item.unit_price) || 0)
-      );
+      return sum + ((parseFloat(item.current_stock) || 0) * (parseFloat(item.unit_price) || 0));
     }, 0);
 
-    return {
-      totalPurchases,
-      kitchenUsage,
-      wasteSpoilage,
-      currentStockValue,
-    };
-  };
+    return { totalPurchases, kitchenUsage, wasteSpoilage, currentStockValue };
+  }, [purchases, transactions, items]);
 
-  const metrics = calculateMetrics();
 
-  // Filter transactions based on filters
-  const getFilteredTransactions = () => {
-    let filtered = [...transactions];
-
-    // Filter by transaction type
-    if (filters.type !== "all") {
-      const typeMap = {
-        purchase: "in",
-        transfer_in: "transfer_in",
-        transfer_out: "transfer_out",
-        usage: "out",
-        waste: "out",
-        adjustment: "adjustment",
-      };
-      filtered = filtered.filter((t) => {
-        if (filters.type === "waste") {
-          return (
-            t.transaction_type === "out" &&
-            (t.notes?.toLowerCase().includes("waste") ||
-              t.notes?.toLowerCase().includes("spoilage"))
-          );
-        }
-        if (filters.type === "usage") {
-          return (
-            t.transaction_type === "out" &&
-            !t.notes?.toLowerCase().includes("waste") &&
-            !t.notes?.toLowerCase().includes("spoilage")
-          );
-        }
-        return t.transaction_type === typeMap[filters.type];
-      });
-    }
-
-    // Filter by category
-    if (filters.category !== "all") {
-      filtered = filtered.filter((t) => {
-        const item = items.find((i) => i.id === t.item_id);
-        if (!item) return false;
-        const category = categories.find((c) => c.id === item.category_id);
-        return category?.name === filters.category;
-      });
-    }
-
-    // Filter by date range
-    if (filters.dateRange !== "all") {
-      const now = new Date();
-      let startDate = new Date();
-
-      if (filters.dateRange === "today") {
-        startDate.setHours(0, 0, 0, 0);
-      } else if (filters.dateRange === "week") {
-        startDate.setDate(now.getDate() - 7);
-      } else if (filters.dateRange === "month") {
-        startDate.setMonth(now.getMonth() - 1);
-      } else if (
-        filters.dateRange === "custom" &&
-        filters.startDate &&
-        filters.endDate
-      ) {
-        startDate = new Date(filters.startDate);
-        const endDate = new Date(filters.endDate);
-        endDate.setHours(23, 59, 59, 999);
-        filtered = filtered.filter((t) => {
-          const transDate = new Date(t.created_at);
-          return transDate >= startDate && transDate <= endDate;
-        });
-        return filtered;
+  // Scroll Handler for Infinite Scroll
+  const handleScroll = (e) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.target;
+    // Load more when user is near bottom (buffer of 50px)
+    if (scrollHeight - scrollTop <= clientHeight + 50) {
+      if (!isLoadingMore && hasMore) {
+        onLoadMore();
       }
-
-      filtered = filtered.filter((t) => {
-        const transDate = new Date(t.created_at);
-        return transDate >= startDate;
-      });
     }
-
-    return filtered.sort(
-      (a, b) => new Date(b.created_at) - new Date(a.created_at),
-    );
   };
 
-  const filteredTransactions = getFilteredTransactions();
-
-  // Get transaction type icon and color
   const getTransactionTypeInfo = (trans) => {
     if (trans.transaction_type === "in") {
+      if (
+        trans.notes?.toLowerCase().includes("initial stock") ||
+        trans.notes?.toLowerCase().includes("opening balance")
+      ) {
+        return {
+          icon: <RotateCcw className="w-4 h-4" />,
+          label: "Initial Stock",
+          color: "text-teal-600 bg-teal-50",
+          statusColor: "bg-teal-500",
+        };
+      }
       return {
         icon: <ArrowDownCircle className="w-4 h-4" />,
         label: "Purchase",
@@ -4208,43 +4507,54 @@ const SmartTransactionsTab = ({
           color: "text-red-600 bg-red-50",
           statusColor: "bg-red-500",
         };
-      } else if (trans.notes?.toLowerCase().includes("kitchen")) {
+      }
+      // Explicit backend type check
+      else if (trans.transaction_type === "waste_spoilage") {
         return {
-          icon: <ShoppingCart className="w-4 h-4" />,
+          icon: <Trash className="w-4 h-4" />,
+          label: "Waste/Spoilage",
+          color: "text-red-600 bg-red-50",
+          statusColor: "bg-red-500",
+        };
+      }
+      else if (trans.notes?.toLowerCase().includes("kitchen")) {
+        return {
+          icon: <ArrowUpCircle className="w-4 h-4" />,
           label: "Kitchen Usage",
           color: "text-yellow-600 bg-yellow-50",
           statusColor: "bg-yellow-500",
         };
-      } else {
-        return {
-          icon: <ArrowUpCircle className="w-4 h-4" />,
-          label: "Usage",
-          color: "text-orange-600 bg-orange-50",
-          statusColor: "bg-orange-500",
-        };
       }
-    } else {
       return {
-        icon: <RotateCcw className="w-4 h-4" />,
-        label: "Audit Correction",
-        color: "text-blue-600 bg-blue-50",
-        statusColor: "bg-blue-500",
+        icon: <ArrowUpCircle className="w-4 h-4" />,
+        label: "Usage",
+        color: "text-orange-600 bg-orange-50",
+        statusColor: "bg-orange-500",
       };
     }
+    return {
+      icon: <RotateCcw className="w-4 h-4" />,
+      label: "Adjustment",
+      color: "text-blue-600 bg-blue-50",
+      statusColor: "bg-blue-500",
+    };
   };
 
-  // Get item details
   const getItemDetails = (itemId) => {
     const item = items.find((i) => i.id === itemId);
-    if (!item) return { name: "-", category: "-", unit: "-" };
+    if (!item)
+      return { name: "Unknown Item", category: "Uncategorized", unit: "pcs" };
     const category = categories.find((c) => c.id === item.category_id);
     return {
       name: item.name,
-      category: category?.name || "-",
-      unit: item.unit || "pcs",
-      isPerishable: category?.is_perishable || false,
+      category: category?.name || "Uncategorized",
+      unit: item.unit,
+      isPerishable: item.is_perishable,
     };
   };
+
+  // We no longer filter client-side. The 'transactions' prop is already the filtered source.
+  const filteredTransactions = transactions;
 
   return (
     <div className="space-y-6">
@@ -4340,6 +4650,11 @@ const SmartTransactionsTab = ({
                   icon: <ArrowDownCircle className="w-4 h-4" />,
                 },
                 {
+                  value: "initial_stock",
+                  label: "Initial Stock",
+                  icon: <RotateCcw className="w-4 h-4" />,
+                },
+                {
                   value: "transfer_in",
                   label: "Stock Received",
                   icon: <ArrowDownCircle className="w-4 h-4" />,
@@ -4350,18 +4665,18 @@ const SmartTransactionsTab = ({
                   icon: <ArrowUpCircle className="w-4 h-4" />,
                 },
                 {
-                  value: "usage",
-                  label: "Kitchen Usage",
-                  icon: <ShoppingCart className="w-4 h-4" />,
+                  value: "usage", // Unified usage
+                  label: "Usage",
+                  icon: <ArrowUpCircle className="w-4 h-4" />,
                 },
                 {
                   value: "waste",
-                  label: "Waste/Spoilage",
+                  label: "Waste",
                   icon: <Trash className="w-4 h-4" />,
                 },
                 {
                   value: "adjustment",
-                  label: "Audit Correction",
+                  label: "Adjustment",
                   icon: <RotateCcw className="w-4 h-4" />,
                 },
               ].map((option) => (
@@ -4414,11 +4729,11 @@ const SmartTransactionsTab = ({
                 }
                 className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
               >
+                <option value="all">All Time</option>
                 <option value="today">Today</option>
                 <option value="week">This Week</option>
                 <option value="month">This Month</option>
                 <option value="custom">Custom</option>
-                <option value="all">All Time</option>
               </select>
               {filters.dateRange === "custom" && (
                 <>
@@ -4429,7 +4744,6 @@ const SmartTransactionsTab = ({
                       setFilters({ ...filters, startDate: e.target.value })
                     }
                     className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                    placeholder="Start Date"
                   />
                   <input
                     type="date"
@@ -4438,20 +4752,40 @@ const SmartTransactionsTab = ({
                       setFilters({ ...filters, endDate: e.target.value })
                     }
                     className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                    placeholder="End Date"
                   />
                 </>
               )}
             </div>
           </div>
+
+          {/* Search Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Search
+            </label>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <input
+                type="text"
+                value={filters.search}
+                onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+                placeholder="Search item, notes, ref..."
+                className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+          </div>
+
         </div>
       </div>
 
       {/* Master Grid */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+        <div
+          className="overflow-x-auto max-h-[600px] overflow-y-auto"
+          onScroll={handleScroll}
+        >
+          <table className="min-w-full divide-y divide-gray-200 relative">
+            <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                   Status
@@ -4480,7 +4814,7 @@ const SmartTransactionsTab = ({
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredTransactions.length === 0 ? (
+              {filteredTransactions.length === 0 && !isLoadingMore ? (
                 <tr>
                   <td
                     colSpan="8"
@@ -6156,15 +6490,9 @@ function PurchaseFormModal({
 
   const updateDetail = (index, field, value) => {
     const newDetails = [...form.details];
+    // Create a new object for the row to ensure immutability
+    newDetails[index] = { ...newDetails[index], [field]: value };
 
-    // Normalize quantity based on item unit
-    if (field === "quantity") {
-      const itemId = newDetails[index].item_id;
-      const selectedItem = items.find((item) => item.id === parseInt(itemId));
-      newDetails[index][field] = normalizeQuantity(value, selectedItem?.unit);
-    } else {
-      newDetails[index] = { ...newDetails[index], [field]: value };
-    }
 
     // If tax_inclusive changes, recalculate
     if (
@@ -6518,14 +6846,14 @@ function PurchaseFormModal({
                         <td className="px-2 py-2">
                           <input
                             type="number"
-                            step="0.01"
+                            step="any"
                             min="0"
-                            value={detail.quantity || 0}
+                            value={detail.quantity}
                             onChange={(e) =>
                               updateDetail(
                                 index,
                                 "quantity",
-                                parseFloat(e.target.value) || 0,
+                                e.target.value,
                               )
                             }
                             className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500"
@@ -6535,14 +6863,14 @@ function PurchaseFormModal({
                         <td className="px-2 py-2">
                           <input
                             type="number"
-                            step="0.01"
+                            step="any"
                             min="0"
-                            value={detail.unit_price || 0}
+                            value={detail.unit_price}
                             onChange={(e) =>
                               updateDetail(
                                 index,
                                 "unit_price",
-                                parseFloat(e.target.value) || 0,
+                                e.target.value,
                               )
                             }
                             className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500"
@@ -8539,8 +8867,7 @@ function AssetMappingFormModal({
               <option value="">Select Target</option>
               {locations.map((loc) => (
                 <option key={loc.id} value={loc.id}>
-                  {loc.building} - {loc.room_area}{" "}
-                  {loc.floor ? `(${loc.floor})` : ""}
+                  {loc.name || `${loc.building} - ${loc.room_area}${loc.floor ? ` (${loc.floor})` : ""}`}
                 </option>
               ))}
             </select>
@@ -9847,6 +10174,9 @@ function RecipeFormModal({
   );
 };
 
+
+
+
 export default Inventory;
 
 function AdjustmentFormModal({
@@ -9969,3 +10299,7 @@ function AdjustmentFormModal({
     document.body
   );
 }
+
+
+
+

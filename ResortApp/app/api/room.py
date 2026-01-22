@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from typing import Optional
 from app.utils.auth import get_current_user
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -34,7 +35,7 @@ def create_room_test(
     status: str = Form("Available"),
     adults: int = Form(2),
     children: int = Form(0),
-    image: UploadFile = File(None),
+    image: Optional[UploadFile] = File(None),
     air_conditioning: bool = Form(False),
     wifi: bool = Form(False),
     bathroom: bool = Form(False),
@@ -51,6 +52,11 @@ def create_room_test(
     current_user: dict = Depends(get_current_user)
 ):
     try:
+        # Check if room number already exists
+        existing_room = db.query(Room).filter(Room.number == number).first()
+        if existing_room:
+            raise HTTPException(status_code=400, detail=f"Room {number} already exists")
+
         filename = None
         if image and image.filename:
             try:
@@ -62,6 +68,28 @@ def create_room_test(
             except Exception as e:
                 print(f"Error saving image: {e}")
                 raise HTTPException(status_code=500, detail=f"Error saving image: {str(e)}")
+
+        # Convert string booleans to actual booleans (frontend sends "true"/"false" as strings)
+        def str_to_bool(val):
+            if isinstance(val, bool):
+                return val
+            if isinstance(val, str):
+                return val.lower() in ('true', '1', 'yes')
+            return bool(val)
+        
+        air_conditioning = str_to_bool(air_conditioning)
+        wifi = str_to_bool(wifi)
+        bathroom = str_to_bool(bathroom)
+        living_area = str_to_bool(living_area)
+        terrace = str_to_bool(terrace)
+        parking = str_to_bool(parking)
+        kitchen = str_to_bool(kitchen)
+        family_room = str_to_bool(family_room)
+        bbq = str_to_bool(bbq)
+        garden = str_to_bool(garden)
+        dining = str_to_bool(dining)
+        breakfast = str_to_bool(breakfast)
+
 
         db_room = Room(
             number=number,
@@ -198,7 +226,7 @@ def create_room(
     status: str = Form("Available"),
     adults: int = Form(2),
     children: int = Form(0),
-    image: UploadFile = File(None),
+    image: Optional[UploadFile] = File(None),
     air_conditioning: bool = Form(False),
     wifi: bool = Form(False),
     bathroom: bool = Form(False),
@@ -226,6 +254,28 @@ def create_room(
             except Exception as e:
                 print(f"Error saving image: {e}")
                 raise HTTPException(status_code=500, detail=f"Error saving image: {str(e)}")
+
+        # Convert string booleans to actual booleans (frontend sends "true"/"false" as strings)
+        def str_to_bool(val):
+            if isinstance(val, bool):
+                return val
+            if isinstance(val, str):
+                return val.lower() in ('true', '1', 'yes')
+            return bool(val)
+        
+        air_conditioning = str_to_bool(air_conditioning)
+        wifi = str_to_bool(wifi)
+        bathroom = str_to_bool(bathroom)
+        living_area = str_to_bool(living_area)
+        terrace = str_to_bool(terrace)
+        parking = str_to_bool(parking)
+        kitchen = str_to_bool(kitchen)
+        family_room = str_to_bool(family_room)
+        bbq = str_to_bool(bbq)
+        garden = str_to_bool(garden)
+        dining = str_to_bool(dining)
+        breakfast = str_to_bool(breakfast)
+
 
         db_room = Room(
             number=number,
@@ -352,6 +402,18 @@ def _get_rooms_impl(db: Session, skip: int = 0, limit: int = 20):
             raise HTTPException(status_code=500, detail=f"Error querying rooms: {str(query_error)}")
         
         # Return the rooms directly - SQLAlchemy should handle serialization
+        # Hydrate current guest name
+        from app.models.booking import Booking, BookingRoom
+        for room in rooms:
+            active_booking = db.query(Booking).join(BookingRoom).filter(
+                BookingRoom.room_id == room.id,
+                Booking.status.in_(['checked-in', 'checked_in', 'Checked-in', 'booked', 'Booked'])
+            ).first()
+            if active_booking:
+                room.current_guest_name = getattr(active_booking, 'guest_name', 'Guest')
+            else:
+                room.current_guest_name = None
+        
         return rooms
         
     except HTTPException:
@@ -391,7 +453,23 @@ def delete_room(room_id: int, db: Session = Depends(get_db), current_user: dict 
         if os.path.exists(image_path):
             os.remove(image_path)
 
+    # Capture location ID before deleting room
+    inv_loc_id = db_room.inventory_location_id
+
     db.delete(db_room)
+    db.flush() # Ensure room deletion is processed mostly (FK constrains)
+
+    # Delete associated inventory location if it exists
+    if inv_loc_id:
+        try:
+            from app.models.inventory import Location
+            # Verify it's a guest room location to be safe
+            loc = db.query(Location).filter(Location.id == inv_loc_id, Location.location_type == "GUEST_ROOM").first()
+            if loc:
+                db.delete(loc)
+        except Exception as e:
+            print(f"Warning: Could not delete associated location {inv_loc_id}: {e}")
+
     db.commit()
     return {"message": "Room deleted successfully"}
 
@@ -404,9 +482,10 @@ def update_room(
     type: str = Form(None),
     price: float = Form(None),
     status: str = Form(None),
+    housekeeping_status: str = Form(None),
     adults: int = Form(None),
     children: int = Form(None),
-    image: UploadFile = File(None),
+    image: Optional[UploadFile] = File(None),
     air_conditioning: bool = Form(None),
     wifi: bool = Form(None),
     bathroom: bool = Form(None),
@@ -434,7 +513,12 @@ def update_room(
     if price is not None:
         db_room.price = price
     if status:
+        if db_room.status == "Maintenance" and status == "Available":
+             db_room.last_maintenance_date = date.today()
         db_room.status = status
+    if housekeeping_status:
+        db_room.housekeeping_status = housekeeping_status
+        db_room.housekeeping_updated_at = datetime.utcnow()
     if adults is not None:
         db_room.adults = adults
     if children is not None:
@@ -484,3 +568,19 @@ def update_room(
     db.commit()
     db.refresh(db_room)
     return db_room
+
+@router.get("/stats")
+def get_room_stats(db: Session = Depends(get_db)):
+    total = db.query(Room).count()
+    occupied = db.query(Room).filter(Room.status == "Occupied").count()
+    available = db.query(Room).filter(Room.status == "Available").count()
+    maintenance = db.query(Room).filter(Room.status == "Maintenance").count()
+    dirty = db.query(Room).filter(Room.housekeeping_status == "Dirty").count()
+    
+    return {
+        "total": total,
+        "occupied": occupied,
+        "available": available,
+        "maintenance": maintenance,
+        "dirty": dirty
+    }

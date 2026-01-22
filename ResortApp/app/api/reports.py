@@ -60,7 +60,108 @@ class UserHistoryOut(BaseModel):
     user_name: str
     activities: List[ActivityItem]
 
+class GlobalActivityItem(ActivityItem):
+    user_name: str
+
 # --- Report Endpoints ---
+
+@router.get("/global-activity", response_model=List[GlobalActivityItem])
+def get_global_activity_report(
+    from_date: Optional[date] = None, 
+    to_date: Optional[date] = None, 
+    db: Session = Depends(get_db), 
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Generates a consolidated report of activities across ALL employees.
+    """
+    activities = []
+
+    # 1. Bookings
+    booking_query = db.query(Booking, User).join(User, Booking.user_id == User.id)
+    if from_date: booking_query = booking_query.filter(Booking.created_at >= from_date)
+    if to_date: booking_query = booking_query.filter(Booking.created_at <= to_date)
+    
+    for b, u in booking_query.all():
+        activities.append(GlobalActivityItem(
+            activity_date=b.created_at or datetime.now(),
+            type="Booking",
+            description=f"Created booking for {b.guest_name or 'Unknown'} (Room count: {len(b.rooms)})",
+            amount=b.total_amount,
+            user_name=u.name
+        ))
+
+    # 2. Services Assigned (Completed)
+    srv_query = db.query(AssignedService, Employee, User).join(Employee, AssignedService.employee_id == Employee.id).join(User, Employee.user_id == User.id)
+    if from_date: srv_query = srv_query.filter(AssignedService.assigned_at >= from_date) # Approx
+    
+    all_services = srv_query.all()
+    for s, emp, u in all_services:
+        s_status = s.status.value if hasattr(s.status, 'value') else str(s.status)
+        if s_status.lower() != "completed":
+            continue
+            
+        act_date = s.last_used_at or s.assigned_at or datetime.now()
+        if from_date and act_date.date() < from_date: continue
+        if to_date and act_date.date() > to_date: continue
+
+        service_name = s.service.name if s.service else "Unknown Service"
+        room_num = s.room.number if s.room else "Unknown Room"
+        activities.append(GlobalActivityItem(
+            activity_date=act_date,
+            type="Service",
+            description=f"Completed service: {service_name} in Room {room_num}",
+            amount=None,
+            user_name=u.name
+        ))
+
+    # 3. Expenses
+    exp_query = db.query(Expense, Employee, User).join(Employee, Expense.employee_id == Employee.id).join(User, Employee.user_id == User.id)
+    if from_date: exp_query = exp_query.filter(Expense.date >= from_date)
+    if to_date: exp_query = exp_query.filter(Expense.date <= to_date)
+    
+    for e, emp, u in exp_query.all():
+        activities.append(GlobalActivityItem(
+            activity_date=datetime.combine(e.date, datetime.min.time()),
+            type="Expense",
+            description=f"Reported expense: {e.category} - {e.description or ''}",
+            amount=e.amount,
+            user_name=u.name
+        ))
+
+    # 4. Working Logs
+    wl_query = db.query(WorkingLog, Employee, User).join(Employee, WorkingLog.employee_id == Employee.id).join(User, Employee.user_id == User.id)
+    if from_date: wl_query = wl_query.filter(WorkingLog.date >= from_date)
+    if to_date: wl_query = wl_query.filter(WorkingLog.date <= to_date)
+
+    for w, emp, u in wl_query.all():
+        check_in = w.check_in_time.strftime("%H:%M") if w.check_in_time else "?"
+        check_out = w.check_out_time.strftime("%H:%M") if w.check_out_time else "?"
+        activities.append(GlobalActivityItem(
+            activity_date=datetime.combine(w.date, w.check_in_time) if w.check_in_time else datetime.combine(w.date, datetime.min.time()),
+            type="Attendance",
+            description=f"Work Log: {check_in} - {check_out} ({w.location or 'Office'})",
+            amount=None,
+            user_name=u.name
+        ))
+
+    # 5. Food Orders
+    fo_query = db.query(FoodOrder, Employee, User).join(Employee, FoodOrder.assigned_employee_id == Employee.id).join(User, Employee.user_id == User.id)
+    if from_date: fo_query = fo_query.filter(FoodOrder.created_at >= from_date)
+    if to_date: fo_query = fo_query.filter(FoodOrder.created_at <= to_date)
+
+    for f, emp, u in fo_query.all():
+        room_num = f.room.number if f.room else "N/A"
+        activities.append(GlobalActivityItem(
+            activity_date=f.created_at,
+            type="Food Order",
+            description=f"Served order in Room {room_num} ({len(f.items)} items)",
+            amount=f.total_with_gst or f.amount,
+            user_name=u.name
+        ))
+
+    activities.sort(key=lambda x: x.activity_date, reverse=True)
+    return activities
 
 @router.get("/checkin-by-employee", response_model=List[CheckinByEmployeeOut])
 def get_checkin_by_employee_report(from_date: Optional[date] = None, to_date: Optional[date] = None, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):

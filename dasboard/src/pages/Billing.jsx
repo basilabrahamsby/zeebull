@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, memo, useMemo } from "react";
+import React, { useState, useEffect, useCallback, memo, useMemo } from "react"; // FORCE UPDATE
 import DashboardLayout from "../layout/DashboardLayout";
 import BannerMessage from "../components/BannerMessage";
 import axios from "axios"; // We need axios to create the api service object
@@ -226,16 +226,16 @@ const CheckoutDetailModal = React.memo(({ checkout, onClose }) => {
             )}
 
             {/* Consumables (from bill_details) */}
-            {details.bill_details?.consumables_audit?.items?.length > 0 && (
+            {details.bill_details?.consumables_items?.length > 0 && (
               <div className="border-t pt-4">
                 <h3 className="text-lg font-semibold mb-3">Consumables</h3>
                 <div className="space-y-2">
-                  {details.bill_details.consumables_audit.items.map((item, idx) => (
+                  {details.bill_details.consumables_items.map((item, idx) => (
                     <div key={idx} className="flex justify-between items-center bg-gray-50 p-3 rounded-lg">
                       <div className="flex-1">
                         <p className="font-semibold">{item.item_name}</p>
                         <p className="text-sm text-gray-500">
-                          Qty: {item.actual_consumed}
+                          Qty: {item.quantity || item.actual_consumed}
                           {item.complimentary_limit > 0 && <span className="text-xs text-green-600 ml-2">(Limit: {item.complimentary_limit})</span>}
                         </p>
                       </div>
@@ -246,74 +246,30 @@ const CheckoutDetailModal = React.memo(({ checkout, onClose }) => {
                     </div>
                   ))}
                   <div className="flex justify-end pt-2 text-sm font-medium">
-                    <span>Subtotal: {formatCurrency(details.bill_details.consumables_audit.charges)}</span>
+                    <span>Subtotal: {formatCurrency(details.bill_details.consumables_charges || 0)}</span>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Inventory Usage (from bill_details) */}
-            {details.bill_details?.inventory_usage?.length > 0 && (
-              <div className="border-t pt-4">
-                <h3 className="text-lg font-semibold mb-3">Inventory Usage</h3>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full text-sm">
-                    <thead className="bg-gray-100">
-                      <tr>
-                        <th className="px-3 py-2 text-left">Item</th>
-                        <th className="px-3 py-2 text-center">Qty</th>
-                        <th className="px-3 py-2 text-left">Type</th>
-                        <th className="px-3 py-2 text-right">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {details.bill_details.inventory_usage.map((item, idx) => (
-                        <tr key={idx} className="border-b">
-                          <td className="px-3 py-2">
-                            <div className="font-medium">{item.item_name}</div>
-                            <div className="text-xs text-gray-500">{new Date(item.date).toLocaleDateString()}</div>
-                          </td>
-                          <td className="px-3 py-2 text-center">{item.quantity} {item.unit}</td>
-                          <td className="px-3 py-2">
-                            {item.is_rental ? <span className="text-blue-600">Rental</span> :
-                              item.is_payable ? <span className="text-orange-600">Chargeable</span> :
-                                "Complimentary"}
-                          </td>
-                          <td className="px-3 py-2 text-right">
-                            {(item.rental_charge > 0 || item.is_payable) ? (
-                              <span className="font-semibold text-indigo-600">
-                                {formatCurrency(item.rental_charge || (item.is_payable && item.cost ? (item.quantity * item.cost) : 0))}
-                              </span>
-                            ) : (
-                              <span className="text-gray-400">-</span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
             {/* Asset Damages (from bill_details) */}
-            {details.bill_details?.asset_damages?.items?.length > 0 && (
+            {details.bill_details?.asset_damages?.length > 0 && (
               <div className="border-t pt-4">
                 <h3 className="text-lg font-semibold mb-3 text-red-600">Asset Damages</h3>
                 <div className="space-y-2">
-                  {details.bill_details.asset_damages.items.map((item, idx) => (
+                  {details.bill_details.asset_damages.map((item, idx) => (
                     <div key={idx} className="flex justify-between items-center bg-red-50 p-3 rounded-lg border border-red-100">
                       <div>
                         <p className="font-semibold text-red-700">{item.item_name}</p>
                         {item.notes && <p className="text-sm text-red-500 italic">"{item.notes}"</p>}
                       </div>
                       <div className="text-right">
-                        <p className="font-bold text-red-700">{formatCurrency(item.replacement_cost)}</p>
+                        <p className="font-bold text-red-700">{formatCurrency(item.total_charge || item.replacement_cost)}</p>
                       </div>
                     </div>
                   ))}
                   <div className="flex justify-end pt-2 text-sm font-bold text-red-700">
-                    <span>Total Damages: {formatCurrency(details.bill_details.asset_damages.charges)}</span>
+                    <span>Total Damages: {formatCurrency(details.bill_details.asset_damage_charges || 0)}</span>
                   </div>
                 </div>
               </div>
@@ -347,22 +303,22 @@ const CheckoutDetailModal = React.memo(({ checkout, onClose }) => {
                     <span className="font-medium">{formatCurrency(details.service_total)}</span>
                   </div>
                 )}
-                {details.bill_details?.consumables_audit?.charges > 0 && (
+                {(details.bill_details?.consumables_charges > 0) && (
                   <div className="flex justify-between">
                     <span>Consumables:</span>
-                    <span className="font-medium">{formatCurrency(details.bill_details.consumables_audit.charges)}</span>
+                    <span className="font-medium">{formatCurrency(details.bill_details.consumables_charges)}</span>
                   </div>
                 )}
-                {details.bill_details?.charges_breakdown?.inventory_charges > 0 && (
+                {(details.bill_details?.inventory_charges > 0) && (
                   <div className="flex justify-between">
                     <span>Inventory Charges:</span>
-                    <span className="font-medium">{formatCurrency(details.bill_details.charges_breakdown.inventory_charges)}</span>
+                    <span className="font-medium">{formatCurrency(details.bill_details.inventory_charges)}</span>
                   </div>
                 )}
-                {details.bill_details?.asset_damages?.charges > 0 && (
+                {(details.bill_details?.asset_damage_charges > 0) && (
                   <div className="flex justify-between text-red-600">
                     <span>Asset Damages:</span>
-                    <span className="font-medium">{formatCurrency(details.bill_details.asset_damages.charges)}</span>
+                    <span className="font-medium">{formatCurrency(details.bill_details.asset_damage_charges)}</span>
                   </div>
                 )}
                 {details.tax_amount > 0 && (
@@ -439,12 +395,16 @@ const Billing = () => {
   };
 
   const loadMoreCheckouts = useCallback(async () => {
-    if (isFetchingMore || !hasMoreCheckouts) return;
+    if (isFetchingMore || !hasMoreCheckouts || loading) return;
     setIsFetchingMore(true);
     try {
       const response = await api.get(`/bill/checkouts?skip=${checkouts.length}&limit=20`);
       const newCheckouts = response.data || [];
-      setCheckouts(prev => [...prev, ...newCheckouts]);
+      setCheckouts(prev => {
+        const combined = [...prev, ...newCheckouts];
+        const unique = Array.from(new Map(combined.map(item => [item.id, item])).values());
+        return unique;
+      });
       if (newCheckouts.length < 20) {
         setHasMoreCheckouts(false);
       }
@@ -453,7 +413,7 @@ const Billing = () => {
     } finally {
       setIsFetchingMore(false);
     }
-  }, [isFetchingMore, hasMoreCheckouts, checkouts.length]);
+  }, [isFetchingMore, hasMoreCheckouts, checkouts.length, loading]);
 
   const loadMoreRef = useInfiniteScroll(loadMoreCheckouts, hasMoreCheckouts, isFetchingMore);
   const [kpiData, setKpiData] = useState({
@@ -567,6 +527,7 @@ const Billing = () => {
   }, []);
 
   const fetchInitialData = async () => {
+    setLoading(true);
     try {
       // Fetch all necessary data in parallel using Promise.allSettled to handle individual failures
       const results = await Promise.allSettled([
@@ -662,6 +623,8 @@ const Billing = () => {
         revenue_breakdown: [],
         weekly_performance: []
       });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -786,16 +749,37 @@ const Billing = () => {
 
   const handleUpdateInventoryVerification = (index, field, value) => {
     const newItems = [...checkoutInventoryDetails.items];
-    const val = parseFloat(value) || 0;
+    const item = newItems[index];
+    const unit = (item.unit || 'pcs').toLowerCase();
+    const isDiscreteUnit = ['pcs', 'pc', 'can', 'bottle', 'unit', 'nos', 'number', 'pkt', 'pack', 'box', 'tray', 'piece', 'pieces'].includes(unit);
+
+    let val = parseFloat(value) || 0;
+    if (field === 'available_stock' && isDiscreteUnit) {
+      val = Math.floor(val);
+    }
     newItems[index][field] = val;
 
     // Auto-calculate used/missing based on Available Stock
-    if (field === 'available_stock') {
+    if (field === 'available_stock' || field === 'damage_qty') {
       const current = newItems[index].current_stock || 0;
-      const diff = current - val;
-      // Assumption: Difference is "Used" for consumables
-      newItems[index].used_qty = Math.max(0, diff);
-      newItems[index].missing_qty = 0;
+      const good = field === 'available_stock' ? val : (newItems[index].available_stock || 0);
+      const damaged = field === 'damage_qty' ? val : (newItems[index].damage_qty || 0);
+
+      const isRental = newItems[index].is_rentable || (newItems[index].category_name && newItems[index].category_name.toLowerCase().includes('rental'));
+
+      if (isRental) {
+        // For rentals: Stock = Good + Damaged + Missing. Used is 0 (or handled separately)
+        newItems[index].missing_qty = Math.max(0, current - good - damaged);
+        newItems[index].used_qty = 0;
+      } else {
+        // For consumables: Stock = Available + Used + Missing. Damaged is a type of loss.
+        let used = current - good - damaged;
+        if (isDiscreteUnit) used = Math.round(used);
+        else used = parseFloat(used.toFixed(2));
+
+        newItems[index].used_qty = Math.max(0, used);
+        newItems[index].missing_qty = 0; // Or split with missing if needed?
+      }
     }
 
     setCheckoutInventoryDetails({
@@ -831,18 +815,19 @@ const Billing = () => {
         item_id: item.id,
         used_qty: item.used_qty || 0,
         missing_qty: item.missing_qty || 0,
+        damage_qty: item.damage_qty || 0,
         return_location_id: item.return_location_id // Send user selection
       }));
 
       // Collect asset damages
       const assetDamages = (checkoutInventoryDetails.fixed_assets || [])
-        .filter(asset => asset.is_damaged)
+        .filter(asset => asset.is_damaged || (parseInt(asset.available_stock || 0) < parseInt(asset.current_stock || 0)))
         .map(asset => ({
           asset_registry_id: asset.asset_registry_id,
           item_id: asset.item_id,
           item_name: asset.item_name,
           replacement_cost: asset.replacement_cost,
-          notes: asset.damage_notes || ""
+          notes: asset.damage_notes || (parseInt(asset.available_stock || 0) < parseInt(asset.current_stock || 0) ? "Missing at checkout" : "Damaged")
         }));
 
       const res = await api.post(`/bill/checkout-request/${checkoutInventoryModal}/check-inventory`, {
@@ -890,6 +875,8 @@ const Billing = () => {
       const actualRoomNumber = roomNumber.includes('-') ? roomNumber.split('-')[1] : roomNumber;
       const res = await api.get(`/bill/${actualRoomNumber}?checkout_mode=${checkoutMode}`);
       if (res.data && res.data.room_numbers) {
+        console.log("DEBUG BILL DATA:", res.data);
+        console.log("INVENTORY CHARGES:", res.data.charges?.inventory_charges);
         setBillData(res.data);
         const roomCount = res.data.room_numbers.length;
         const modeText = checkoutMode === "single" ? "single room" : "all rooms in the booking";
@@ -1031,12 +1018,37 @@ const Billing = () => {
 
     // Add Inventory Usage (Optional display)
     if (billData.charges.inventory_usage && billData.charges.inventory_usage.length > 0) {
-      chargesBody.push([{ content: 'Inventory / Amenities Usage', colSpan: 3, styles: { fillColor: [240, 240, 240], fontStyle: 'bold' } }]);
+      chargesBody.push([{ content: 'Rental / Asset Usage', colSpan: 3, styles: { fillColor: [240, 240, 240], fontStyle: 'bold' } }]);
       billData.charges.inventory_usage.forEach(item => {
+        const roomPrefix = item.room_number ? `Rm ${item.room_number}: ` : '';
         chargesBody.push([
-          `Inventory: ${item.item_name}`,
-          `Qty: ${item.quantity} ${item.unit} (${new Date(item.date).toLocaleDateString()})`,
-          '' // No charge shown here as it's usage history
+          `${roomPrefix}${item.item_name}`,
+          `Qty: ${item.quantity} ${item.unit} ${item.is_rental ? `(Rate: ${formatCurrency(item.rental_price)})` : ''}`,
+          formatCurrency(item.rental_charge || 0)
+        ]);
+      });
+    }
+
+    // Add Consumables specifically if they have individual charges
+    if (billData.charges.consumables_items && billData.charges.consumables_items.length > 0) {
+      chargesBody.push([{ content: 'Consumables & Breakage', colSpan: 3, styles: { fillColor: [240, 240, 240], fontStyle: 'bold' } }]);
+      billData.charges.consumables_items.forEach(item => {
+        chargesBody.push([
+          item.item_name,
+          `Qty: ${item.actual_consumed} (Limit: ${item.complimentary_limit})`,
+          formatCurrency(item.total_charge)
+        ]);
+      });
+    }
+
+    // Add Asset Damages
+    if (billData.charges.asset_damages && billData.charges.asset_damages.length > 0) {
+      chargesBody.push([{ content: 'Asset Damages / Replacement', colSpan: 3, styles: { fillColor: [240, 240, 240], fontStyle: 'bold' } }]);
+      billData.charges.asset_damages.forEach(item => {
+        chargesBody.push([
+          item.item_name,
+          item.notes || 'Asset Replacement Charge',
+          formatCurrency(item.replacement_cost)
         ]);
       });
     }
@@ -1056,13 +1068,17 @@ const Billing = () => {
     const totals = [
       ...(billData.charges.food_charges > 0 ? [['Food & Beverage', formatCurrency(billData.charges.food_charges)]] : []),
       ...(billData.charges.service_charges > 0 ? [['Service Charges', formatCurrency(billData.charges.service_charges)]] : []),
+      ...(billData.charges.inventory_charges > 0 ? [['Rentals / Inventory', formatCurrency(billData.charges.inventory_charges)]] : []),
       ...(billData.charges.consumables_charges > 0 ? [['Consumables', formatCurrency(billData.charges.consumables_charges)]] : []),
+      ...(billData.charges.asset_damage_charges > 0 ? [['Asset Damages', formatCurrency(billData.charges.asset_damage_charges)]] : []),
       ['Subtotal', formatCurrency(billData.charges.total_due)],
       ...(billData.charges.room_gst > 0 ? [['Room GST', `+${formatCurrency(billData.charges.room_gst || 0)}`]] : []),
       ...(billData.charges.package_gst > 0 ? [['Package GST', `+${formatCurrency(billData.charges.package_gst || 0)}`]] : []),
       ...(billData.charges.food_gst > 0 ? [['Food GST (5%)', `+${formatCurrency(billData.charges.food_gst || 0)}`]] : []),
-      ...(billData.charges.service_gst > 0 ? [['Service GST', `+${formatCurrency(billData.charges.service_gst || 0)}`]] : []),
+      ...(billData.charges.service_gst > 0 ? [['Service GST (18%)', `+${formatCurrency(billData.charges.service_gst || 0)}`]] : []),
       ...(billData.charges.consumables_gst > 0 ? [['Consumables GST (5%)', `+${formatCurrency(billData.charges.consumables_gst || 0)}`]] : []),
+      ...(billData.charges.inventory_gst > 0 ? [['Inventory GST (18%)', `+${formatCurrency(billData.charges.inventory_gst || 0)}`]] : []),
+      ...(billData.charges.asset_damage_gst > 0 ? [['Damage GST (18%)', `+${formatCurrency(billData.charges.asset_damage_gst || 0)}`]] : []),
       ['Total GST', `+${formatCurrency(totalGST)}`],
       ...(discount > 0 ? [['Discount', `-${formatCurrency(parseFloat(discount))}`]] : []),
       ['Grand Total', formatCurrency(grandTotal)]
@@ -1423,9 +1439,9 @@ const Billing = () => {
             // Consumables: Show ALL (Complimentary + Payable)
             const allConsumables = billData.charges.consumables_items || [];
 
-            // For Inventory Usage, show if it's payable, rented (with charge), or explicitly marked as rental
+            // For Inventory Usage, show all items that were used/issued (including complimentary)
             const payableInventory = billData.charges.inventory_usage?.filter(
-              item => item.is_payable || (item.rental_price && item.rental_price > 0) || item.rental_charge > 0
+              item => item.quantity > 0 || item.is_payable || (item.rental_price && item.rental_price > 0)
             ) || [];
 
             // Check if there are any food items (paid or unpaid)
@@ -1442,6 +1458,7 @@ const Billing = () => {
             return (
               <div id="bill-details" className="bg-gray-50 border border-gray-200 p-4 rounded-xl mb-6 animate-fade-in">
                 <h2 className="text-2xl font-bold text-gray-800 mb-4 text-center">Detailed Bill</h2>
+
                 <div className="grid grid-cols-2 gap-x-4 gap-y-2 mb-4 text-sm">
                   <p><span className="font-semibold">Guest Name:</span> {billData.guest_name}</p>
                   <p><span className="font-semibold">Rooms:</span> {billData.room_numbers.join(', ')} ({billData.room_numbers.length})</p>
@@ -1529,7 +1546,7 @@ const Billing = () => {
                             {item.quantity > 0 && ` (x${item.quantity} ${item.unit})`}
                             {item.rental_price > 0 && (
                               <span className="text-blue-700 font-semibold ml-2">
-                                @ ₹{item.rental_price} = ₹{item.rental_charge || (item.rental_price * item.quantity)}
+                                @ ₹{item.rental_price} = ₹{item.rental_charge !== undefined ? item.rental_charge : (item.rental_price * item.quantity)}
                               </span>
                             )}
                             {item.room_number && ` - Room ${item.room_number}`}
@@ -1560,20 +1577,33 @@ const Billing = () => {
                     {/* GST Breakdown */}
                     {billData.charges.room_gst > 0 && (
                       <p className="text-xs text-gray-500">Room GST ({
-                        billData.charges.room_charges < 5000 ? '5%' :
-                          billData.charges.room_charges <= 7500 ? '12%' : '18%'
+                        dailyRatePerRoom < 5000 ? '5%' :
+                          dailyRatePerRoom <= 7500 ? '12%' : '18%'
                       }): +{formatCurrency(billData.charges.room_gst || 0)}</p>
                     )}
                     {billData.charges.package_gst > 0 && (
                       <p className="text-xs text-gray-500">Package GST ({
-                        billData.charges.package_charges < 5000 ? '5%' :
-                          billData.charges.package_charges <= 7500 ? '12%' : '18%'
+                        (billData.charges.package_charges / (stayNights * numRooms)) < 5000 ? '5%' :
+                          (billData.charges.package_charges / (stayNights * numRooms)) <= 7500 ? '12%' : '18%'
                       }): +{formatCurrency(billData.charges.package_gst || 0)}</p>
                     )}
                     {billData.charges.food_gst > 0 && (
                       <p className="text-xs text-gray-500">Food GST (5%): +{formatCurrency(billData.charges.food_gst || 0)}</p>
                     )}
+                    {billData.charges.service_gst > 0 && (
+                      <p className="text-xs text-gray-500">Service GST (5%): +{formatCurrency(billData.charges.service_gst || 0)}</p>
+                    )}
+                    {billData.charges.consumables_gst > 0 && (
+                      <p className="text-xs text-gray-500">Consumables GST (5%): +{formatCurrency(billData.charges.consumables_gst || 0)}</p>
+                    )}
+                    {billData.charges.inventory_gst > 0 && (
+                      <p className="text-xs text-gray-500">Inventory GST (5%): +{formatCurrency(billData.charges.inventory_gst || 0)}</p>
+                    )}
+                    {billData.charges.asset_damage_gst > 0 && (
+                      <p className="text-xs text-gray-500">Damage GST (5%): +{formatCurrency(billData.charges.asset_damage_gst || 0)}</p>
+                    )}
                     <p className="text-sm text-gray-600 font-semibold">Total GST: +{formatCurrency(billData.charges.total_gst || 0)}</p>
+
                     {discount > 0 && (
                       <p className="text-sm text-green-600">Discount: -{formatCurrency(parseFloat(discount))}</p>
                     )}
@@ -1941,75 +1971,188 @@ const Billing = () => {
                       No damage reporting needed for consumables - only usage quantity matters.
                     </p>
                   </div>
-                  <div className="overflow-x-auto border rounded-lg">
-                    <table className="min-w-full text-sm">
-                      <thead className="bg-gray-100 uppercase tracking-wider text-gray-700">
-                        <tr>
-                          <th className="py-3 px-4 text-left">Item Name</th>
-                          <th className="py-3 px-4 text-center">Current Stock</th>
-                          <th className="py-3 px-4 text-center">Available Stock</th>
-                          <th className="py-3 px-4 text-left">Return Unused To</th>
-                          <th className="py-3 px-4 text-center">Consumed Qty</th>
-                          <th className="py-3 px-4 text-right">Potential Charge</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200">
-                        {checkoutInventoryDetails.items && checkoutInventoryDetails.items.map((item, idx) => {
-                          const charge = (item.used_qty || 0) * (item.charge_per_unit || item.unit_price || 0);
-                          // Determine actual charge based on complimentary limit
-                          const isChargeable = (item.used_qty || 0) > (item.complimentary_limit || 0);
-                          const chargeAmount = isChargeable ? ((item.used_qty - item.complimentary_limit) * (item.charge_per_unit || 0)) : 0;
+                  {/* Separate items into consumables, rent/laundry */}
+                  {(() => {
+                    const items = checkoutInventoryDetails.items || [];
+                    const consumableItems = items.filter(item => {
+                      const isFixedItem = item.is_fixed_asset;
+                      const isKnownConsumable = ["coca", "cola", "water", "chips", "juice", "biscuit"].some(k => (item.item_name || "").toLowerCase().includes(k));
+                      const isRentable = !isKnownConsumable && (item.is_rentable || item.track_laundry_cycle);
+                      return !isFixedItem && !isRentable;
+                    });
 
-                          return (
-                            <tr key={idx} className="hover:bg-gray-50">
-                              <td className="py-3 px-4 font-medium">{item.item_name}</td>
-                              <td className="py-3 px-4 text-center text-gray-600 font-semibold">{item.current_stock || 0}</td>
-                              <td className="py-3 px-4 text-center">
-                                <input
-                                  type="number"
-                                  min="0"
-                                  max={item.current_stock}
-                                  className={`w-20 border rounded p-1 text-center font-bold ${(item.available_stock < item.current_stock) ? 'text-orange-600 border-orange-300 bg-orange-50' : 'text-green-600 border-gray-300'}`}
-                                  value={item.available_stock}
-                                  onChange={(e) => handleUpdateInventoryVerification(idx, 'available_stock', e.target.value)}
-                                />
-                              </td>
-                              <td className="py-3 px-4">
-                                {item.available_stock > 0 ? (
-                                  <select
-                                    className="w-full text-sm border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
-                                    value={item.return_location_id || ""}
-                                    onChange={(e) => handleUpdateReturnLocation(idx, e.target.value)}
-                                  >
-                                    <option value="">Auto-detect (Default)</option>
-                                    {returnLocations.map(loc => (
-                                      <option key={loc.id} value={loc.id}>
-                                        {loc.name} {loc.location_type ? `(${loc.location_type})` : ''}
-                                      </option>
-                                    ))}
-                                  </select>
-                                ) : (
-                                  <span className="text-gray-400 text-xs">-</span>
-                                )}
-                              </td>
-                              <td className="py-3 px-4 text-center text-gray-700">
-                                {item.used_qty || 0}
-                                {item.complimentary_limit > 0 && <span className="text-xs text-green-600 block">(Free: {item.complimentary_limit})</span>}
-                              </td>
-                              <td className="py-3 px-4 text-right font-medium text-red-600">
-                                {chargeAmount > 0 ? `+${formatCurrency(chargeAmount)}` : '-'}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                        {(!checkoutInventoryDetails.items || checkoutInventoryDetails.items.length === 0) && (
-                          <tr>
-                            <td colSpan="5" className="py-4 text-center text-gray-500">No consumable items found.</td>
-                          </tr>
+                    const rentalItems = items.filter(item => {
+                      const isFixedItem = item.is_fixed_asset;
+                      const isKnownConsumable = ["coca", "cola", "water", "chips", "juice", "biscuit"].some(k => (item.item_name || "").toLowerCase().includes(k));
+                      const isRentable = !isKnownConsumable && (item.is_rentable || item.track_laundry_cycle);
+                      return isRentable && !isFixedItem;
+                    });
+
+                    return (
+                      <>
+                        {consumableItems.length > 0 && (
+                          <div className="mb-8">
+                            <h3 className="text-lg font-semibold mb-3 text-gray-800">Consumables Inventory Check</h3>
+                            <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                              <p className="text-sm text-blue-800">
+                                📦 <strong>Consumables Usage Tracking:</strong> Track how many items were consumed.
+                              </p>
+                            </div>
+                            <div className="overflow-x-auto border rounded-lg">
+                              <table className="min-w-full text-sm">
+                                <thead className="bg-gray-100 uppercase tracking-wider text-gray-700">
+                                  <tr>
+                                    <th className="py-3 px-4 text-left">Item Name</th>
+                                    <th className="py-3 px-4 text-center">Room Stock</th>
+                                    <th className="py-3 px-4 text-center">Available Stock</th>
+                                    <th className="py-3 px-4 text-left">Return Unused To</th>
+                                    <th className="py-3 px-4 text-center">Consumed</th>
+                                    <th className="py-3 px-4 text-right">Potential Charge</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-200">
+                                  {consumableItems.map((item, idx) => {
+                                    const originalIdx = items.indexOf(item);
+                                    const unit = (item.unit || 'pcs').toLowerCase();
+                                    const isDiscreteUnit = ['pcs', 'pc', 'can', 'bottle', 'unit', 'nos', 'number', 'pkt', 'pack', 'box', 'tray', 'piece', 'pieces'].includes(unit);
+                                    const chargeAmount = ((item.used_qty || 0) > (item.complimentary_qty || 0))
+                                      ? ((item.used_qty - (item.complimentary_qty || 0)) * (item.charge_per_unit || item.unit_price || 0))
+                                      : 0;
+
+                                    return (
+                                      <tr key={idx} className="hover:bg-gray-50">
+                                        <td className="py-3 px-4 font-medium">{item.item_name}</td>
+                                        <td className="py-3 px-4 text-center text-gray-600 font-semibold">{isDiscreteUnit ? Math.floor(item.current_stock || 0) : (item.current_stock || 0)}</td>
+                                        <td className="py-3 px-4 text-center">
+                                          <input
+                                            type="number"
+                                            min="0"
+                                            max={item.current_stock}
+                                            step={isDiscreteUnit ? "1" : "0.01"}
+                                            onKeyDown={(e) => isDiscreteUnit && (e.key === '.' || e.key === 'e') && e.preventDefault()}
+                                            className={`w-20 border rounded p-1 text-center font-bold ${(item.available_stock < item.current_stock) ? 'text-orange-600 border-orange-300 bg-orange-50' : 'text-green-600 border-gray-300'}`}
+                                            value={item.available_stock}
+                                            onChange={(e) => handleUpdateInventoryVerification(originalIdx, 'available_stock', e.target.value)}
+                                          />
+                                        </td>
+                                        <td className="py-3 px-4">
+                                          {item.available_stock > 0 ? (
+                                            <select
+                                              className="w-full text-sm border-gray-300 rounded-md"
+                                              value={item.return_location_id || ""}
+                                              onChange={(e) => handleUpdateReturnLocation(originalIdx, e.target.value)}
+                                            >
+                                              <option value="">Auto-detect (Default)</option>
+                                              {returnLocations.map(loc => (
+                                                <option key={loc.id} value={loc.id}>{loc.name}</option>
+                                              ))}
+                                            </select>
+                                          ) : (
+                                            <span className="text-gray-400 text-xs">-</span>
+                                          )}
+                                        </td>
+                                        <td className="py-3 px-4 text-center text-gray-700 font-medium">
+                                          {item.used_qty || 0}
+                                          {item.complimentary_qty > 0 && <span className="text-xs text-green-600 block">(Free: {item.complimentary_qty})</span>}
+                                        </td>
+                                        <td className="py-3 px-4 text-right font-medium text-red-600">
+                                          {chargeAmount > 0 ? `+${formatCurrency(chargeAmount)}` : '-'}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
                         )}
-                      </tbody>
-                    </table>
-                  </div>
+
+                        {rentalItems.length > 0 && (
+                          <div className="mb-8">
+                            <h3 className="text-lg font-semibold mb-3 text-purple-700">Rent / Laundry Items Check</h3>
+                            <div className="mb-3 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                              <p className="text-sm text-purple-800">
+                                🧺 <strong>For Rent/Laundry Items:</strong> Track good, damaged, and missing items.
+                              </p>
+                            </div>
+                            <div className="overflow-x-auto border rounded-lg">
+                              <table className="min-w-full text-sm">
+                                <thead className="bg-purple-50 uppercase tracking-wider text-purple-800">
+                                  <tr>
+                                    <th className="py-3 px-4 text-left">Item Name</th>
+                                    <th className="py-3 px-4 text-center">Room Stock</th>
+                                    <th className="py-3 px-4 text-center">Good</th>
+                                    <th className="py-3 px-4 text-center">Damaged</th>
+                                    <th className="py-3 px-4 text-center">Missing</th>
+                                    <th className="py-3 px-4 text-right">Potential Charge</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-200">
+                                  {rentalItems.map((item, idx) => {
+                                    const originalIdx = items.indexOf(item);
+                                    const price = item.charge_per_unit || item.unit_price || 0;
+                                    const damagePrice = item.cost_per_unit || price;
+                                    const unit = (item.unit || 'pcs').toLowerCase();
+                                    const isDiscreteUnit = ['pcs', 'pc', 'can', 'bottle', 'unit', 'nos', 'number', 'pkt', 'pack', 'box', 'tray', 'piece', 'pieces'].includes(unit);
+
+                                    const totalQty = Math.floor(item.current_stock || 0);
+                                    const good = Math.floor(item.available_stock || 0);
+                                    const damaged = Math.floor(item.damage_qty || 0);
+                                    let missing = Math.max(0, totalQty - good - damaged);
+
+                                    let chargeAmount = (damaged + missing) * damagePrice;
+
+                                    return (
+                                      <tr key={idx} className="hover:bg-purple-50">
+                                        <td className="py-3 px-4 font-medium">
+                                          {item.item_name}
+                                          {item.is_rentable && <span className="ml-2 text-[10px] bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded">RENT</span>}
+                                        </td>
+                                        <td className="py-3 px-4 text-center text-gray-600 font-semibold">{totalQty}</td>
+                                        <td className="py-3 px-4 text-center">
+                                          <input
+                                            type="number"
+                                            min="0"
+                                            max={totalQty}
+                                            step={isDiscreteUnit ? "1" : "0.01"}
+                                            className="w-16 border rounded p-1 text-center font-bold text-green-600"
+                                            value={good}
+                                            onKeyDown={(e) => isDiscreteUnit && (e.key === '.' || e.key === 'e') && e.preventDefault()}
+                                            onChange={(e) => handleUpdateInventoryVerification(originalIdx, 'available_stock', e.target.value)}
+                                          />
+                                        </td>
+                                        <td className="py-3 px-4 text-center">
+                                          <input
+                                            type="number"
+                                            min="0"
+                                            max={totalQty}
+                                            step={isDiscreteUnit ? "1" : "0.01"}
+                                            className="w-16 border rounded p-1 text-center font-bold text-red-600"
+                                            value={damaged}
+                                            onKeyDown={(e) => isDiscreteUnit && (e.key === '.' || e.key === 'e') && e.preventDefault()}
+                                            onChange={(e) => handleUpdateInventoryVerification(originalIdx, 'damage_qty', e.target.value)}
+                                          />
+                                        </td>
+                                        <td className="py-3 px-4 text-center font-bold text-orange-600">{missing || '-'}</td>
+                                        <td className="py-3 px-4 text-right font-medium text-red-600">
+                                          {chargeAmount > 0 ? `+${formatCurrency(chargeAmount)}` : '-'}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        )}
+                        {(!items || items.length === 0) && (
+                          <div className="py-8 text-center text-gray-500 bg-gray-50 border rounded-lg">
+                            No consumable or rental items found for this room.
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
 
                 {/* Fixed Assets Verification Section */}

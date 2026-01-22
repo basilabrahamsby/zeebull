@@ -6,7 +6,7 @@ from app.models.employee import Employee
 from app.schemas.service_request import ServiceRequestCreate, ServiceRequestUpdate
 from typing import List, Optional
 from datetime import datetime
-# Notification system removed
+from app.curd.notification import notify_service_request_created, notify_service_request_status_changed
 
 def create_service_request(db: Session, request_data: ServiceRequestCreate):
     request = ServiceRequest(
@@ -15,13 +15,20 @@ def create_service_request(db: Session, request_data: ServiceRequestCreate):
         employee_id=request_data.employee_id,
         request_type=request_data.request_type,
         description=request_data.description,
+        image_path=request_data.image_path,
         status="pending"
     )
     db.add(request)
     db.commit()
     db.refresh(request)
     
-    # Notification system removed for performance
+    # Notify about new service request
+    try:
+        room = db.query(Room).filter(Room.id == request.room_id).first()
+        room_number = room.number if room else "Unknown"
+        notify_service_request_created(db, request.request_type, room_number, request.id)
+    except Exception as e:
+        print(f"Notification error: {e}")
     
     return request
 
@@ -42,7 +49,11 @@ def create_cleaning_service_request(db: Session, room_id: int, room_number: str,
     db.commit()
     db.refresh(request)
     
-    # Notification system removed for performance
+    # Notify about new cleaning request
+    try:
+        notify_service_request_created(db, "cleaning", room_number, request.id)
+    except Exception as e:
+        print(f"Notification error: {e}")
     
     return request
 
@@ -196,7 +207,7 @@ def create_return_items_service_request(db: Session, room_id: int, room_number: 
     db.refresh(request)
     return request
 
-def get_service_requests(db: Session, skip: int = 0, limit: int = 100, status: Optional[str] = None):
+def get_service_requests(db: Session, skip: int = 0, limit: int = 100, status: Optional[str] = None, room_id: Optional[int] = None, employee_id: Optional[int] = None):
     query = db.query(ServiceRequest).options(
         joinedload(ServiceRequest.food_order),
         joinedload(ServiceRequest.room),
@@ -205,6 +216,13 @@ def get_service_requests(db: Session, skip: int = 0, limit: int = 100, status: O
     
     if status:
         query = query.filter(ServiceRequest.status == status)
+    
+    if room_id:
+        query = query.filter(ServiceRequest.room_id == room_id)
+
+    if employee_id is not None:
+        from sqlalchemy import or_
+        query = query.filter(or_(ServiceRequest.employee_id == employee_id, ServiceRequest.employee_id == None))
     
     requests = query.offset(skip).limit(limit).all()
     
@@ -328,7 +346,21 @@ def update_service_request(db: Session, request_id: int, update_data: ServiceReq
     db.refresh(request)
     
     
-    # Notification system removed for performance
+    # Notify about status change
+    try:
+        room = db.query(Room).filter(Room.id == request.room_id).first()
+        room_number = room.number if room else "Unknown"
+        
+        recipient_id = None
+        if request.employee_id:
+            from app.models.employee import Employee
+            emp = db.query(Employee).filter(Employee.id == request.employee_id).first()
+            if emp:
+                recipient_id = emp.user_id
+        
+        notify_service_request_status_changed(db, request.request_type, room_number, request.status, request.id, recipient_id=recipient_id)
+    except Exception as e:
+        print(f"Notification error: {e}")
     
     return request
 

@@ -130,7 +130,7 @@ export default function ReportsDashboard() {
   const PAGE_LIMIT = 10;
 
   // Accounting Tab State
-  const [activeAccountingTab, setActiveAccountingTab] = useState("chart-of-accounts");
+  const [activeAccountingTab, setActiveAccountingTab] = useState("gst-reports");
   const [accountGroups, setAccountGroups] = useState([]);
   const [accountLedgers, setAccountLedgers] = useState([]);
   const [selectedGroup, setSelectedGroup] = useState(null);

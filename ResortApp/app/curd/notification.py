@@ -15,7 +15,8 @@ def create_notification(
         title=notification.title,
         message=notification.message,
         entity_type=notification.entity_type,
-        entity_id=notification.entity_id
+        entity_id=notification.entity_id,
+        recipient_id=notification.recipient_id
     )
     db.add(db_notification)
     db.commit()
@@ -26,10 +27,17 @@ def get_notifications(
     db: Session,
     skip: int = 0,
     limit: int = 50,
-    unread_only: bool = False
+    unread_only: bool = False,
+    user_id: Optional[int] = None
 ) -> List[Notification]:
-    """Get all notifications, optionally filtered by read status"""
+    """Get all notifications, optionally filtered by read status and user"""
     query = db.query(Notification)
+    
+    if user_id is not None:
+        # Filter by recipient_id matching user_id OR global notifications (recipient_id is NULL)
+        from sqlalchemy import or_
+        query = query.filter(or_(Notification.recipient_id == user_id, Notification.recipient_id == None))
+        
     if unread_only:
         query = query.filter(Notification.is_read == False)
     return query.order_by(desc(Notification.created_at)).offset(skip).limit(limit).all()
@@ -72,9 +80,13 @@ def clear_all_notifications(db: Session) -> int:
     db.commit()
     return count
 
-def get_unread_count(db: Session) -> int:
+def get_unread_count(db: Session, user_id: Optional[int] = None) -> int:
     """Get count of unread notifications"""
-    return db.query(Notification).filter(Notification.is_read == False).count()
+    query = db.query(Notification).filter(Notification.is_read == False)
+    if user_id is not None:
+        from sqlalchemy import or_
+        query = query.filter(or_(Notification.recipient_id == user_id, Notification.recipient_id == None))
+    return query.count()
 
 # Helper function to create notifications for different events
 def notify_service_created(db: Session, service_name: str, service_id: int):
@@ -87,24 +99,26 @@ def notify_service_created(db: Session, service_name: str, service_id: int):
         entity_id=service_id
     ))
 
-def notify_service_assigned(db: Session, service_name: str, employee_name: str, room_number: str, assigned_id: int):
+def notify_service_assigned(db: Session, service_name: str, employee_name: str, room_number: str, assigned_id: int, recipient_id: Optional[int] = None):
     """Create notification for service assignment"""
     return create_notification(db, NotificationCreate(
         type=NotificationType.SERVICE,
         title="Service Assigned",
         message=f"Service '{service_name}' assigned to {employee_name} for Room {room_number}.",
         entity_type="assigned_service",
-        entity_id=assigned_id
+        entity_id=assigned_id,
+        recipient_id=recipient_id
     ))
 
-def notify_service_status_changed(db: Session, service_name: str, status: str, assigned_id: int):
+def notify_service_status_changed(db: Session, service_name: str, status: str, assigned_id: int, recipient_id: Optional[int] = None):
     """Create notification for service status change"""
     return create_notification(db, NotificationCreate(
         type=NotificationType.SERVICE,
         title="Service Status Updated",
         message=f"Service '{service_name}' status changed to {status}.",
         entity_type="assigned_service",
-        entity_id=assigned_id
+        entity_id=assigned_id,
+        recipient_id=recipient_id
     ))
 
 def notify_booking_created(db: Session, guest_name: str, booking_id: int):
@@ -187,14 +201,15 @@ def notify_food_order_created(db: Session, room_number: str, order_id: int):
         entity_id=order_id
     ))
 
-def notify_food_order_status_changed(db: Session, room_number: str, status: str, order_id: int):
+def notify_food_order_status_changed(db: Session, room_number: str, status: str, order_id: int, recipient_id: Optional[int] = None):
     """Create notification for food order status change"""
     return create_notification(db, NotificationCreate(
         type=NotificationType.FOOD_ORDER,
         title="Food Order Status Updated",
         message=f"Food order for Room {room_number} is now {status}.",
         entity_type="food_order",
-        entity_id=order_id
+        entity_id=order_id,
+        recipient_id=recipient_id
     ))
 
 def notify_service_request_created(db: Session, request_type: str, room_number: str, request_id: int):
@@ -208,7 +223,7 @@ def notify_service_request_created(db: Session, request_type: str, room_number: 
         entity_id=request_id
     ))
 
-def notify_service_request_status_changed(db: Session, request_type: str, room_number: str, status: str, request_id: int):
+def notify_service_request_status_changed(db: Session, request_type: str, room_number: str, status: str, request_id: int, recipient_id: Optional[int] = None):
     """Create notification for service request status change"""
     type_label = request_type.replace("_", " ").title()
     return create_notification(db, NotificationCreate(
@@ -216,5 +231,6 @@ def notify_service_request_status_changed(db: Session, request_type: str, room_n
         title=f"{type_label} Request Updated",
         message=f"{type_label} request for Room {room_number} is now {status}.",
         entity_type="service_request",
-        entity_id=request_id
+        entity_id=request_id,
+        recipient_id=recipient_id
     ))

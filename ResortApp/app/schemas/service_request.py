@@ -8,6 +8,7 @@ class ServiceRequestCreate(BaseModel):
     employee_id: Optional[int] = None
     request_type: str = "delivery"
     description: Optional[str] = None
+    image_path: Optional[str] = None
 
 class ServiceRequestUpdate(BaseModel):
     status: Optional[str] = None
@@ -25,6 +26,7 @@ class ServiceRequestOut(BaseModel):
     status: str
     created_at: datetime
     completed_at: Optional[datetime] = None
+    image_path: Optional[str] = None
     food_order_amount: Optional[float] = None
     food_order_status: Optional[str] = None
     room_number: Optional[str] = None

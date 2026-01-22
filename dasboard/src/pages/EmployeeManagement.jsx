@@ -3,15 +3,18 @@ import { formatCurrency } from '../utils/currency';
 import DashboardLayout from "../layout/DashboardLayout";
 import api from "../services/api";
 import { motion, AnimatePresence } from "framer-motion";
-import { Calendar as CalendarIcon, User, DollarSign, Utensils, ConciergeBell, BedDouble, Package, AlertCircle, Search, UserCheck, Briefcase, Clock, Users, ChevronLeft, ChevronRight, TrendingUp } from "lucide-react";
+import { Calendar as CalendarIcon, User, DollarSign, Utensils, ConciergeBell, BedDouble, Package, AlertCircle, Search, UserCheck, Briefcase, Clock, Users, ChevronLeft, ChevronRight, TrendingUp, Settings } from "lucide-react";
 import * as XLSX from "xlsx";
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import CountUp from "react-countup";
 import BannerMessage from "../components/BannerMessage";
+import EmployeeProfileModal from "../components/EmployeeProfileModal";
 import { getMediaBaseUrl } from "../utils/env";
 import { formatDateIST, formatDateTimeIST } from "../utils/dateUtils";
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
+import PayrollManagement from "../components/PayrollManagement";
+import LeavePolicyManagement from "../components/LeavePolicyManagement";
 
 const EmployeeOverview = () => {
   const [date, setDate] = useState(new Date());
@@ -1073,6 +1076,7 @@ const EmployeeListAndForm = () => {
   const [isFetchingMore, setIsFetchingMore] = useState(false);
   const [page, setPage] = useState(1);
   const [hoveredKPI, setHoveredKPI] = useState(null);
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState(null);
 
   const mediaBaseUrl = useMemo(() => getMediaBaseUrl(), []);
 
@@ -1087,8 +1091,8 @@ const EmployeeListAndForm = () => {
     try {
       // Fetch both users and employees to show all users including admins
       const [usersRes, employeesRes] = await Promise.all([
-        api.get("/users/?skip=0&limit=20", authHeader()),
-        api.get("/employees?skip=0&limit=20", authHeader())
+        api.get("/users/?skip=0&limit=1000", authHeader()),
+        api.get("/employees?skip=0&limit=1000", authHeader())
       ]);
 
       const users = usersRes.data || [];
@@ -1103,23 +1107,25 @@ const EmployeeListAndForm = () => {
       });
 
       // Combine users with their employee data
-      const combinedUsers = users.map(user => ({
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role?.name || 'Unknown',
-        phone: user.phone,
-        is_active: user.is_active,
-        // Add employee-specific data if available
-        salary: employeeMap.get(user.id)?.salary || null,
-        join_date: employeeMap.get(user.id)?.join_date || null,
-        image_url: employeeMap.get(user.id)?.image_url || null,
-        has_employee_record: employeeMap.has(user.id),
-        trend: Array.from({ length: 30 }, () => Math.floor(Math.random() * 10000))
-      }));
+      const combinedUsers = users
+        .filter(user => user.role?.name?.toLowerCase() !== 'guest') // Hide guest users from employee management
+        .map(user => ({
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role?.name || 'Unknown',
+          phone: user.phone,
+          is_active: user.is_active,
+          // Add employee-specific data if available
+          salary: employeeMap.get(user.id)?.salary || null,
+          join_date: employeeMap.get(user.id)?.join_date || null,
+          image_url: employeeMap.get(user.id)?.image_url || null,
+          has_employee_record: employeeMap.has(user.id),
+          trend: Array.from({ length: 30 }, () => Math.floor(Math.random() * 10000))
+        }));
 
       setEmployees(combinedUsers);
-      setHasMore(combinedUsers.length >= 20);
+      setHasMore(combinedUsers.length >= 1000);
       setPage(1);
     } catch (err) {
       console.error("Error fetching employees:", err);
@@ -1395,7 +1401,7 @@ const EmployeeListAndForm = () => {
                 <td className="p-1 sm:p-2 border text-xs sm:text-sm">
                   <div className="flex flex-col sm:flex-row sm:items-center">
                     <span className="truncate">{emp.name}</span>
-                    {!emp.has_employee_record && (
+                    {!emp.has_employee_record && (emp.role?.toLowerCase() === 'admin' || emp.role?.toLowerCase() === 'manager') && (
                       <span className="text-xs bg-blue-100 text-blue-800 px-1 sm:px-2 py-0.5 sm:py-1 rounded mt-1 sm:mt-0 sm:ml-2">Admin</span>
                     )}
                   </div>
@@ -1416,6 +1422,12 @@ const EmployeeListAndForm = () => {
                   <div className="flex flex-col sm:flex-row gap-1 sm:gap-2">
                     {emp.has_employee_record ? (
                       <>
+                        <button
+                          className="bg-indigo-500 text-white px-1 sm:px-2 py-1 text-xs sm:text-sm rounded hover:bg-indigo-600"
+                          onClick={() => setSelectedEmployeeId(emp.id)}
+                        >
+                          View Profile
+                        </button>
                         <button
                           className="bg-blue-500 text-white px-1 sm:px-2 py-1 text-xs sm:text-sm rounded"
                           onClick={() => handleEdit(emp)}
@@ -1463,6 +1475,14 @@ const EmployeeListAndForm = () => {
           )}
         </table>
       </div>
+
+      {/* Employee Profile Modal */}
+      {selectedEmployeeId && (
+        <EmployeeProfileModal
+          employeeId={selectedEmployeeId}
+          onClose={() => setSelectedEmployeeId(null)}
+        />
+      )}
     </div>
   );
 };
@@ -1474,11 +1494,13 @@ const EmployeeManagement = () => {
     switch (activeTab) {
       case 'overview': return <EmployeeOverview />;
       case 'manage-employees': return <EmployeeListAndForm />;
+      case 'payroll': return <PayrollManagement />;
       case 'report': return <UserHistory />;
       case 'leave': return <LeaveManagement />;
       case 'attendance': return <AttendanceTracking />;
       case 'monthly-report': return <MonthlyReport />;
       case 'status-overview': return <StatusOverview />;
+      case 'leave-policy': return <LeavePolicyManagement />;
       default: return null;
     }
   };
@@ -1508,10 +1530,12 @@ const EmployeeManagement = () => {
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-1 inline-flex flex-wrap gap-1">
           <TabButton id="overview" label="Overview" icon={<TrendingUp size={18} />} />
           <TabButton id="manage-employees" label="Directory" icon={<Users size={18} />} />
+          <TabButton id="payroll" label="Payroll" icon={<DollarSign size={18} />} />
           <TabButton id="attendance" label="Attendance" icon={<Clock size={18} />} />
           <TabButton id="leave" label="Leave" icon={<UserCheck size={18} />} />
           <TabButton id="monthly-report" label="Reports" icon={<CalendarIcon size={18} />} />
           <TabButton id="status-overview" label="Status" icon={<Briefcase size={18} />} />
+          <TabButton id="leave-policy" label="Policy" icon={<Settings size={18} />} />
           <TabButton id="report" label="Activity" icon={<Search size={18} />} />
         </div>
 

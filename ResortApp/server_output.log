@@ -7862,3 +7862,6 @@ INFO:     127.0.0.1:55410 - "GET /api/packages/bookingsall?limit=1000 HTTP/1.1" 
 [DEBUG get_all_assigned_services] Service 12 has 2 inventory items
 INFO:     127.0.0.1:50964 - "GET /api/services/assigned?skip=0&limit=20 HTTP/1.1" 200 OK
 INFO:     127.0.0.1:64708 - "GET /api/employees HTTP/1.1" 200 OK
+F L U S H   L O G S  
+ F L U S H   L O G S   2  
+ 

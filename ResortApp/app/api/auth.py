@@ -14,11 +14,14 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 @router.post("/login", response_model=Token)
 def login(request: LoginRequest, db: Session = Depends(auth.get_db)):
     try:
+        print(f"LOGIN DEBUG: Received email='{request.email}'")
         # Check if user exists
         user = crud_user.get_user_by_email(db, request.email)
         if not user:
-            print(f"Login attempt: User not found for email: {request.email}")
+            print(f"LOGIN DEBUG: User not found for email: '{request.email}'")
             raise HTTPException(status_code=400, detail="Invalid credentials")
+        
+        print(f"LOGIN DEBUG: User found: id={user.id}, active={user.is_active}, role={user.role}")
         
         # Check if user is active
         if not user.is_active:
@@ -43,13 +46,34 @@ def login(request: LoginRequest, db: Session = Depends(auth.get_db)):
             print(f"Login attempt: Invalid password for email: {request.email}")
             raise HTTPException(status_code=400, detail="Invalid credentials")
         
+        
+        # DEBUG LOGGING TO FILE
+        try:
+            with open("/tmp/auth_debug.log", "a") as f:
+                f.write(f"\n--- Login Attempt {request.email} ---\n")
+                f.write(f"DB URL: {str(db.bind.url)}\n")
+                f.write(f"User ID: {user.id}\n")
+                
+                # Get employee record if exists
+                from app.models import Employee
+                employee = db.query(Employee).filter(Employee.user_id == user.id).first()
+                employee_id = employee.id if employee else None
+                f.write(f"Employee Found: {employee}\n")
+                f.write(f"Employee ID: {employee_id}\n")
+        except Exception as log_err:
+            print(f"Log Error: {log_err}")
+
         # Create access token
+        token_data = {"user_id": user.id, "role": user.role.name}
+        if employee_id:
+            token_data["employee_id"] = employee_id
+            
         access_token = auth.create_access_token(
-            data={"user_id": user.id, "role": user.role.name},
+            data=token_data,
             expires_delta=timedelta(hours=auth.ACCESS_TOKEN_EXPIRE_MINUTES),
         )
-        print(f"Login successful: {request.email}")
-        return {"access_token": access_token}
+        print(f"Login successful: {request.email}, employee_id: {employee_id}")
+        return {"access_token": access_token, "token_type": "bearer"}
     except HTTPException:
         # Re-raise HTTP exceptions (like invalid credentials)
         raise

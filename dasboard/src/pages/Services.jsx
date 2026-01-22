@@ -1235,11 +1235,18 @@ const Services = () => {
 
   const handleAssignEmployeeToRequest = async (requestId, employeeId) => {
     try {
-      // Check if this is a checkout request (ID > 1000000)
-      if (requestId > 1000000) {
-        const checkoutRequestId = requestId - 1000000;
+      const idNum = parseInt(requestId);
+      // Determine request type based on ID ranges
+      if (idNum >= 2000000) {
+        // Assigned Service
+        const asvcId = idNum - 2000000;
+        await api.put(`/services/assigned/${asvcId}`, { employee_id: employeeId });
+      } else if (idNum >= 1000000) {
+        // Checkout Request
+        const checkoutRequestId = idNum - 1000000;
         await api.put(`/bill/checkout-request/${checkoutRequestId}/assign?employee_id=${employeeId}`);
       } else {
+        // Regular Service Request
         await api.put(`/service-requests/${requestId}`, { employee_id: employeeId });
       }
       fetchServiceRequests();
@@ -1258,35 +1265,27 @@ const Services = () => {
       const res = await api.get(`/bill/checkout-request/${checkoutRequestId}/inventory-details`);
       const details = res.data;
 
-      // Fetch inventory verification data
-      if (details.room_number) {
-        try {
-          const verificationRes = await api.get(`/bill/pre-checkout/${details.room_number}/verification-data`);
-          if (verificationRes.data) {
-            if (verificationRes.data.consumables) {
-              details.items = verificationRes.data.consumables.map(item => ({
-                ...item,
-                total_assigned: item.current_stock,
-                current_stock: item.current_stock,
-                available_stock: item.current_stock, // Default assumption: all present
-                used_qty: 0,
-                missing_qty: 0
-              }));
-            }
-            if (verificationRes.data.assets) {
-              // Map assets to include local state fields
-              details.fixed_assets = verificationRes.data.assets.map(asset => ({
-                ...asset,
-                is_damaged: false,
-                damage_notes: "",
-                current_stock: 1,
-                available_stock: 1
-              }));
-            }
-          }
-        } catch (e) {
-          console.error("Failed to fetch inventory verification data:", e);
-        }
+      // Initialize UI state fields for ALL items
+      // The backend now returns a comprehensive list of items (LocationStock + Assets + Registry)
+      // with correct flags (is_fixed_asset, is_rentable, etc.)
+      if (details.items) {
+        details.items = details.items.map(item => ({
+          ...item,
+          // Common UI fields
+          total_assigned: item.current_stock,
+          available_stock: item.current_stock,
+
+          // For Consumables logic
+          used_qty: 0,
+          missing_qty: 0,
+
+          // For Asset logic
+          is_damaged: false,
+          damage_notes: ""
+        }));
+
+        // Derive fixed_assets for the specific rendering section
+        details.fixed_assets = details.items.filter(item => item.is_fixed_asset);
       }
 
       setCheckoutInventoryDetails(details);
@@ -1299,16 +1298,29 @@ const Services = () => {
 
   const handleUpdateInventoryVerification = (index, field, value) => {
     const newItems = [...checkoutInventoryDetails.items];
+    const item = newItems[index];
     const val = parseFloat(value) || 0;
     newItems[index][field] = val;
 
-    // Auto-calculate used/missing based on Available Stock
-    if (field === 'available_stock') {
-      const current = newItems[index].current_stock || 0;
-      const diff = current - val;
-      // Assumption: Difference is "Used" for consumables
-      newItems[index].used_qty = Math.max(0, diff);
-      newItems[index].missing_qty = 0;
+    // Auto-calculate used/missing based on Available Stock or Damaged Qty
+    if (field === 'available_stock' || field === 'damage_qty') {
+      const current = Number(item.current_stock || 0);
+      const available = field === 'available_stock' ? val : Number(item.available_stock || 0);
+      const damaged = field === 'damage_qty' ? val : Number(item.damage_qty || 0);
+
+      if (item.is_rentable || item.track_laundry_cycle) {
+        // For Rentals: Missing = Current - Available - Damaged
+        let missing = current - available - damaged;
+        if (missing < 0) missing = 0;
+        newItems[index].missing_qty = missing;
+        newItems[index].used_qty = 0;
+      } else {
+        // For Consumables: Used = Current - Available
+        let used = current - available;
+        if (used < 0) used = 0;
+        newItems[index].used_qty = used;
+        newItems[index].missing_qty = 0;
+      }
     }
 
     setCheckoutInventoryDetails({
@@ -1335,15 +1347,15 @@ const Services = () => {
         damage_qty: Number(item.damage_qty || 0)
       }));
 
-      // Collect asset damages
+      // Collect asset damages (Damaged OR Missing)
       const assetDamages = (checkoutInventoryDetails.fixed_assets || [])
-        .filter(asset => asset.is_damaged)
+        .filter(asset => asset.is_damaged || (asset.available_stock || 0) < (asset.current_stock || 0))
         .map(asset => ({
           asset_registry_id: asset.asset_registry_id,
           item_id: asset.item_id,
           item_name: asset.item_name,
           replacement_cost: Number(asset.replacement_cost || 0),
-          notes: asset.damage_notes || ""
+          notes: asset.damage_notes || ((asset.available_stock || 0) < (asset.current_stock || 0) ? "Missing at checkout" : "")
         }));
 
       await api.post(`/bill/checkout-request/${checkoutRequestId}/check-inventory`, {
@@ -2047,7 +2059,7 @@ const Services = () => {
                         // If same status, sort by created_at (newest first)
                         return new Date(b.created_at || 0) - new Date(a.created_at || 0);
                       }).map((request, idx) => {
-                        const isCheckoutRequest = request.is_checkout_request || request.id > 1000000;
+                        const isCheckoutRequest = request.is_checkout_request;
                         const checkoutRequestId = isCheckoutRequest ? (request.checkout_request_id || request.id - 1000000) : null;
 
                         return (
@@ -2161,50 +2173,65 @@ const Services = () => {
                             </td>
                             <td className="p-3 border-t border-gray-200">
                               <div className="flex gap-2">
-                                {isCheckoutRequest ? (
-                                  <>
-                                    {!request.employee_id && !request.employee_name && request.status === "pending" && (
-                                      <button
-                                        onClick={() => handleQuickAssignFromRequest(request)}
-                                        className="px-3 py-1 rounded text-sm font-medium bg-green-500 hover:bg-green-600 text-white"
-                                        title="Assign employee to checkout verification"
-                                      >
-                                        Assign Employee
-                                      </button>
+                                    {isCheckoutRequest ? (
+                                      <>
+                                        {((request.status || "").toLowerCase() === "pending" || (request.status || "").toLowerCase() === "in_progress" || (request.status || "").toLowerCase() === "inventory_checked") ? (
+                                          <>
+                                            {!request.employee_id ? (
+                                              <button
+                                                onClick={() => handleQuickAssignFromRequest(request)}
+                                                className="px-4 py-2 rounded-lg text-sm font-semibold bg-orange-500 hover:bg-orange-600 text-white shadow-md hover:shadow-lg transition-all duration-200"
+                                                title="Assign employee first before verification"
+                                              >
+                                                ⚠ Assign Employee First
+                                              </button>
+                                            ) : (
+                                              <button
+                                                onClick={() => handleViewCheckoutInventory(checkoutRequestId)}
+                                                className="px-4 py-2 rounded-lg text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-lg transition-all duration-200"
+                                                title="View inventory details and verify"
+                                              >
+                                                ✓ Verify Inventory
+                                              </button>
+                                            )}
+                                          </>
+                                        ) : (request.status || "").toLowerCase() === "completed" ? (
+                                          <span className="px-3 py-1 rounded text-sm font-medium bg-green-100 text-green-800">
+                                            ✓ Completed
+                                          </span>
+                                        ) : null}
+                                      </>
+                                    ) : (
+                                      <div className="flex gap-2">
+                                        {(request.status || "").toLowerCase() === "pending" && (
+                                          <button
+                                            onClick={!request.employee_id ? () => handleQuickAssignFromRequest(request) : () => handleUpdateRequestStatus(request.id, 'in_progress')}
+                                            className={`px-3 py-1 rounded text-sm font-medium ${!request.employee_id ? 'bg-green-500 hover:bg-green-600' : 'bg-blue-500 hover:bg-blue-600'} text-white`}
+                                            title={!request.employee_id ? "Assign Service" : "Accept & Start Request"}
+                                          >
+                                            {!request.employee_id ? "Assign" : "Accept"}
+                                          </button>
+                                        )}
+                                        
+                                        {(request.status || "").toLowerCase() === "in_progress" && (
+                                          <button
+                                            onClick={() => handleUpdateRequestStatus(request.id, 'completed')}
+                                            className="px-3 py-1 rounded text-sm font-medium bg-green-600 hover:bg-green-700 text-white"
+                                            title="Mark as Completed"
+                                          >
+                                            Complete
+                                          </button>
+                                        )}
+
+                                        <button
+                                          onClick={() => handleDeleteRequest(request.id)}
+                                          className="px-3 py-1 rounded text-sm font-medium bg-red-500 hover:bg-red-600 text-white"
+                                          title="Delete Request"
+                                        >
+                                          Delete
+                                        </button>
+                                      </div>
                                     )}
-                                    {(request.status === "pending" || request.status === "in_progress" || request.status === "inventory_checked") ? (
-                                      <button
-                                        onClick={() => handleViewCheckoutInventory(checkoutRequestId)}
-                                        className="px-4 py-2 rounded-lg text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-lg transition-all duration-200"
-                                        title="View inventory details and verify"
-                                      >
-                                        ✓ Verify Inventory
-                                      </button>
-                                    ) : request.status === "completed" ? (
-                                      <span className="px-3 py-1 rounded text-sm font-medium bg-green-100 text-green-800">
-                                        ✓ Completed
-                                      </span>
-                                    ) : null}
-                                  </>
-                                ) : (
-                                  <>
-                                    {request.status === "pending" && !request.employee_id && !request.employee_name && (
-                                      <button
-                                        onClick={() => handleQuickAssignFromRequest(request)}
-                                        className="px-3 py-1 rounded text-sm font-medium bg-green-500 hover:bg-green-600 text-white"
-                                        title="Quick assign service to this room"
-                                      >
-                                        Assign Service
-                                      </button>
-                                    )}
-                                    {request.employee_id || request.employee_name ? (
-                                      <span className="text-sm text-gray-600">
-                                        {request.employee_name || `Employee #${request.employee_id}`}
-                                      </span>
-                                    ) : null}
-                                  </>
-                                )}
-                              </div>
                             </td>
                           </tr>
                         );
@@ -3059,7 +3086,14 @@ const Services = () => {
                 >
                   <option value="">Select Employee</option>
                   {employees.map((e) => (
-                    <option key={e.id} value={e.id}>{e.name}</option>
+                    <option
+                      key={e.id}
+                      value={e.id}
+                      className={e.is_clocked_in ? "text-green-600 font-bold" : ""}
+                      style={{ color: e.is_clocked_in ? "#16a34a" : "inherit" }}
+                    >
+                      {e.name} {e.is_clocked_in ? " ● (On Duty)" : ""}
+                    </option>
                   ))}
                 </select>
                 <select
@@ -3187,7 +3221,15 @@ const Services = () => {
                 </select>
                 <select value={filters.employee} onChange={(e) => setFilters({ ...filters, employee: e.target.value })} className="border p-2 rounded-lg">
                   <option value="">All Employees</option>
-                  {employees.map((e) => (<option key={e.id} value={e.id}>{e.name}</option>))}
+                  {employees.map((e) => (
+                    <option
+                      key={e.id}
+                      value={e.id}
+                      style={{ color: e.is_clocked_in ? "#16a34a" : "inherit" }}
+                    >
+                      {e.name} {e.is_clocked_in ? "●" : ""}
+                    </option>
+                  ))}
                 </select>
                 <select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })} className="border p-2 rounded-lg">
                   <option value="">All Statuses</option>
@@ -3357,8 +3399,8 @@ const Services = () => {
                           // If same status, sort by created_at (newest first)
                           return new Date(b.created_at || 0) - new Date(a.created_at || 0);
                         }).map((request, idx) => {
-                          const isCheckoutRequest = request.is_checkout_request || request.id > 1000000;
-                          const checkoutRequestId = isCheckoutRequest ? (request.checkout_request_id || request.id - 1000000) : null;
+                          const isCheckoutRequest = request.is_checkout_request;
+                          const checkoutRequestId = isCheckoutRequest ? (request.checkout_request_id || (parseInt(request.id) - 1000000)) : null;
 
                           return (
                             <tr key={request.id} className={`${idx % 2 === 0 ? "bg-white" : "bg-gray-50"} hover:bg-gray-100 transition-colors ${isCheckoutRequest ? 'bg-yellow-50' : ''}`}>
@@ -3462,11 +3504,18 @@ const Services = () => {
                                 )}
                               </td>
                               <td className="p-3 border-t border-gray-200">
-                                {request.employee_name || request.employee_id ? (
-                                  <span className="text-sm">{request.employee_name || `Employee #${request.employee_id}`}</span>
-                                ) : (
-                                  <span className="text-gray-400 text-sm">Not assigned</span>
-                                )}
+                                <select
+                                  value={request.employee_id || ""}
+                                  onChange={(e) => handleAssignEmployeeToRequest(request.id, e.target.value)}
+                                  className={`border p-2 rounded-lg bg-white text-sm ${!request.employee_id ? 'border-orange-300 bg-orange-50' : ''}`}
+                                >
+                                  <option value="">-- Unassigned --</option>
+                                  {employees.map((emp) => (
+                                    <option key={emp.id} value={emp.id}>
+                                      {emp.name} {emp.is_clocked_in ? " ●" : ""}
+                                    </option>
+                                  ))}
+                                </select>
                               </td>
                               <td className="p-3 border-t border-gray-200">
                                 {isCheckoutRequest ? (
@@ -3524,7 +3573,7 @@ const Services = () => {
                                 <div className="flex gap-2">
                                   {isCheckoutRequest ? (
                                     <>
-                                      {(request.status === "pending" || request.status === "in_progress" || request.status === "inventory_checked") ? (
+                                      {((request.status || "").toLowerCase() === "pending" || (request.status || "").toLowerCase() === "in_progress" || (request.status || "").toLowerCase() === "inventory_checked") ? (
                                         <>
                                           {!request.employee_id ? (
                                             <button
@@ -3544,31 +3593,43 @@ const Services = () => {
                                             </button>
                                           )}
                                         </>
-                                      ) : request.status === "completed" ? (
+                                      ) : (request.status || "").toLowerCase() === "completed" ? (
                                         <span className="px-3 py-1 rounded text-sm font-medium bg-green-100 text-green-800">
                                           ✓ Completed
                                         </span>
                                       ) : null}
                                     </>
                                   ) : (
-                                    <>
-                                      {request.status === "pending" && !request.employee_id && (
+                                      <div className="flex gap-2">
+                                        {(request.status || "").toLowerCase() === "pending" && (
+                                          <button
+                                            onClick={!request.employee_id ? () => handleQuickAssignFromRequest(request) : () => handleUpdateRequestStatus(request.id, 'in_progress')}
+                                            className={`px-3 py-1 rounded text-sm font-medium ${!request.employee_id ? 'bg-green-500 hover:bg-green-600' : 'bg-blue-500 hover:bg-blue-600'} text-white`}
+                                            title={!request.employee_id ? "Assign Service" : "Accept & Start Request"}
+                                          >
+                                            {!request.employee_id ? "Assign" : "Accept"}
+                                          </button>
+                                        )}
+                                        
+                                        {(request.status || "").toLowerCase() === "in_progress" && (
+                                          <button
+                                            onClick={() => handleUpdateRequestStatus(request.id, 'completed')}
+                                            className="px-3 py-1 rounded text-sm font-medium bg-green-600 hover:bg-green-700 text-white"
+                                            title="Mark as Completed"
+                                          >
+                                            Complete
+                                          </button>
+                                        )}
+
                                         <button
-                                          onClick={() => handleQuickAssignFromRequest(request)}
-                                          className="px-3 py-1 rounded text-sm font-medium bg-green-500 hover:bg-green-600 text-white"
-                                          title="Quick assign service to this room"
+                                          onClick={() => handleDeleteRequest(request.id)}
+                                          className="px-3 py-1 rounded text-sm font-medium bg-red-500 hover:bg-red-600 text-white"
+                                          title="Delete Request"
                                         >
-                                          Assign Service
+                                          Delete
                                         </button>
-                                      )}
-                                      <button
-                                        onClick={() => handleDeleteRequest(request.id)}
-                                        className="px-3 py-1 rounded text-sm font-medium bg-red-500 hover:bg-red-600 text-white"
-                                      >
-                                        Delete
-                                      </button>
-                                    </>
-                                  )}
+                                      </div>
+                                    )}
                                 </div>
                               </td>
                             </tr>
@@ -4337,16 +4398,39 @@ const Services = () => {
                             {consumableItems.map((item, idx) => {
                               const originalIdx = checkoutInventoryDetails.items.indexOf(item);
                               const price = item.charge_per_unit || item.unit_price || 0;
-                              const isPcs = (item.unit || 'pcs').toLowerCase() === 'pcs';
-                              const totalQty = isPcs ? Math.floor(item.current_stock || 0) : (item.current_stock || 0);
-                              const availableQty = isPcs ? Math.floor(item.available_stock || 0) : (item.available_stock || 0);
+                              const isPcs = (item.unit || 'pcs').toLowerCase();
+                              const isDiscreteUnit = ['pcs', 'pc', 'can', 'bottle', 'unit', 'nos', 'number', 'pkt', 'pack', 'box', 'tray', 'piece', 'pieces'].includes(isPcs);
+                              const totalQty = isDiscreteUnit ? Math.floor(item.current_stock || 0) : (item.current_stock || 0);
+                              const availableQty = isDiscreteUnit ? Math.floor(item.available_stock || 0) : (item.available_stock || 0);
 
                               let consumedQty = Math.max(0, totalQty - availableQty);
-                              if (isPcs) consumedQty = Math.round(consumedQty);
+                              if (isDiscreteUnit) consumedQty = Math.round(consumedQty);
                               else consumedQty = parseFloat(consumedQty.toFixed(2));
 
-                              const freeLimit = item.complimentary_limit || 0;
-                              const chargeable = Math.max(0, consumedQty - freeLimit);
+                              const freeLimit = item.complimentary_qty || 0;
+                              let chargeable;
+
+                              // Fix: Only charge if item is payable or exceeds limit
+                              if (item.is_payable) {
+                                // If marked payable (based on stock logic), everything is chargeable
+                                // (Unless backend provides specific 'payable_qty', but we simplistically assume all consumed from this line are payable if flag is set, 
+                                // OR we assume backend split items into "Payable Coke" and "Free Coke")
+                                // Since we aggregated, we should ideally rely on payable_qty. 
+                                // But here, backend says 'is_payable' is true only if payable_qty > 0.
+
+                                // If backend returns mixed stock (e.g. 1 Free, 1 Payable), and we consumed 1:
+                                // Is it the free one or payable one? 
+                                // Usually we consume Free first. 
+                                // So chargeable = max(0, consumed - (total - payable)) ? No, complex.
+
+                                // Simple logic matching backend intent:
+                                // If item.is_payable is False, then Charge is 0.
+                                // If item.is_payable is True, we charge.
+                                chargeable = Math.max(0, consumedQty - freeLimit);
+                              } else {
+                                chargeable = 0;
+                              }
+
                               const chargeAmount = chargeable * price;
 
                               return (
@@ -4361,22 +4445,22 @@ const Services = () => {
                                       type="number"
                                       min="0"
                                       max={totalQty}
-                                      step={isPcs ? "1" : "0.01"}
+                                      step={isDiscreteUnit ? "1" : "0.01"}
                                       className="w-20 border rounded p-1.5 text-center font-bold text-green-600 border-gray-300 focus:ring-2 focus:ring-green-500"
                                       value={availableQty}
                                       onKeyDown={(e) => {
-                                        if (isPcs && (e.key === '.' || e.key === 'e')) {
+                                        if (isDiscreteUnit && (e.key === '.' || e.key === 'e')) {
                                           e.preventDefault();
                                         }
                                       }}
                                       onChange={(e) => {
                                         let val = parseFloat(e.target.value);
                                         if (isNaN(val)) val = 0;
-                                        if (isPcs) val = Math.floor(val);
+                                        if (isDiscreteUnit) val = Math.floor(val);
                                         val = Math.min(totalQty, Math.max(0, val));
 
                                         handleUpdateInventoryVerification(originalIdx, 'available_stock', val);
-                                        handleUpdateInventoryVerification(originalIdx, 'used_qty', isPcs ? Math.round(totalQty - val) : parseFloat((totalQty - val).toFixed(2)));
+                                        handleUpdateInventoryVerification(originalIdx, 'used_qty', isDiscreteUnit ? Math.round(totalQty - val) : parseFloat((totalQty - val).toFixed(2)));
                                       }}
                                       placeholder="Remaining"
                                     />
@@ -4427,20 +4511,21 @@ const Services = () => {
                               const originalIdx = checkoutInventoryDetails.items.indexOf(item);
                               const price = item.charge_per_unit || item.unit_price || 0;
                               const damagePrice = item.cost_per_unit || price;
-                              const isPcs = (item.unit || 'pcs').toLowerCase() === 'pcs';
+                              const isPcs = (item.unit || 'pcs').toLowerCase() === 'pcs' || true; // FORCE INT for all
 
-                              const totalQty = isPcs ? Math.floor(item.current_stock || 0) : (item.current_stock || 0);
-                              const good = isPcs ? Math.floor(item.available_stock || 0) : (item.available_stock || 0);
-                              const damaged = isPcs ? Math.floor(item.damage_qty || 0) : (item.damage_qty || 0);
+                              const totalQty = Math.floor(item.current_stock || 0);
+                              const good = Math.floor(item.available_stock || 0);
+                              const damaged = Math.floor(item.damage_qty || 0);
 
                               let missing = totalQty - good - damaged;
                               if (missing < 0) missing = 0;
-                              if (isPcs) missing = Math.round(missing);
-                              else missing = parseFloat(missing.toFixed(2));
+                              missing = Math.round(missing);
 
                               let chargeAmount = 0;
-                              // Rent charge (if applicable)
-                              if (item.is_payable || item.payable_qty > 0) chargeAmount += (item.payable_qty || 0) * price;
+                              // FIX: For Rental/Laundry Check, we only calculate DAMAGES/MISSING costs here.
+                              // Rental fees are handled in billing, not verification.
+                              // if (item.is_payable || item.payable_qty > 0) chargeAmount += (item.payable_qty || 0) * price;
+
                               // Damage/Missing charge
                               chargeAmount += damaged * damagePrice;
                               chargeAmount += missing * damagePrice;
@@ -4456,21 +4541,9 @@ const Services = () => {
                                   <td className="py-3 px-4 text-center">
                                     <input
                                       type="number"
-                                      min="0"
-                                      max={totalQty}
-                                      step={isPcs ? "1" : "0.01"}
-                                      className="w-16 border rounded p-1.5 text-center font-bold text-green-600 border-gray-300 focus:ring-2 focus:ring-green-500"
+                                      readOnly
+                                      className="w-16 border rounded p-1.5 text-center font-bold text-gray-600 bg-gray-100 border-gray-300 cursor-not-allowed"
                                       value={good}
-                                      onKeyDown={(e) => {
-                                        if (isPcs && (e.key === '.' || e.key === 'e')) e.preventDefault();
-                                      }}
-                                      onChange={(e) => {
-                                        let val = parseFloat(e.target.value);
-                                        if (isNaN(val)) val = 0;
-                                        if (isPcs) val = Math.floor(val);
-                                        val = Math.min(totalQty, Math.max(0, val));
-                                        handleUpdateInventoryVerification(originalIdx, 'available_stock', val);
-                                      }}
                                     />
                                   </td>
                                   <td className="py-3 px-4 text-center">
@@ -4489,8 +4562,14 @@ const Services = () => {
                                         if (isNaN(val)) val = 0;
                                         if (isPcs) val = Math.floor(val);
                                         val = Math.min(totalQty, Math.max(0, val));
+
                                         handleUpdateInventoryVerification(originalIdx, 'damage_qty', val);
                                         handleUpdateInventoryVerification(originalIdx, 'is_damaged', val > 0);
+
+                                        // Auto-calculate Good (available_stock) as Total - Damaged
+                                        // This assumes Missing is 0 for this workflow
+                                        const newGood = Math.max(0, totalQty - val);
+                                        handleUpdateInventoryVerification(originalIdx, 'available_stock', newGood);
                                       }}
                                     />
                                   </td>
@@ -4509,107 +4588,9 @@ const Services = () => {
                     </div>
                   )}
 
-                  {/* Fixed Assets Section */}
-                  {fixedItems.length > 0 && (
-                    <div className="mb-6">
-                      <h3 className="text-lg font-semibold mb-3 text-red-700">Fixed Assets Check</h3>
-                      <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg">
-                        <p className="text-sm text-red-800">
-                          🔧 <strong>For Fixed Assets:</strong> Track items that should stay in the room.
-                        </p>
-                      </div>
-                      <div className="overflow-x-auto border rounded-lg">
-                        <table className="min-w-full text-sm">
-                          <thead className="bg-red-50 uppercase tracking-wider text-red-800">
-                            <tr>
-                              <th className="py-3 px-4 text-left">Item Name</th>
-                              <th className="py-3 px-4 text-center">Total Stock</th>
-                              <th className="py-3 px-4 text-center">Good</th>
-                              <th className="py-3 px-4 text-center">Damaged</th>
-                              <th className="py-3 px-4 text-center">Missing</th>
-                              <th className="py-3 px-4 text-right">Potential Charge</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-gray-200">
-                            {fixedItems.map((item, idx) => {
-                              const originalIdx = checkoutInventoryDetails.items.indexOf(item);
-                              const price = item.charge_per_unit || item.unit_price || 0;
-                              const damagePrice = item.cost_per_unit || price;
-                              const isPcs = (item.unit || 'pcs').toLowerCase() === 'pcs';
-
-                              const totalQty = isPcs ? Math.floor(item.current_stock || 0) : (item.current_stock || 0);
-                              const good = isPcs ? Math.floor(item.available_stock || 0) : (item.available_stock || 0);
-                              const damaged = isPcs ? Math.floor(item.damage_qty || 0) : (item.damage_qty || 0);
-
-                              let missing = totalQty - good - damaged;
-                              if (missing < 0) missing = 0;
-                              if (isPcs) missing = Math.round(missing);
-                              else missing = parseFloat(missing.toFixed(2));
-
-                              let chargeAmount = (damaged * damagePrice) + (missing * damagePrice);
-
-                              return (
-                                <tr key={idx} className="hover:bg-red-50">
-                                  <td className="py-3 px-4 font-medium">
-                                    {item.item_name}
-                                    <span className="ml-2 text-xs bg-red-100 text-red-800 px-2 py-0.5 rounded">FIXED</span>
-                                  </td>
-                                  <td className="py-3 px-4 text-center text-gray-600 font-semibold">{isPcs ? Math.floor(totalQty) : totalQty}</td>
-                                  <td className="py-3 px-4 text-center">
-                                    <input
-                                      type="number"
-                                      min="0"
-                                      max={totalQty}
-                                      step={isPcs ? "1" : "0.01"}
-                                      className="w-16 border rounded p-1.5 text-center font-bold text-green-600 border-gray-300 focus:ring-2 focus:ring-green-500"
-                                      value={good}
-                                      onKeyDown={(e) => {
-                                        if (isPcs && (e.key === '.' || e.key === 'e')) e.preventDefault();
-                                      }}
-                                      onChange={(e) => {
-                                        let val = parseFloat(e.target.value);
-                                        if (isNaN(val)) val = 0;
-                                        if (isPcs) val = Math.floor(val);
-                                        val = Math.min(totalQty, Math.max(0, val));
-                                        handleUpdateInventoryVerification(originalIdx, 'available_stock', val);
-                                      }}
-                                    />
-                                  </td>
-                                  <td className="py-3 px-4 text-center">
-                                    <input
-                                      type="number"
-                                      min="0"
-                                      max={totalQty}
-                                      step={isPcs ? "1" : "0.01"}
-                                      className="w-16 border rounded p-1.5 text-center font-bold text-red-600 border-gray-300 focus:ring-2 focus:ring-red-500"
-                                      value={damaged}
-                                      onKeyDown={(e) => {
-                                        if (isPcs && (e.key === '.' || e.key === 'e')) e.preventDefault();
-                                      }}
-                                      onChange={(e) => {
-                                        let val = parseFloat(e.target.value);
-                                        if (isNaN(val)) val = 0;
-                                        if (isPcs) val = Math.floor(val);
-                                        val = Math.min(totalQty, Math.max(0, val));
-                                        handleUpdateInventoryVerification(originalIdx, 'damage_qty', val);
-                                        handleUpdateInventoryVerification(originalIdx, 'is_damaged', val > 0);
-                                      }}
-                                    />
-                                  </td>
-                                  <td className="py-3 px-4 text-center">
-                                    <div className="font-bold text-orange-600">{missing > 0 ? missing : '-'}</div>
-                                  </td>
-                                  <td className="py-3 px-4 text-right font-medium text-red-600">
-                                    {chargeAmount > 0 ? `+₹${chargeAmount.toFixed(2)}` : '-'}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
+                  {/* Fixed Assets Section - REMOVED DUPLICATE */}
+                  {/* The primary Fixed Assets Check is rendered at the top of the modal using checkoutInventoryDetails.fixed_assets */}
+                  {/* Fixed Assets Section - REMOVED DUPLICATE: Primary section is at top */}
                 </>
               );
             })()}
@@ -4730,190 +4711,195 @@ const Services = () => {
             </div>
           </div>
         </div>
-      )}
+      )
+      }
 
       {/* Payment Modal - For Service Request Completion */}
-      {paymentModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full">
-            <h2 className="text-xl font-bold mb-4">Complete Service Request</h2>
+      {
+        paymentModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 max-w-md w-full">
+              <h2 className="text-xl font-bold mb-4">Complete Service Request</h2>
 
-            <div className="mb-6">
-              <p className="text-gray-700 mb-4">
-                This delivery service request has an associated food order.
-                Please select the payment status for the food order:
-              </p>
-            </div>
+              <div className="mb-6">
+                <p className="text-gray-700 mb-4">
+                  This delivery service request has an associated food order.
+                  Please select the payment status for the food order:
+                </p>
+              </div>
 
-            <div className="flex flex-col gap-3">
-              <button
-                onClick={() => handleUpdateRequestStatus(paymentModal.requestId, paymentModal.newStatus, "paid")}
-                className="w-full px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors"
-              >
-                ✓ Mark as Paid & Complete
-              </button>
-
-              <button
-                onClick={() => handleUpdateRequestStatus(paymentModal.requestId, paymentModal.newStatus, "unpaid")}
-                className="w-full px-4 py-3 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium transition-colors"
-              >
-                Mark as Unpaid & Complete
-              </button>
-
-              <button
-                onClick={() => setPaymentModal(null)}
-                className="w-full px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-
-            <div className="mt-4 p-3 bg-blue-50 rounded-lg">
-              <p className="text-xs text-blue-800">
-                <strong>Note:</strong> The food order will be marked as completed.
-                If marked as unpaid, you can collect payment later from the billing section.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-      {/* Activity Details Modal */}
-      {selectedActivity && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-fade-in-up">
-            <div className="p-6">
-              <div className="flex justify-between items-start mb-6 border-b pb-4">
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-                    {selectedActivity.type === 'Assigned' ? 'Service Assigment Details' : 'Service Request Details'}
-                    <span className={`px-2 py-1 text-sm rounded-full ${selectedActivity.status === 'completed' ? 'bg-green-100 text-green-800' :
-                      selectedActivity.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
-                        'bg-yellow-100 text-yellow-800'
-                      }`}>
-                      {selectedActivity.status}
-                    </span>
-                  </h2>
-                  <p className="text-gray-500 mt-1">ID: {selectedActivity.id}</p>
-                </div>
+              <div className="flex flex-col gap-3">
                 <button
-                  onClick={() => setSelectedActivity(null)}
-                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                  onClick={() => handleUpdateRequestStatus(paymentModal.requestId, paymentModal.newStatus, "paid")}
+                  className="w-full px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors"
                 >
-                  <X size={24} />
+                  ✓ Mark as Paid & Complete
+                </button>
+
+                <button
+                  onClick={() => handleUpdateRequestStatus(paymentModal.requestId, paymentModal.newStatus, "unpaid")}
+                  className="w-full px-4 py-3 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium transition-colors"
+                >
+                  Mark as Unpaid & Complete
+                </button>
+
+                <button
+                  onClick={() => setPaymentModal(null)}
+                  className="w-full px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium transition-colors"
+                >
+                  Cancel
                 </button>
               </div>
 
-              <div className="space-y-6">
-                {/* Core Info */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="p-4 bg-gray-50 rounded-lg">
-                    <p className="text-sm text-gray-500 mb-1">Service / Description</p>
-                    <p className="font-semibold text-lg text-gray-900">{selectedActivity.name}</p>
+              <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+                <p className="text-xs text-blue-800">
+                  <strong>Note:</strong> The food order will be marked as completed.
+                  If marked as unpaid, you can collect payment later from the billing section.
+                </p>
+              </div>
+            </div>
+          </div>
+        )
+      }
+      {/* Activity Details Modal */}
+      {
+        selectedActivity && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-fade-in-up">
+              <div className="p-6">
+                <div className="flex justify-between items-start mb-6 border-b pb-4">
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                      {selectedActivity.type === 'Assigned' ? 'Service Assigment Details' : 'Service Request Details'}
+                      <span className={`px-2 py-1 text-sm rounded-full ${selectedActivity.status === 'completed' ? 'bg-green-100 text-green-800' :
+                        selectedActivity.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
+                          'bg-yellow-100 text-yellow-800'
+                        }`}>
+                        {selectedActivity.status}
+                      </span>
+                    </h2>
+                    <p className="text-gray-500 mt-1">ID: {selectedActivity.id}</p>
                   </div>
-                  <div className="p-4 bg-gray-50 rounded-lg">
-                    <p className="text-sm text-gray-500 mb-1">Room</p>
-                    <p className="font-semibold text-lg text-gray-900">{selectedActivity.room}</p>
-                  </div>
-                  <div className="p-4 bg-gray-50 rounded-lg">
-                    <p className="text-sm text-gray-500 mb-1">Assigned / Checked By</p>
-                    <p className="font-semibold text-lg text-gray-900">
-                      {selectedActivity.employee !== '-'
-                        ? selectedActivity.employee
-                        : (selectedActivity.original?.inventory_checked_by || 'System')}
-                    </p>
-                  </div>
-                  <div className="p-4 bg-gray-50 rounded-lg">
-                    <p className="text-sm text-gray-500 mb-1">Timestamp</p>
-                    <p className="font-semibold text-gray-900">
-                      {new Date(selectedActivity.date).toLocaleString()}
-                    </p>
-                  </div>
-                </div>
-
-
-
-                {/* Inventory Consumption & Asset Damage Details */}
-                {selectedActivity.type !== 'Assigned' && selectedActivity.original && (
-                  <div className="space-y-4">
-                    {/* Asset Damages */}
-                    {selectedActivity.original.asset_damages && selectedActivity.original.asset_damages.length > 0 && (
-                      <div className="bg-red-50 p-4 rounded-lg border border-red-100">
-                        <h3 className="text-md font-semibold text-red-800 mb-2">Asset Damages Reported</h3>
-                        <div className="overflow-x-auto">
-                          <table className="min-w-full text-sm">
-                            <thead className="bg-red-100 text-red-900">
-                              <tr>
-                                <th className="px-3 py-2 text-left">Item Name</th>
-                                <th className="px-3 py-2 text-center">Cost</th>
-                                <th className="px-3 py-2 text-left">Notes</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {selectedActivity.original.asset_damages.map((asset, idx) => (
-                                <tr key={idx} className="border-t border-red-200">
-                                  <td className="px-3 py-2 font-medium">{asset.item_name}</td>
-                                  <td className="px-3 py-2 text-center">₹{asset.replacement_cost}</td>
-                                  <td className="px-3 py-2 text-gray-700">{asset.notes || '-'}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Inventory Items Used */}
-                    {selectedActivity.original.inventory_data_with_charges && selectedActivity.original.inventory_data_with_charges.length > 0 && (
-                      <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                        <h3 className="text-md font-semibold text-gray-800 mb-2">Inventory Items Consumed</h3>
-                        <div className="overflow-x-auto">
-                          <table className="min-w-full text-sm">
-                            <thead className="bg-gray-200 text-gray-700">
-                              <tr>
-                                <th className="px-3 py-2 text-left">Item Name</th>
-                                <th className="px-3 py-2 text-center">Used</th>
-                                <th className="px-3 py-2 text-center">Missing</th>
-                                <th className="px-3 py-2 text-center">Charge</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {selectedActivity.original.inventory_data_with_charges.map((item, idx) => {
-                                // Safely fallback if missing_item_charge is missing
-                                const itemCharge = item.missing_item_charge || 0;
-                                return (
-                                  <tr key={idx} className="border-t border-gray-200">
-                                    <td className="px-3 py-2 font-medium">{item.item_name}</td>
-                                    <td className="px-3 py-2 text-center">{item.used_qty}</td>
-                                    <td className="px-3 py-2 text-center text-red-600">{item.missing_qty > 0 ? item.missing_qty : '-'}</td>
-                                    <td className="px-3 py-2 text-center font-medium">
-                                      {itemCharge > 0 ? <span className="text-red-600">₹{itemCharge}</span> : <span className="text-green-600">Free</span>}
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Cancel/Close Actions */}
-                <div className="flex justify-end pt-4 border-t">
                   <button
                     onClick={() => setSelectedActivity(null)}
-                    className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium"
+                    className="text-gray-400 hover:text-gray-600 transition-colors"
                   >
-                    Close
+                    <X size={24} />
                   </button>
+                </div>
+
+                <div className="space-y-6">
+                  {/* Core Info */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-4 bg-gray-50 rounded-lg">
+                      <p className="text-sm text-gray-500 mb-1">Service / Description</p>
+                      <p className="font-semibold text-lg text-gray-900">{selectedActivity.name}</p>
+                    </div>
+                    <div className="p-4 bg-gray-50 rounded-lg">
+                      <p className="text-sm text-gray-500 mb-1">Room</p>
+                      <p className="font-semibold text-lg text-gray-900">{selectedActivity.room}</p>
+                    </div>
+                    <div className="p-4 bg-gray-50 rounded-lg">
+                      <p className="text-sm text-gray-500 mb-1">Assigned / Checked By</p>
+                      <p className="font-semibold text-lg text-gray-900">
+                        {selectedActivity.employee !== '-'
+                          ? selectedActivity.employee
+                          : (selectedActivity.original?.inventory_checked_by || 'System')}
+                      </p>
+                    </div>
+                    <div className="p-4 bg-gray-50 rounded-lg">
+                      <p className="text-sm text-gray-500 mb-1">Timestamp</p>
+                      <p className="font-semibold text-gray-900">
+                        {new Date(selectedActivity.date).toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+
+
+
+                  {/* Inventory Consumption & Asset Damage Details */}
+                  {selectedActivity.type !== 'Assigned' && selectedActivity.original && (
+                    <div className="space-y-4">
+                      {/* Asset Damages */}
+                      {selectedActivity.original.asset_damages && selectedActivity.original.asset_damages.length > 0 && (
+                        <div className="bg-red-50 p-4 rounded-lg border border-red-100">
+                          <h3 className="text-md font-semibold text-red-800 mb-2">Asset Damages Reported</h3>
+                          <div className="overflow-x-auto">
+                            <table className="min-w-full text-sm">
+                              <thead className="bg-red-100 text-red-900">
+                                <tr>
+                                  <th className="px-3 py-2 text-left">Item Name</th>
+                                  <th className="px-3 py-2 text-center">Cost</th>
+                                  <th className="px-3 py-2 text-left">Notes</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {selectedActivity.original.asset_damages.map((asset, idx) => (
+                                  <tr key={idx} className="border-t border-red-200">
+                                    <td className="px-3 py-2 font-medium">{asset.item_name}</td>
+                                    <td className="px-3 py-2 text-center">₹{asset.replacement_cost}</td>
+                                    <td className="px-3 py-2 text-gray-700">{asset.notes || '-'}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Inventory Items Used */}
+                      {selectedActivity.original.inventory_data_with_charges && selectedActivity.original.inventory_data_with_charges.length > 0 && (
+                        <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                          <h3 className="text-md font-semibold text-gray-800 mb-2">Inventory Items Consumed</h3>
+                          <div className="overflow-x-auto">
+                            <table className="min-w-full text-sm">
+                              <thead className="bg-gray-200 text-gray-700">
+                                <tr>
+                                  <th className="px-3 py-2 text-left">Item Name</th>
+                                  <th className="px-3 py-2 text-center">Used</th>
+                                  <th className="px-3 py-2 text-center">Missing</th>
+                                  <th className="px-3 py-2 text-center">Charge</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {selectedActivity.original.inventory_data_with_charges.map((item, idx) => {
+                                  // Safely fallback if missing_item_charge is missing
+                                  const itemCharge = item.missing_item_charge || 0;
+                                  return (
+                                    <tr key={idx} className="border-t border-gray-200">
+                                      <td className="px-3 py-2 font-medium">{item.item_name}</td>
+                                      <td className="px-3 py-2 text-center">{item.used_qty}</td>
+                                      <td className="px-3 py-2 text-center text-red-600">{item.missing_qty > 0 ? item.missing_qty : '-'}</td>
+                                      <td className="px-3 py-2 text-center font-medium">
+                                        {itemCharge > 0 ? <span className="text-red-600">₹{itemCharge}</span> : <span className="text-green-600">Free</span>}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Cancel/Close Actions */}
+                  <div className="flex justify-end pt-4 border-t">
+                    <button
+                      onClick={() => setSelectedActivity(null)}
+                      className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium"
+                    >
+                      Close
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
-    </DashboardLayout>
+        )
+      }
+    </DashboardLayout >
   );
 };
 

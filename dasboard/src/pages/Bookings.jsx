@@ -3,6 +3,7 @@ import { formatCurrency } from "../utils/currency";
 import { getQuantityStep, normalizeQuantity } from "../utils/quantityValidation";
 import DashboardLayout from "../layout/DashboardLayout";
 import API from "../services/api";
+import { getMediaBaseUrl } from "../utils/env";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import CountUp from "react-countup";
@@ -35,6 +36,14 @@ const KPI_Card = React.memo(({ title, value, unit = "", duration = 1.5 }) => (
   </motion.div>
 ));
 KPI_Card.displayName = "KPI_Card";
+
+const getImageUrl = (imagePath) => {
+  if (!imagePath) return 'https://placehold.co/400x300/e2e8f0/a0aec0?text=No+Image';
+  if (imagePath.startsWith('http')) return imagePath;
+  const baseUrl = getMediaBaseUrl();
+  const path = imagePath.startsWith('/') ? imagePath : `/${imagePath}`;
+  return `${baseUrl}${path}`;
+};
 
 const BookingStatusBadge = React.memo(({ status }) => {
   const statusClasses = {
@@ -223,9 +232,7 @@ const BookingDetailsModal = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {booking.id_card_image_url &&
                   (() => {
-                    // Use API base URL for image endpoints
-                    const imageUrl = `${API.defaults.baseURL}/${booking.is_package ? "packages/booking/checkin-image" : "bookings/checkin-image"}/${booking.id_card_image_url}`;
-                    console.log("ID Card Image URL:", imageUrl);
+                    const imageUrl = getImageUrl(`/uploads/checkin_proofs/${booking.id_card_image_url}`);
                     return (
                       <div className="text-center">
                         <p className="text-sm font-medium text-gray-600 mb-1">
@@ -246,9 +253,7 @@ const BookingDetailsModal = ({
                   })()}
                 {booking.guest_photo_url &&
                   (() => {
-                    // Use API base URL for image endpoints
-                    const imageUrl = `${API.defaults.baseURL}/${booking.is_package ? "packages/booking/checkin-image" : "bookings/checkin-image"}/${booking.guest_photo_url}`;
-                    console.log("Guest Photo URL:", imageUrl);
+                    const imageUrl = getImageUrl(`/uploads/checkin_proofs/${booking.guest_photo_url}`);
                     return (
                       <div className="text-center">
                         <p className="text-sm font-medium text-gray-600 mb-1">
@@ -874,10 +879,13 @@ const AddExtraAllocationModal = ({
             authHeader(),
           );
           setCurrentRoomItems(res.data?.items || []);
-          setActiveTab("current"); // Switch to current items tab to show the new items
         } catch (error) {
           console.error("Error refreshing items:", error);
+        } finally {
+          setActiveTab("current"); // Switch to current items tab to show the new items
         }
+      } else {
+        setActiveTab("current");
       }
 
       if (onSuccess) {
@@ -1151,18 +1159,11 @@ const AddExtraAllocationModal = ({
                             let calculatedComplimentaryQty = complimentaryQty;
                             let calculatedPayableQty = payableQty;
 
-                            if (complimentaryQty === 0 && payableQty === 0 && totalQty > 0) {
-                              calculatedComplimentaryQty = Math.min(totalQty, complimentaryLimit);
-                              calculatedPayableQty = Math.max(0, totalQty - complimentaryLimit);
-                            }
 
                             return (
                               <tr key={index} className="hover:bg-gray-50">
                                 <td className="px-3 py-2 text-sm">
                                   <div className="font-medium text-gray-900">{item.item_name}</div>
-                                  {complimentaryLimit > 0 && (
-                                    <div className="text-xs text-blue-600 mt-1">Limit: {complimentaryLimit} free</div>
-                                  )}
                                 </td>
                                 <td className="px-3 py-2 text-sm text-gray-600 font-medium">{totalQty} {item.unit}</td>
                                 <td className="px-3 py-2 text-sm text-green-700 font-medium">{calculatedComplimentaryQty} {item.unit}</td>
@@ -1384,8 +1385,56 @@ const AddExtraAllocationModal = ({
                                       }}
                                       className="w-full px-2 py-1 text-sm border border-indigo-300 rounded focus:ring-2 focus:ring-indigo-500 outline-none"
                                     >
-                                      <option value="">Select Rentable Asset...</option>
-                                      {inventoryItems.filter(inv => inv.is_asset_fixed || inv.track_laundry_cycle || !inv.is_perishable).map(inv => (
+                                      <option value="">Select Rentable Asset ({inventoryItems.filter(inv => {
+                                        const catName = String(inv.category_name || inv.category?.name || "").toLowerCase();
+                                        const itemName = String(inv.name || "").toLowerCase();
+                                        const isConsumableCategory = catName.includes("beverage") || catName.includes("food") ||
+                                          catName.includes("minibar") || catName.includes("consumable") ||
+                                          catName.includes("guest amenities") || catName.includes("kitchen") ||
+                                          catName.includes("restaurant") || catName.includes("ingredient") ||
+                                          catName.includes("raw material") || catName.includes("grocery") ||
+                                          catName.includes("cleaning") || catName.includes("toiletries") || catName.includes("housekeeping");
+                                        const isConsumableName = itemName.includes("water") || itemName.includes("cola") ||
+                                          itemName.includes("juice") || itemName.includes("drink") || itemName.includes("beverage") ||
+                                          itemName.includes("snack") || itemName.includes("chocolate") || itemName.includes("candy") ||
+                                          itemName.includes("biscuit") || itemName.includes("cookie") || itemName.includes("chips") ||
+                                          itemName.includes("soda") || itemName.includes("tea") || itemName.includes("coffee") ||
+                                          itemName.includes("chicken") || itemName.includes("rice") || itemName.includes("egg") ||
+                                          itemName.includes("meat") || itemName.includes("fish") || itemName.includes("vegetable") ||
+                                          itemName.includes("fruit") || itemName.includes("milk") || itemName.includes("bread") ||
+                                          itemName.includes("oil") || itemName.includes("spice") || itemName.includes("sauce") ||
+                                          itemName.includes("flour") || itemName.includes("sugar") || itemName.includes("salt") ||
+                                          itemName.includes("soap") || itemName.includes("detergent") || itemName.includes("shampoo") ||
+                                          itemName.includes("conditioner") || itemName.includes("toothpaste") || itemName.includes("cleaner") ||
+                                          itemName.includes("disinfectant") || itemName.includes("bleach") || itemName.includes("polish");
+                                        const isPerishable = inv.is_perishable === true;
+                                        return !isConsumableCategory && !isConsumableName && !isPerishable;
+                                      }).length} items)...</option>
+                                      {inventoryItems.filter(inv => {
+                                        const catName = String(inv.category_name || inv.category?.name || "").toLowerCase();
+                                        const itemName = String(inv.name || "").toLowerCase();
+                                        const isConsumableCategory = catName.includes("beverage") || catName.includes("food") ||
+                                          catName.includes("minibar") || catName.includes("consumable") ||
+                                          catName.includes("guest amenities") || catName.includes("kitchen") ||
+                                          catName.includes("restaurant") || catName.includes("ingredient") ||
+                                          catName.includes("raw material") || catName.includes("grocery") ||
+                                          catName.includes("cleaning") || catName.includes("toiletries") || catName.includes("housekeeping");
+                                        const isConsumableName = itemName.includes("water") || itemName.includes("cola") ||
+                                          itemName.includes("juice") || itemName.includes("drink") || itemName.includes("beverage") ||
+                                          itemName.includes("snack") || itemName.includes("chocolate") || itemName.includes("candy") ||
+                                          itemName.includes("biscuit") || itemName.includes("cookie") || itemName.includes("chips") ||
+                                          itemName.includes("soda") || itemName.includes("tea") || itemName.includes("coffee") ||
+                                          itemName.includes("chicken") || itemName.includes("rice") || itemName.includes("egg") ||
+                                          itemName.includes("meat") || itemName.includes("fish") || itemName.includes("vegetable") ||
+                                          itemName.includes("fruit") || itemName.includes("milk") || itemName.includes("bread") ||
+                                          itemName.includes("oil") || itemName.includes("spice") || itemName.includes("sauce") ||
+                                          itemName.includes("flour") || itemName.includes("sugar") || itemName.includes("salt") ||
+                                          itemName.includes("soap") || itemName.includes("detergent") || itemName.includes("shampoo") ||
+                                          itemName.includes("conditioner") || itemName.includes("toothpaste") || itemName.includes("cleaner") ||
+                                          itemName.includes("disinfectant") || itemName.includes("bleach") || itemName.includes("polish");
+                                        const isPerishable = inv.is_perishable === true;
+                                        return !isConsumableCategory && !isConsumableName && !isPerishable;
+                                      }).map(inv => (
                                         <option key={inv.id} value={inv.id}>{inv.name}</option>
                                       ))}
                                     </select>
@@ -1467,14 +1516,13 @@ const AddExtraAllocationModal = ({
                                       onChange={(e) => {
                                         const selectedLocationId = e.target.value;
 
-                                        // Check if stock is available at selected location
+                                        // Check if stock is available at selected location - warn but allow selection
                                         if (item.item_id && selectedLocationId) {
                                           const stock = itemStockCache[item.item_id]?.[selectedLocationId];
                                           const qty = item.location_stock || 1;
 
                                           if (stock !== undefined && stock < qty) {
-                                            alert(`Insufficient stock at selected location!\n\nAvailable: ${stock}\nRequired: ${qty}\n\nPlease select a different location or reduce quantity.`);
-                                            return; // Don't update if stock is insufficient
+                                            console.warn(`Insufficient stock at selected location: Available: ${stock}, Required: ${qty}. Proceeding with negative stock.`);
                                           }
                                         }
 
@@ -1718,7 +1766,7 @@ const AddExtraAllocationModal = ({
                       >
                         <option value="">Select an item</option>
                         {inventoryItems
-                          .filter((it) => it.is_active !== false && it.is_sellable_to_guest)
+                          .filter((it) => it.is_active !== false && (it.is_sellable_to_guest || it.is_asset_fixed || it.track_laundry_cycle))
                           .map((invItem) => (
 
 
@@ -1734,9 +1782,6 @@ const AddExtraAllocationModal = ({
                                 ? `(${invItem.item_code})`
                                 : ""}{" "}
                               - Avail: {itemStockCache[invItem.id]?.[item.source_location_id || getDefaultSourceLocationId()] || 0} {invItem.unit} (Global: {invItem.current_stock})
-                              {invItem.complimentary_limit
-                                ? ` (First ${invItem.complimentary_limit} free)`
-                                : ""}
                             </option>
                           ))}
                       </select>
@@ -6077,7 +6122,16 @@ const Bookings = () => {
               setModalBooking(null);
               setBookingForAllocation(booking);
             }}
-            inventoryItems={inventoryItems}
+            inventoryItems={inventoryItems.filter((item) => {
+              const dept = String(item.department || "").toLowerCase();
+              const catName = String(item.category_name || item.category?.name || "").toLowerCase();
+              return (
+                !dept.includes("kitchen") &&
+                !dept.includes("restaurant") &&
+                !catName.includes("ingredient") &&
+                !catName.includes("raw material")
+              );
+            })}
             inventoryLocations={inventoryLocations}
             authHeader={authHeader}
           />

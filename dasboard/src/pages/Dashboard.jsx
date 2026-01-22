@@ -9,7 +9,7 @@ import {
 } from "recharts";
 
 // Import the new bubble animation CSS
-import "../styles/bubble-animation.css"; 
+import "../styles/bubble-animation.css";
 
 const COLORS = ["#6366F1", "#22C55E", "#F59E0B", "#EF4444", "#06B6D4", "#A78BFA", "#F43F5E", "#10B981", "#60A5FA", "#FBBF24"];
 
@@ -30,159 +30,173 @@ const Dashboard = () => {
   const [inventoryItems, setInventoryItems] = useState([]);
   const [inventoryCategories, setInventoryCategories] = useState([]);
   const [employees, setEmployees] = useState([]);
+  const [summary, setSummary] = useState(null);
+  const [dailyKpis, setDailyKpis] = useState(null);
 
   // ---------- Fetch Data Function ----------
   const fetchDashboardData = useCallback(async (showLoading = true) => {
-      try {
+    try {
       if (showLoading) {
         setLoading(true);
       }
-        setErr(null); // Clear any previous errors
-        
-        // Fetch all endpoints with individual error handling to prevent complete failure
-        // Use smaller limits and batch requests to avoid overwhelming the server
-        // Batch 1: Critical data (reduced limits for faster response)
-        const batch1 = await Promise.allSettled([
-          API.get("/bookings?limit=50").catch(err => ({ error: err, data: { bookings: [] } })),
-          API.get("/packages/bookingsall?limit=50").catch(err => ({ error: err, data: [] })),
-          API.get("/rooms?limit=100").catch(err => ({ error: err, data: [] })),
-          API.get("/expenses?limit=50").catch(err => ({ error: err, data: [] })),
-        ]);
-        
-        // Batch 2: Secondary data
-        const batch2 = await Promise.allSettled([
-          API.get("/food-orders?limit=50").catch(err => ({ error: err, data: [] })),
-          API.get("/food-items?limit=100").catch(err => ({ error: err, data: [] })),
-          API.get("/services/assigned?limit=100").catch(err => ({ error: err, data: [] })),
-          API.get("/services?limit=100").catch(err => ({ error: err, data: [] })),
-        ]);
-        
-        // Batch 3: Additional data
-        const batch3 = await Promise.allSettled([
-          API.get("/bill/checkouts?limit=50").catch(err => ({ error: err, data: [] })),
-          API.get("/packages?limit=100").catch(err => ({ error: err, data: [] })),
-          API.get("/inventory/items?limit=100").catch(err => ({ error: err, data: [] })),
-          API.get("/inventory/categories?limit=50").catch(err => ({ error: err, data: [] })),
-          API.get("/employees?limit=100").catch(err => ({ error: err, data: [] })),
-        ]);
-        
-        // Combine all results in the correct order
-        const results = [...batch1, ...batch2, ...batch3];
-        
-        // Process results individually - allow partial failures
-        // Bookings
-        if (results[0].status === 'fulfilled' && !results[0].value.error) {
-          setBookings(Array.isArray(results[0].value.data?.bookings) ? results[0].value.data.bookings : []);
-        } else {
-          console.error("Failed to load bookings:", results[0].value?.error || results[0].reason);
-          setBookings([]);
-        }
-        
-        // Package Bookings
-        if (results[1].status === 'fulfilled' && !results[1].value.error) {
-          setPackageBookings(Array.isArray(results[1].value.data) ? results[1].value.data : []);
-        } else {
-          console.error("Failed to load package bookings:", results[1].value?.error || results[1].reason);
-          setPackageBookings([]);
-        }
-        
-        // Rooms
-        if (results[2].status === 'fulfilled' && !results[2].value.error) {
-          setRooms(Array.isArray(results[2].value.data) ? results[2].value.data : []);
-        } else {
-          console.error("Failed to load rooms:", results[2].value?.error || results[2].reason);
-          setRooms([]);
-        }
-        
-        // Expenses
-        if (results[3].status === 'fulfilled' && !results[3].value.error) {
-          setExpenses(Array.isArray(results[3].value.data) ? results[3].value.data : []);
-        } else {
-          console.error("Failed to load expenses:", results[3].value?.error || results[3].reason);
-          setExpenses([]);
-        }
-        
-        // Food Orders
-        if (results[4].status === 'fulfilled' && !results[4].value.error) {
-          setFoodOrders(Array.isArray(results[4].value.data) ? results[4].value.data : []);
-        } else {
-          console.error("Failed to load food orders:", results[4].value?.error || results[4].reason);
-          setFoodOrders([]);
-        }
-        
-        // Food Items
-        if (results[5].status === 'fulfilled' && !results[5].value.error) {
-          setFoodItems(Array.isArray(results[5].value.data) ? results[5].value.data : []);
-        } else {
-          console.error("Failed to load food items:", results[5].value?.error || results[5].reason);
-          setFoodItems([]);
-        }
-        
-        // Assigned Services
-        if (results[6].status === 'fulfilled' && !results[6].value.error) {
-          setAssignedServices(Array.isArray(results[6].value.data) ? results[6].value.data : []);
-        } else {
-          console.error("Failed to load assigned services:", results[6].value?.error || results[6].reason);
-          setAssignedServices([]);
-        }
-        
-        // Services
-        if (results[7].status === 'fulfilled' && !results[7].value.error) {
-          setServices(Array.isArray(results[7].value.data) ? results[7].value.data : []);
-        } else {
-          console.error("Failed to load services:", results[7].value?.error || results[7].reason);
-          setServices([]);
-        }
-        
-        // Billings
-        if (results[8].status === 'fulfilled' && !results[8].value.error) {
-          setBillings(Array.isArray(results[8].value.data) ? results[8].value.data : []);
-        } else {
-          console.error("Failed to load billings:", results[8].value?.error || results[8].reason);
-          setBillings([]);
-        }
-        
-        // Packages
-        if (results[9].status === 'fulfilled' && !results[9].value.error) {
-          setPackages(Array.isArray(results[9].value.data) ? results[9].value.data : []);
-        } else {
-          console.error("Failed to load packages:", results[9].value?.error || results[9].reason);
-          setPackages([]);
-        }
-        
-        // Inventory Items
-        if (results[10].status === 'fulfilled' && !results[10].value.error) {
-          setInventoryItems(Array.isArray(results[10].value.data) ? results[10].value.data : []);
-        } else {
-          console.error("Failed to load inventory items:", results[10].value?.error || results[10].reason);
-          setInventoryItems([]);
-        }
-        
-        // Inventory Categories
-        if (results[11].status === 'fulfilled' && !results[11].value.error) {
-          setInventoryCategories(Array.isArray(results[11].value.data) ? results[11].value.data : []);
-        } else {
-          console.error("Failed to load inventory categories:", results[11].value?.error || results[11].reason);
-          setInventoryCategories([]);
-        }
-        
-        // Employees
-        if (results[12].status === 'fulfilled' && !results[12].value.error) {
-          setEmployees(Array.isArray(results[12].value.data) ? results[12].value.data : []);
-        } else {
-          console.error("Failed to load employees:", results[12].value?.error || results[12].reason);
-          setEmployees([]);
-        }
-        
-        // Set error message only if all requests failed
-        const allFailed = results.every(r => r.status === 'rejected' || (r.status === 'fulfilled' && r.value?.error));
-        if (allFailed) {
-          setErr("Failed to load dashboard data. Please check your connection and try again.");
-        }
-      } catch (e) {
-        console.error("Dashboard fetch error:", e);
-        setErr(e?.response?.data?.detail || "Failed to load dashboard data");
-      } finally {
+      setErr(null); // Clear any previous errors
+
+      // Fetch all endpoints with individual error handling to prevent complete failure
+      // Use smaller limits and batch requests to avoid overwhelming the server
+      // Batch 1: Critical data (reduced limits for faster response)
+      const batch1 = await Promise.allSettled([
+        API.get("/bookings?limit=50").catch(err => ({ error: err, data: { bookings: [] } })),
+        API.get("/packages/bookingsall?limit=50").catch(err => ({ error: err, data: [] })),
+        API.get("/rooms?limit=100").catch(err => ({ error: err, data: [] })),
+        API.get("/expenses?limit=50").catch(err => ({ error: err, data: [] })),
+      ]);
+
+      // Batch 2: Secondary data
+      const batch2 = await Promise.allSettled([
+        API.get("/food-orders?limit=50").catch(err => ({ error: err, data: [] })),
+        API.get("/food-items?limit=100").catch(err => ({ error: err, data: [] })),
+        API.get("/services/assigned?limit=100").catch(err => ({ error: err, data: [] })),
+        API.get("/services?limit=100").catch(err => ({ error: err, data: [] })),
+      ]);
+
+      // Batch 3: Additional data
+      const batch3 = await Promise.allSettled([
+        API.get("/bill/checkouts?limit=50").catch(err => ({ error: err, data: [] })),
+        API.get("/packages?limit=100").catch(err => ({ error: err, data: [] })),
+        API.get("/inventory/items?limit=100").catch(err => ({ error: err, data: [] })),
+        API.get("/inventory/categories?limit=50").catch(err => ({ error: err, data: [] })),
+        API.get("/employees?limit=100").catch(err => ({ error: err, data: [] })),
+        API.get("/dashboard/summary?period=all").catch(err => ({ error: err, data: null })),
+        API.get("/dashboard/kpis").catch(err => ({ error: err, data: [] })),
+      ]);
+
+      // Combine all results in the correct order
+      const results = [...batch1, ...batch2, ...batch3];
+
+      // Process results individually - allow partial failures
+      // Bookings
+      if (results[0].status === 'fulfilled' && !results[0].value.error) {
+        setBookings(Array.isArray(results[0].value.data?.bookings) ? results[0].value.data.bookings : []);
+      } else {
+        console.error("Failed to load bookings:", results[0].value?.error || results[0].reason);
+        setBookings([]);
+      }
+
+      // Package Bookings
+      if (results[1].status === 'fulfilled' && !results[1].value.error) {
+        setPackageBookings(Array.isArray(results[1].value.data) ? results[1].value.data : []);
+      } else {
+        console.error("Failed to load package bookings:", results[1].value?.error || results[1].reason);
+        setPackageBookings([]);
+      }
+
+      // Rooms
+      if (results[2].status === 'fulfilled' && !results[2].value.error) {
+        setRooms(Array.isArray(results[2].value.data) ? results[2].value.data : []);
+      } else {
+        console.error("Failed to load rooms:", results[2].value?.error || results[2].reason);
+        setRooms([]);
+      }
+
+      // Expenses
+      if (results[3].status === 'fulfilled' && !results[3].value.error) {
+        setExpenses(Array.isArray(results[3].value.data) ? results[3].value.data : []);
+      } else {
+        console.error("Failed to load expenses:", results[3].value?.error || results[3].reason);
+        setExpenses([]);
+      }
+
+      // Food Orders
+      if (results[4].status === 'fulfilled' && !results[4].value.error) {
+        setFoodOrders(Array.isArray(results[4].value.data) ? results[4].value.data : []);
+      } else {
+        console.error("Failed to load food orders:", results[4].value?.error || results[4].reason);
+        setFoodOrders([]);
+      }
+
+      // Food Items
+      if (results[5].status === 'fulfilled' && !results[5].value.error) {
+        setFoodItems(Array.isArray(results[5].value.data) ? results[5].value.data : []);
+      } else {
+        console.error("Failed to load food items:", results[5].value?.error || results[5].reason);
+        setFoodItems([]);
+      }
+
+      // Assigned Services
+      if (results[6].status === 'fulfilled' && !results[6].value.error) {
+        setAssignedServices(Array.isArray(results[6].value.data) ? results[6].value.data : []);
+      } else {
+        console.error("Failed to load assigned services:", results[6].value?.error || results[6].reason);
+        setAssignedServices([]);
+      }
+
+      // Services
+      if (results[7].status === 'fulfilled' && !results[7].value.error) {
+        setServices(Array.isArray(results[7].value.data) ? results[7].value.data : []);
+      } else {
+        console.error("Failed to load services:", results[7].value?.error || results[7].reason);
+        setServices([]);
+      }
+
+      // Billings
+      if (results[8].status === 'fulfilled' && !results[8].value.error) {
+        setBillings(Array.isArray(results[8].value.data) ? results[8].value.data : []);
+      } else {
+        console.error("Failed to load billings:", results[8].value?.error || results[8].reason);
+        setBillings([]);
+      }
+
+      // Packages
+      if (results[9].status === 'fulfilled' && !results[9].value.error) {
+        setPackages(Array.isArray(results[9].value.data) ? results[9].value.data : []);
+      } else {
+        console.error("Failed to load packages:", results[9].value?.error || results[9].reason);
+        setPackages([]);
+      }
+
+      // Inventory Items
+      if (results[10].status === 'fulfilled' && !results[10].value.error) {
+        setInventoryItems(Array.isArray(results[10].value.data) ? results[10].value.data : []);
+      } else {
+        console.error("Failed to load inventory items:", results[10].value?.error || results[10].reason);
+        setInventoryItems([]);
+      }
+
+      // Inventory Categories
+      if (results[11].status === 'fulfilled' && !results[11].value.error) {
+        setInventoryCategories(Array.isArray(results[11].value.data) ? results[11].value.data : []);
+      } else {
+        console.error("Failed to load inventory categories:", results[11].value?.error || results[11].reason);
+        setInventoryCategories([]);
+      }
+
+      // Employees
+      if (results[12].status === 'fulfilled' && !results[12].value.error) {
+        setEmployees(Array.isArray(results[12].value.data) ? results[12].value.data : []);
+      } else {
+        console.error("Failed to load employees:", results[12].value?.error || results[12].reason);
+        setEmployees([]);
+      }
+
+      // Summary
+      if (results[13].status === 'fulfilled' && !results[13].value.error) {
+        setSummary(results[13].value.data);
+      }
+
+      // Daily KPIs
+      if (results[14].status === 'fulfilled' && !results[14].value.error) {
+        setDailyKpis(Array.isArray(results[14].value.data) && results[14].value.data.length > 0 ? results[14].value.data[0] : null);
+      }
+
+      // Set error message only if all requests failed
+      const allFailed = results.every(r => r.status === 'rejected' || (r.status === 'fulfilled' && r.value?.error));
+      if (allFailed) {
+        setErr("Failed to load dashboard data. Please check your connection and try again.");
+      }
+    } catch (e) {
+      console.error("Dashboard fetch error:", e);
+      setErr(e?.response?.data?.detail || "Failed to load dashboard data");
+    } finally {
       if (showLoading) {
         setLoading(false);
       }
@@ -192,10 +206,10 @@ const Dashboard = () => {
   // ---------- Initial Data Fetch and Auto-Refresh ----------
   useEffect(() => {
     let mounted = true;
-    
+
     // Initial fetch with loading indicator
     fetchDashboardData(true);
-    
+
     // Set up auto-refresh every 5 minutes (300,000 milliseconds)
     const refreshInterval = setInterval(() => {
       if (mounted) {
@@ -203,7 +217,7 @@ const Dashboard = () => {
         fetchDashboardData(false);
       }
     }, 5 * 60 * 1000); // 5 minutes
-    
+
     return () => {
       mounted = false;
       clearInterval(refreshInterval);
@@ -230,11 +244,11 @@ const Dashboard = () => {
     }).length;
     // Ensure counts add up correctly
     const calculatedMaintenance = Math.max(0, total - occupied - available);
-    return { 
-      total, 
-      occupied, 
-      available, 
-      maintenance: maintenance > 0 ? maintenance : calculatedMaintenance 
+    return {
+      total,
+      occupied,
+      available,
+      maintenance: maintenance > 0 ? maintenance : calculatedMaintenance
     };
   }, [rooms]);
   const revenue = useMemo(() => {
@@ -277,9 +291,9 @@ const Dashboard = () => {
     // Active bookings: exclude cancelled and checked-out
     const active = bookings.filter(b => {
       const status = (b.status || "").toLowerCase();
-      return !status.includes("cancel") && 
-             !status.includes("checked-out") && 
-             !status.includes("checked_out");
+      return !status.includes("cancel") &&
+        !status.includes("checked-out") &&
+        !status.includes("checked_out");
     }).length;
     return { total, active, cancelled };
   }, [bookings]);
@@ -371,7 +385,7 @@ const Dashboard = () => {
   }, [packages]);
 
   // ---------- New Comprehensive Calculations ----------
-  
+
   // Food Orders Revenue & Metrics
   const foodOrdersMetrics = useMemo(() => {
     const completed = foodOrders.filter(o => (o.status || "").toLowerCase().includes("completed") || (o.status || "").toLowerCase().includes("done"));
@@ -406,7 +420,7 @@ const Dashboard = () => {
     const totalSellingValue = inventoryItems
       .filter(item => item.is_sellable_to_guest || item.is_sellable)
       .reduce((sum, item) => sum + (Number(item.current_stock || 0) * Number(item.selling_price || item.unit_price || 0)), 0);
-    
+
     return {
       totalItems: inventoryItems.length,
       totalValue,
@@ -423,8 +437,8 @@ const Dashboard = () => {
     const totalRevenue = assignedServices
       .filter(s => (s.status || "").toLowerCase().includes("completed") || (s.status || "").toLowerCase().includes("done"))
       .reduce((sum, s) => sum + Number(s.charges || s.service?.charges || 0), 0);
-    const completed = assignedServices.filter(s => 
-      (s.status || "").toLowerCase().includes("completed") || 
+    const completed = assignedServices.filter(s =>
+      (s.status || "").toLowerCase().includes("completed") ||
       (s.status || "").toLowerCase().includes("done")
     ).length;
     return {
@@ -493,8 +507,8 @@ const Dashboard = () => {
   // Food Orders Revenue by Date (Last 14 days)
   const foodOrdersRevenueSeries = useMemo(() => {
     const map = new Map();
-    const completed = foodOrders.filter(o => 
-      (o.status || "").toLowerCase().includes("completed") || 
+    const completed = foodOrders.filter(o =>
+      (o.status || "").toLowerCase().includes("completed") ||
       (o.status || "").toLowerCase().includes("done")
     );
     completed.forEach(o => {
@@ -516,8 +530,8 @@ const Dashboard = () => {
   // Services Revenue by Date (Last 14 days)
   const servicesRevenueSeries = useMemo(() => {
     const map = new Map();
-    const completed = assignedServices.filter(s => 
-      (s.status || "").toLowerCase().includes("completed") || 
+    const completed = assignedServices.filter(s =>
+      (s.status || "").toLowerCase().includes("completed") ||
       (s.status || "").toLowerCase().includes("done")
     );
     completed.forEach(s => {
@@ -546,8 +560,8 @@ const Dashboard = () => {
         unitPrice: Number(item.unit_price || 0),
         sellingPrice: Number(item.selling_price || item.unit_price || 0),
         totalValue: Number(item.current_stock || 0) * Number(item.selling_price || item.unit_price || 0),
-        profitMargin: item.selling_price && item.unit_price 
-          ? ((item.selling_price - item.unit_price) / item.selling_price * 100) 
+        profitMargin: item.selling_price && item.unit_price
+          ? ((item.selling_price - item.unit_price) / item.selling_price * 100)
           : 0
       }))
       .sort((a, b) => b.totalValue - a.totalValue)
@@ -601,7 +615,7 @@ const Dashboard = () => {
           <div className="bg-red-50 border border-red-200 rounded-xl p-6">
             <h2 className="text-xl font-bold text-red-800 mb-2">Error Loading Dashboard</h2>
             <p className="text-red-600">{err}</p>
-            <button 
+            <button
               onClick={() => { setErr(null); fetchDashboardData(); }}
               className="mt-4 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
             >
@@ -642,12 +656,36 @@ const Dashboard = () => {
 
         {/* KPI Cards - Row 1: Financial Overview */}
         <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2 sm:gap-4">
-          <KPICard label="Total Revenue" value={fmtCurrency(revenue.total + foodOrdersMetrics.totalRevenue + servicesMetrics.totalRevenue + packageBookingsMetrics.totalRevenue)} sub="All time" />
-          <KPICard label="Today Revenue" value={fmtCurrency(revenue.today + foodOrdersMetrics.todayRevenue + packageBookingsMetrics.todayRevenue)} sub="Today" />
-          <KPICard label="This Month Revenue" value={fmtCurrency(revenue.month)} sub="Month" />
-          <KPICard label="Net Profit" value={fmtCurrency(netProfit.total)} sub={`Margin: ${netProfit.margin.toFixed(1)}%`} />
-          <KPICard label="Total Expenses" value={fmtCurrency(expenseAgg.total)} sub="All time" />
-          <KPICard label="This Month Expenses" value={fmtCurrency(expenseAgg.month)} sub="Month" />
+          <KPICard
+            label="Total Revenue"
+            value={fmtCurrency(summary?.total_revenue ?? (revenue.total + foodOrdersMetrics.totalRevenue + servicesMetrics.totalRevenue + packageBookingsMetrics.totalRevenue))}
+            sub="All time"
+          />
+          <KPICard
+            label="Today Revenue"
+            value={fmtCurrency(dailyKpis?.food_revenue_today ?? (revenue.today + foodOrdersMetrics.todayRevenue + packageBookingsMetrics.todayRevenue))}
+            sub="Today"
+          />
+          <KPICard
+            label="ADR"
+            value={fmtCurrency(summary ? (summary.room_bookings > 0 ? summary.total_revenue / summary.room_bookings : 0) : 0)}
+            sub="Avg Daily Rate"
+          />
+          <KPICard
+            label="RevPAR"
+            value={fmtCurrency(summary ? (rooms.length > 0 ? summary.total_revenue / rooms.length : 0) : 0)}
+            sub="Rev/Avail Room"
+          />
+          <KPICard
+            label="Total Expenses"
+            value={fmtCurrency(summary?.total_expenses ?? expenseAgg.total)}
+            sub="All time"
+          />
+          <KPICard
+            label="Net Profit"
+            value={fmtCurrency(summary ? summary.total_revenue - summary.total_expenses : netProfit.total)}
+            sub={`Margin: ${summary ? (summary.total_revenue > 0 ? ((summary.total_revenue - summary.total_expenses) / summary.total_revenue * 100).toFixed(1) : "0.0") : netProfit.margin.toFixed(1)}%`}
+          />
         </section>
 
         {/* KPI Cards - Row 2: Bookings & Rooms */}
@@ -672,12 +710,12 @@ const Dashboard = () => {
 
         {/* KPI Cards - Row 4: Inventory & Employees */}
         <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2 sm:gap-4">
-          <KPICard label="Inventory Items" value={inventoryMetrics.totalItems} sub={`Categories: ${inventoryMetrics.categories}`} />
-          <KPICard label="Inventory Value" value={fmtCurrency(inventoryMetrics.totalValue)} sub="Total stock value" />
-          <KPICard label="Sellable Items" value={inventoryMetrics.sellableItems} sub={fmtCurrency(inventoryMetrics.totalSellingValue)} />
-          <KPICard label="Low Stock Items" value={inventoryMetrics.lowStock} sub="Needs attention" />
+          <KPICard label="Inventory Items" value={summary?.inventory_items ?? inventoryMetrics.totalItems} sub={`Categories: ${summary?.inventory_categories ?? inventoryMetrics.categories}`} />
+          <KPICard label="Inventory Value" value={fmtCurrency(summary?.total_inventory_value ?? inventoryMetrics.totalValue)} sub="Total stock value" />
+          <KPICard label="Sellable Items" value={summary?.sellable_items_count ?? inventoryMetrics.sellableItems} sub={fmtCurrency(inventoryMetrics.totalSellingValue)} />
+          <KPICard label="Low Stock Items" value={summary?.low_stock_items_count ?? inventoryMetrics.lowStock} sub="Needs attention" />
           <KPICard label="Out of Stock" value={inventoryMetrics.outOfStock} sub="Critical" />
-          <KPICard label="Employees" value={employeeMetrics.total} sub={`Active: ${employeeMetrics.active}`} />
+          <KPICard label="Employees" value={summary?.active_employees ?? employeeMetrics.total} sub={`Active: ${employeeMetrics.active}`} />
         </section>
 
         {/* Charts Row 1 */}
@@ -898,10 +936,9 @@ const Dashboard = () => {
                       <Td className="text-xs sm:text-sm hidden lg:table-cell">{b.check_in}</Td>
                       <Td className="text-xs sm:text-sm hidden lg:table-cell">{b.check_out}</Td>
                       <Td>
-                        <span className={`px-2 py-1 text-xs rounded font-semibold ${
-                          String(b.status || "").toLowerCase().includes("cancel")
-                            ? "bg-red-100 text-red-600"
-                            : "bg-green-100 text-green-700"
+                        <span className={`px-2 py-1 text-xs rounded font-semibold ${String(b.status || "").toLowerCase().includes("cancel")
+                          ? "bg-red-100 text-red-600"
+                          : "bg-green-100 text-green-700"
                           }`}>
                           {b.status}
                         </span>
@@ -933,12 +970,11 @@ const Dashboard = () => {
                       <Td className="text-xs sm:text-sm hidden sm:table-cell">{c.room_number || "-"}</Td>
                       <Td className="text-xs sm:text-sm capitalize hidden md:table-cell">{String(c.payment_method || "").replace("_", " ")}</Td>
                       <Td className="uppercase">
-                        <span className={`px-2 py-1 text-xs rounded font-semibold ${
-                          String(c.payment_status || "").toLowerCase() === "paid"
-                            ? "bg-green-100 text-green-700"
-                            : String(c.payment_status || "").toLowerCase() === "pending"
-                              ? "bg-yellow-100 text-yellow-700"
-                              : "bg-gray-100 text-gray-700"
+                        <span className={`px-2 py-1 text-xs rounded font-semibold ${String(c.payment_status || "").toLowerCase() === "paid"
+                          ? "bg-green-100 text-green-700"
+                          : String(c.payment_status || "").toLowerCase() === "pending"
+                            ? "bg-yellow-100 text-yellow-700"
+                            : "bg-gray-100 text-gray-700"
                           }`}>
                           {c.payment_status}
                         </span>
@@ -952,7 +988,7 @@ const Dashboard = () => {
             </div>
           </Card>
         </section>
-        
+
         {/* New tables section */}
         <section className="grid grid-cols-1 xl:grid-cols-2 gap-6">
           <Card title="Latest Packages">
@@ -979,7 +1015,7 @@ const Dashboard = () => {
               </table>
             </div>
           </Card>
-          
+
           <Card title="Recent Food Orders">
             <div className="overflow-x-auto w-full">
               <table className="min-w-full text-sm">
@@ -998,10 +1034,9 @@ const Dashboard = () => {
                       <Td>{o.type || o.category || "-"}</Td>
                       <Td>{Array.isArray(o.items) ? o.items.length : (o.quantity || "-")}</Td>
                       <Td>
-                        <span className={`px-2 py-1 text-xs rounded font-semibold ${
-                          String(o.status || "").toLowerCase().includes("cancel")
-                            ? "bg-red-100 text-red-600"
-                            : "bg-blue-100 text-blue-700"
+                        <span className={`px-2 py-1 text-xs rounded font-semibold ${String(o.status || "").toLowerCase().includes("cancel")
+                          ? "bg-red-100 text-red-600"
+                          : "bg-blue-100 text-blue-700"
                           }`}>
                           {o.status || "NEW"}
                         </span>

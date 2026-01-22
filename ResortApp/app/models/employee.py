@@ -12,6 +12,12 @@ class Employee(Base):
     join_date = Column(Date)
     image_url = Column(String, nullable=True) # ✅ Changed 'image' to 'image_url' for clarity
     
+    # Leave balances (total allocated per year)
+    paid_leave_balance = Column(Integer, default=12)
+    sick_leave_balance = Column(Integer, default=12)
+    long_leave_balance = Column(Integer, default=5)
+    wellness_leave_balance = Column(Integer, default=5)
+    
     # ✅ Add this foreign key column to link to the users table
     user_id = Column(Integer, ForeignKey("users.id"), unique=True)
     
@@ -22,6 +28,7 @@ class Employee(Base):
     expenses = relationship("Expense", back_populates="employee")
     attendances = relationship("Attendance", back_populates="employee")
     working_logs = relationship("WorkingLog", back_populates="employee")
+    salary_payments = relationship("SalaryPayment", back_populates="employee")
 
 class Leave(Base):
     __tablename__ = "leaves"
@@ -31,7 +38,7 @@ class Leave(Base):
     from_date = Column(Date)
     to_date = Column(Date)
     reason = Column(String)
-    leave_type = Column(String, default="Paid") # Add leave_type, e.g., 'Paid', 'Sick'
+    leave_type = Column(String, default="Paid") # Leave type: 'Paid', 'Sick', 'Long', 'Wellness'
     status = Column(String, default="pending")
 
     employee = relationship("Employee", back_populates="leaves")

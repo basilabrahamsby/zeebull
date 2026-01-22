@@ -18,9 +18,9 @@ const SummaryCard = ({ label, value, icon, color, highlight }) => {
             <div className="flex items-center justify-between gap-2">
                 <div className="flex-1 min-w-0">
                     <p className="text-xs sm:text-sm text-gray-600 truncate">{label}</p>
-                    <p className={`text-base sm:text-lg md:text-xl lg:text-2xl font-bold mt-1 break-words ${colorClasses[color]}`}>
+                    <div className={`text-base sm:text-lg md:text-xl lg:text-2xl font-bold mt-1 break-words ${colorClasses[color]}`}>
                         {value}
-                    </p>
+                    </div>
                 </div>
                 <div className={colorClasses[color] + " p-2 sm:p-3 rounded-lg flex-shrink-0"}>{icon}</div>
             </div>

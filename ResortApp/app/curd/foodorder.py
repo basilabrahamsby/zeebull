@@ -5,7 +5,7 @@ from app.models.Package import PackageBooking, PackageBookingRoom
 from app.models.service_request import ServiceRequest
 from app.schemas.foodorder import FoodOrderCreate, FoodOrderUpdate
 from datetime import datetime
-# Notification system removed
+from app.curd.notification import notify_food_order_created, notify_food_order_status_changed
 
 def get_guest_for_room(room_id, db: Session, reference_date=None):
     """Get guest name for a room from either regular or package bookings"""
@@ -100,7 +100,14 @@ def create_food_order(db: Session, order_data: FoodOrderCreate):
             db.commit()
     
     
-    # Notification system removed for performance
+    # Notify about new order
+    try:
+        from app.models.room import Room
+        room = db.query(Room).filter(Room.id == order.room_id).first()
+        room_number = room.number if room else "Unknown"
+        notify_food_order_created(db, room_number, order.id)
+    except Exception as e:
+        print(f"Notification error: {e}")
     
     
     # Reload order with relationships to ensure response has all data (especially food_item_name)
@@ -190,7 +197,23 @@ def update_food_order_status(db: Session, order_id: int, status: str):
                 db.rollback()
                 print(f"Failed to process inventory usage: {e}")
         
-        # Notification system removed for performance
+        # Notify status change
+        try:
+            from app.models.room import Room
+            from app.models.employee import Employee
+            
+            room = db.query(Room).filter(Room.id == order.room_id).first()
+            room_number = room.number if room else "Unknown"
+            
+            recipient_id = None
+            if order.assigned_employee_id:
+                emp = db.query(Employee).filter(Employee.id == order.assigned_employee_id).first()
+                if emp:
+                    recipient_id = emp.user_id
+            
+            notify_food_order_status_changed(db, room_number, status, order.id, recipient_id=recipient_id)
+        except Exception as e:
+            print(f"Notification error: {e}")
             
     return order
 
@@ -234,7 +257,23 @@ def update_food_order(db: Session, order_id: int, update_data: FoodOrderUpdate):
                 )
                 db.add(service_request)
         
-        # Notification system removed for performance
+        # Notify status change
+        try:
+            from app.models.room import Room
+            from app.models.employee import Employee
+            
+            room = db.query(Room).filter(Room.id == order.room_id).first()
+            room_number = room.number if room else "Unknown"
+            
+            recipient_id = None
+            if order.assigned_employee_id:
+                emp = db.query(Employee).filter(Employee.id == order.assigned_employee_id).first()
+                if emp:
+                    recipient_id = emp.user_id
+
+            notify_food_order_status_changed(db, room_number, update_data.status, order.id, recipient_id=recipient_id)
+        except Exception as e:
+            print(f"Notification error: {e}")
 
     if update_data.billing_status is not None:
         order.billing_status = update_data.billing_status

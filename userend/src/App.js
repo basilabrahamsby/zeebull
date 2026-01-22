@@ -1092,7 +1092,10 @@ export default function App() {
             // Helper: fetch JSON but never throw – log and return fallback on error.
             const safeFetch = async (endpoint, fallback) => {
                 try {
-                    const res = await fetch(`${API_BASE_URL}${endpoint}`);
+                    // Add cache-busting timestamp to force fresh requests
+                    const separator = endpoint.includes('?') ? '&' : '?';
+                    const cacheBuster = `${separator}_t=${Date.now()}`;
+                    const res = await fetch(`${API_BASE_URL}${endpoint}${cacheBuster}`);
                     if (!res.ok) {
                         console.warn(`Endpoint ${endpoint} returned ${res.status}`);
                         return { data: fallback, error: true };

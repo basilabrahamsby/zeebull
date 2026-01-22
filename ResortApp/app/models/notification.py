@@ -28,3 +28,5 @@ class Notification(Base):
     # Optional metadata for linking to specific entities
     entity_type = Column(String(50), nullable=True)  # e.g., "booking", "service", "expense"
     entity_id = Column(Integer, nullable=True)  # ID of the related entity
+    recipient_id = Column(Integer, nullable=True) # ID of the user who receives this notification (NULL for global)
+

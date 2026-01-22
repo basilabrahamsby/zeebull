@@ -1,0 +1,13 @@
+{
+  "files": {
+    "main.css": "/orchid/static/css/main.0fa40bfa.css",
+    "main.js": "/orchid/static/js/main.aa7f2820.js",
+    "index.html": "/orchid/index.html",
+    "main.0fa40bfa.css.map": "/orchid/static/css/main.0fa40bfa.css.map",
+    "main.aa7f2820.js.map": "/orchid/static/js/main.aa7f2820.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.0fa40bfa.css",
+    "static/js/main.aa7f2820.js"
+  ]
+}

@@ -8,6 +8,9 @@ console.log("API Base URL:", apiBaseUrl); // Debug log
 const API = axios.create({
   baseURL: apiBaseUrl,
   timeout: 60000, // 60 second timeout (increased for large queries)
+  headers: {
+    "Accept": "application/json",
+  },
 });
 
 // Automatically add token to headers and prevent caching

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, Fragment } from "react";
+import { useState, useEffect, useRef, Fragment } from "react"; // HMR Force Update
 import { Link, useLocation, Navigate } from "react-router-dom";
 import { AnimatePresence, motion, m } from "framer-motion";
 import {
@@ -22,6 +22,7 @@ import {
   Briefcase,
   Sun,
   Warehouse,
+  Activity,
 } from "lucide-react";
 import { jwtDecode } from "jwt-decode";
 import orchidLogo from "../assets/orchidlogo.png";
@@ -212,7 +213,7 @@ export default function DashboardLayout({ children }) {
   // Menu items with role-based access control
   const allMenuItems = [
     { label: "Dashboard", icon: <Home size={18} />, to: "/dashboard" },
-    { label: "Account", icon: <UserCircle size={18} />, to: "/account", roles: ["admin"] },
+    { label: "Finance", icon: <UserCircle size={18} />, to: "/account", roles: ["admin"] },
     { label: "Bookings", icon: <CalendarCheck2 size={18} />, to: "/bookings" },
     { label: "Packages", icon: <Package size={18} />, to: "/packages" },
     { label: "Services", icon: <ConciergeBell size={18} />, to: "/services" },
@@ -248,6 +249,7 @@ export default function DashboardLayout({ children }) {
     { label: "Employee Mgt", icon: <Briefcase size={18} />, to: "/employee-management", roles: ["admin", "manager"] },
     { label: "Inventory", icon: <Warehouse size={18} />, to: "/inventory", roles: ["admin", "manager"] },
     { label: "Settings", icon: <Settings size={18} />, to: "/settings", roles: ["admin"] },
+    { label: "Activity Logs", icon: <Activity size={18} />, to: "/activity-logs", roles: ["admin"] },
   ];
 
   const menuItems = allMenuItems.filter((item) => {

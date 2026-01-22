@@ -325,10 +325,10 @@ const Rooms = ({ noLayout = false }) => {
     const formData = new FormData();
     formData.append("number", form.number);
     formData.append("type", form.type);
-    formData.append("price", form.price);
+    formData.append("price", form.price || 0);
     formData.append("status", form.status);
-    formData.append("adults", form.adults);
-    formData.append("children", form.children);
+    formData.append("adults", form.adults || 2);
+    formData.append("children", form.children || 0);
     if (form.image) formData.append("image", form.image);
 
     // Append feature fields
@@ -344,6 +344,12 @@ const Rooms = ({ noLayout = false }) => {
     formData.append("garden", form.garden);
     formData.append("dining", form.dining);
     formData.append("breakfast", form.breakfast);
+
+    // Debug logging
+    console.log("Submitting Room Form Data:");
+    for (let [key, value] of formData.entries()) {
+      console.log(`${key}: ${value} (${typeof value})`);
+    }
 
     try {
       if (isEditing) {

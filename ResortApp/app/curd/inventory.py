@@ -87,18 +87,76 @@ def update_item(db: Session, item_id: int, data: InventoryItemUpdate):
     return item
 
 
-def update_item_stock(db: Session, item_id: int, quantity_change: float, transaction_type: str):
-    """Update item stock and create transaction record"""
+def update_item_cost_wac(db: Session, item_id: int, new_quantity: float, new_unit_price: float, is_cancellation: bool = False, commit: bool = True):
+    """
+    Update item's unit_price using Weighted Average Cost (WAC) formula.
+    WAC = (Old Stock * Old Price + New Stock * New Price) / (Old Stock + New Stock)
+    """
+    item = get_item_by_id(db, item_id)
+    if not item:
+        return None
+    
+    old_stock = float(item.current_stock or 0)
+    old_price = float(item.unit_price or 0)
+    old_value = old_stock * old_price
+    
+    if is_cancellation:
+        # For cancellation, we want to remove the specific value of the cancelled items
+        # NOTE: This assumes new_unit_price is the price at which they were purchased
+        cancelled_stock = float(new_quantity)
+        cancelled_price = float(new_unit_price)
+        cancelled_value = cancelled_stock * cancelled_price
+        
+        remaining_stock = old_stock - cancelled_stock
+        remaining_value = old_value - cancelled_value
+        
+        item.current_stock = remaining_stock
+        if remaining_stock > 0:
+            item.unit_price = round(remaining_value / remaining_stock, 2)
+        elif remaining_stock == 0:
+            # If stock becomes zero, we might keep the last price or reset to latest known price
+            # Resetting to new_unit_price (the price of the batch being reversed) is a fallback
+            pass 
+    else:
+        new_stock = float(new_quantity)
+        new_price = float(new_unit_price)
+        new_value = new_stock * new_price
+        
+        total_stock = old_stock + new_stock
+        total_value = old_value + new_value
+        
+        item.current_stock = total_stock
+        if total_stock > 0:
+            item.unit_price = round(total_value / total_stock, 2)
+        else:
+            # If stock is 0 or negative after this, set price to the latest purchase price
+            item.unit_price = new_price
+            
+    if commit:
+        db.commit()
+        db.refresh(item)
+    return item
+
+
+def update_item_stock(db: Session, item_id: int, quantity_change: float, transaction_type: str, unit_price: Optional[float] = None):
+    """Update item stock and optionally update price using WAC if type is 'in'"""
+    if transaction_type == "in" and unit_price is not None:
+        return update_item_cost_wac(db, item_id, quantity_change, unit_price)
+    
     item = get_item_by_id(db, item_id)
     if not item:
         return None
     
     if transaction_type == "in":
         item.current_stock += quantity_change
+        if unit_price is not None:
+            item.unit_price = unit_price # Simple update if not using WAC helper for some reason
     elif transaction_type == "out":
         item.current_stock -= quantity_change
     elif transaction_type == "adjustment":
         item.current_stock = quantity_change
+        if unit_price is not None:
+            item.unit_price = unit_price
     
     db.commit()
     db.refresh(item)
@@ -375,31 +433,33 @@ def update_purchase_status(db: Session, purchase_id: int, status: str):
     old_status = purchase.status
     purchase.status = status
     
-    
     # If changing to received, update inventory
     if old_status.lower() != "received" and status.lower() == "received":
         from datetime import datetime
         from app.models.inventory import LocationStock, InventoryTransaction
         
-        for detail in purchase.details:
-            # Update global stock
-            update_item_stock(db, detail.item_id, detail.quantity, "in")
+        # Use a list to avoid iterator issues during commits
+        details = list(purchase.details)
+        for detail in details:
+            # Update global stock and cost using WAC (WITHOUT commit in loop)
+            update_item_cost_wac(db, detail.item_id, float(detail.quantity or 0), float(detail.unit_price or 0), commit=False)
             
-            # CRITICAL FIX: Update destination location stock
+            # Update destination location stock
             if purchase.destination_location_id:
                 loc_stock = db.query(LocationStock).filter(
                     LocationStock.location_id == purchase.destination_location_id,
                     LocationStock.item_id == detail.item_id
                 ).first()
                 
+                qty = float(detail.quantity or 0)
                 if loc_stock:
-                    loc_stock.quantity += detail.quantity
+                    loc_stock.quantity += qty
                     loc_stock.last_updated = datetime.utcnow()
                 else:
                     loc_stock = LocationStock(
                         location_id=purchase.destination_location_id,
                         item_id=detail.item_id,
-                        quantity=detail.quantity,
+                        quantity=qty,
                         last_updated=datetime.utcnow()
                     )
                     db.add(loc_stock)
@@ -410,12 +470,13 @@ def update_purchase_status(db: Session, purchase_id: int, status: str):
                 InventoryTransaction.item_id == detail.item_id
             ).first()
             if not existing_transaction:
+                u_price = float(detail.unit_price or 0)
                 transaction = InventoryTransaction(
                     item_id=detail.item_id,
                     transaction_type="in",
-                    quantity=detail.quantity,
-                    unit_price=float(detail.unit_price),
-                    total_amount=float(detail.total_amount),
+                    quantity=float(detail.quantity or 0),
+                    unit_price=u_price,
+                    total_amount=u_price * float(detail.quantity or 0),
                     reference_number=purchase.purchase_number,
                     purchase_master_id=purchase.id,
                     notes=f"Purchase: {purchase.purchase_number}",
@@ -509,12 +570,49 @@ def update_requisition_status(db: Session, requisition_id: int, status: str, app
 # Stock Issue CRUD
 def generate_issue_number(db: Session):
     from datetime import datetime
+    from app.models.inventory import StockIssue
+    
     today = datetime.utcnow()
     date_str = today.strftime("%Y%m%d")
-    count = db.query(StockIssue).filter(
+    
+    # Get the last issue number for today to continue sequence
+    last_issue = db.query(StockIssue).filter(
         StockIssue.issue_number.like(f"ISS-{date_str}-%")
-    ).count() + 1
-    return f"ISS-{date_str}-{str(count).zfill(3)}"  # e.g., ISS-505
+    ).order_by(StockIssue.issue_number.desc()).first()
+    
+    start_suffix = 1
+    if last_issue:
+        try:
+            parts = last_issue.issue_number.split('-')
+            # Assuming format ISS-YYYYMMDD-XXX
+            if len(parts) >= 3:
+                start_suffix = int(parts[-1]) + 1
+        except:
+             pass
+             
+    # Fallback to count if parsing failed or no previous (but maybe count logic is useful if sequence broken? 
+    # Actually, using count alone is what caused the bug. Trusting sequence from DB max is better)
+    if start_suffix == 1 and not last_issue:
+         count = db.query(StockIssue).filter(
+            StockIssue.issue_number.like(f"ISS-{date_str}-%")
+         ).count()
+         if count > 0:
+            start_suffix = count + 1
+
+    # Safety Check Loop to ensure uniqueness
+    loop_count = 0
+    while True:
+        loop_count += 1
+        candidate = f"ISS-{date_str}-{str(start_suffix).zfill(3)}"
+        
+        exists = db.query(StockIssue).filter(StockIssue.issue_number == candidate).count()
+        if exists == 0:
+            return candidate
+            
+        start_suffix += 1
+        if loop_count > 1000:
+             print(f"WARNING: generate_issue_number looped 1000 times. Returning risky candidate: {candidate}")
+             return candidate
 
 
 def create_stock_issue(db: Session, data: dict, issued_by: int):
@@ -596,15 +694,12 @@ def create_stock_issue(db: Session, data: dict, issued_by: int):
              
              available_qty = source_stock_record.quantity if source_stock_record else 0.0
              
-             # Fallback: If location stock is insufficient BUT global stock is sufficient,
-             # we DO NOT allow it anymore to prevent negative stock at location level.
              if available_qty < issued_qty:
-                 print(f"[WARNING] Insufficient stock at source location for {item.name}. Available: {available_qty}, Requested: {issued_qty}. Proceeding anyway.")
-                 # raise HTTPException(status_code=400, detail=f"Insufficient stock at source location for {item.name}. Available: {available_qty}, Requested: {issued_qty}")
+                 print(f"[WARNING] Insufficient stock at source location for {item.name}. Available: {available_qty}, Requested: {issued_qty}. Proceeding with negative stock.")
         else:
-             # Fallback to global stock check if no source specified
+             # Global stock check - warn but allow negative stock
              if item.current_stock < issued_qty:
-                 raise HTTPException(status_code=400, detail=f"Insufficient Global Stock for {item.name}. Available: {item.current_stock}, Requested: {issued_qty}.")
+                 print(f"[WARNING] Insufficient Global Stock for {item.name}. Available: {item.current_stock}, Requested: {issued_qty}. Proceeding with negative stock.")
         
         # Calculate cost/price
         # Ensure float arithmetic
@@ -793,12 +888,42 @@ def get_issue_by_id(db: Session, issue_id: int):
 # Waste Log CRUD
 def generate_waste_log_number(db: Session):
     from datetime import datetime
+    from app.models.inventory import WasteLog
     today = datetime.utcnow()
     date_str = today.strftime("%Y%m%d")
-    count = db.query(WasteLog).filter(
+    
+    # Get the last log number for today
+    last_log = db.query(WasteLog).filter(
         WasteLog.log_number.like(f"WASTE-{date_str}-%")
-    ).count() + 1
-    return f"WASTE-{date_str}-{str(count).zfill(3)}"
+    ).order_by(WasteLog.log_number.desc()).first()
+    
+    start_suffix = 1
+    if last_log:
+        try:
+            parts = last_log.log_number.split('-')
+            start_suffix = int(parts[-1]) + 1
+        except:
+             count = db.query(WasteLog).filter(
+                WasteLog.log_number.like(f"WASTE-{date_str}-%")
+             ).count() + 1
+             start_suffix = count
+    
+    # Safety Check Loop
+    # Safety Check Loop
+    loop_count = 0
+    while True:
+        loop_count += 1
+        candidate = f"WASTE-{date_str}-{str(start_suffix).zfill(3)}"
+        
+        exists = db.query(WasteLog).filter(WasteLog.log_number == candidate).count()
+        if exists == 0:
+            return candidate
+            
+        start_suffix += 1
+        if loop_count > 1000:
+             # Failsafe - should practically never happen if start_suffix is correct
+             print(f"WARNING: generate_waste_log_number looped 1000 times. Returning risky candidate: {candidate}")
+             return candidate
 
 
 def create_waste_log(db: Session, data: dict, reported_by: int):
@@ -879,6 +1004,15 @@ def create_waste_log(db: Session, data: dict, reported_by: int):
             if loc_stock:
                 loc_stock.quantity -= data["quantity"]
                 loc_stock.last_updated = datetime.utcnow()
+            else:
+                # Create negative stock record if it doesn't exist
+                new_stock = LocationStock(
+                    location_id=data["location_id"],
+                    item_id=item_id,
+                    quantity=-data["quantity"],
+                    last_updated=datetime.utcnow()
+                )
+                db.add(new_stock)
             
             # 2. Try Deducting from Asset Mappings (e.g. "light" in Room 101)
             # This is likely where the user's issue lies if it's an asset
@@ -1093,12 +1227,19 @@ def create_asset_mapping(db: Session, data: dict, assigned_by: Optional[int] = N
     ).first()
     
     if source_stock:
-        if source_stock.quantity >= quantity:
-            source_stock.quantity -= quantity
-            source_stock.last_updated = datetime.utcnow()
-        else:
-             # Force deduction to keep sync with global stock, even if it goes negative (should have been checked)
-             source_stock.quantity -= quantity
+        source_stock.quantity -= quantity
+        source_stock.last_updated = datetime.utcnow()
+        print(f"[ASSET] Deducted {quantity} of {item.name} from {source_loc_id}. New stock: {source_stock.quantity}")
+    else:
+        # Create negative stock record if it doesn't exist
+        print(f"[ASSET] No stock record at source {source_loc_id} for {item.name}. Creating negative entry.")
+        new_source_stock = LocationStock(
+            location_id=source_loc_id,
+            item_id=item_id,
+            quantity=-quantity,
+            last_updated=datetime.utcnow()
+        )
+        db.add(new_source_stock)
              
     # 3.2 Create Stock Issue (Transfer Record)
     # This ensures it shows up in history for both Source and Destination
@@ -1625,3 +1766,74 @@ def process_food_order_usage(db: Session, order_id: int):
         db.add(transaction)
     
     # db.commit() removed to allow atomic transaction in caller
+
+
+def get_location_stock(db: Session, location_id: int):
+    """Get all items available at a specific location"""
+    from app.models.inventory import LocationStock, InventoryItem, Location
+    
+    # Get the location object to get its name
+    location = db.query(Location).filter(Location.id == location_id).first()
+    if not location:
+        return []
+    
+    # Query LocationStock table (new system)
+    stocks = db.query(LocationStock).options(
+        joinedload(LocationStock.item).joinedload(InventoryItem.category)
+    ).filter(
+        LocationStock.location_id == location_id,
+        LocationStock.quantity != 0 
+    ).all()
+    
+    result = []
+    item_ids_seen = set()
+    
+    # Add items from LocationStock table
+    for s in stocks:
+        if not s.item: continue
+        item_ids_seen.add(s.item_id)
+        result.append({
+            "item_id": s.item_id,
+            "item_name": s.item.name,
+            "quantity": float(s.quantity),
+            "unit": s.item.unit,
+            "category_name": s.item.category.name if s.item.category else None,
+            "min_stock_level": float(s.item.min_stock_level or 0),
+            "is_low_stock": float(s.quantity) <= (s.item.min_stock_level or 0),
+            "unit_price": float(s.item.unit_price or 0)
+        })
+    
+    # FALLBACK: Also check InventoryItem.location field (legacy system)
+    # This handles items that were created with location as a text field
+    legacy_items = db.query(InventoryItem).options(
+        joinedload(InventoryItem.category)
+    ).filter(
+        InventoryItem.location.ilike(f"%{location.name}%"),
+        InventoryItem.current_stock > 0,
+        InventoryItem.is_active == True
+    ).all()
+    
+    for item in legacy_items:
+        if item.id in item_ids_seen:
+            continue  # Already added from LocationStock
+        result.append({
+            "item_id": item.id,
+            "item_name": item.name,
+            "quantity": float(item.current_stock or 0),
+            "unit": item.unit,
+            "category_name": item.category.name if item.category else None,
+            "min_stock_level": float(item.min_stock_level or 0),
+            "is_low_stock": float(item.current_stock or 0) <= (item.min_stock_level or 0),
+            "unit_price": float(item.unit_price or 0)
+        })
+    
+    return result
+
+
+def get_all_recipes(db: Session, skip: int = 0, limit: int = 100):
+   """Get all recipes"""
+   from app.models.recipe import Recipe, RecipeIngredient
+   return db.query(Recipe).options(
+       joinedload(Recipe.food_item),
+       selectinload(Recipe.ingredients).joinedload(RecipeIngredient.inventory_item)
+   ).offset(skip).limit(limit).all()

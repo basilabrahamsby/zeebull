@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from datetime import date, datetime
 from typing import Optional
 
 class RoomBase(BaseModel):
@@ -27,7 +28,11 @@ class RoomCreate(RoomBase):
 class RoomOut(RoomBase):
     id: int
     status: str
+    housekeeping_status: Optional[str] = "Clean"
+    housekeeping_updated_at: Optional[datetime] = None
+    last_maintenance_date: Optional[date] = None
     image_url: str | None = None
+    current_guest_name: Optional[str] = None
 
     model_config = {
         "from_attributes": True  # enables from_orm in Pydantic v2
