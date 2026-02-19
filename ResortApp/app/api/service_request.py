@@ -128,6 +128,7 @@ def get_service_requests(
                 "type": str(sr.request_type) if sr.request_type else "Other", # Alias for mobile app
                 "description": str(sr.description) if sr.description else None,
                 "status": str(sr.status) if sr.status else "pending",
+                "billing_status": sr.billing_status,
                 "created_at": sr.created_at.isoformat() if sr.created_at else None,
                 "completed_at": sr.completed_at.isoformat() if sr.completed_at else None,
                 "is_checkout_request": False,
@@ -228,6 +229,7 @@ def get_service_requests(
                 "is_checkout_request": False,
                 "is_assigned_service": True,
                 "assigned_service_id": asvc.id,
+                "billing_status": asvc.billing_status, # Include billing status from AssignedService
                 "room_number": asvc.room.number if asvc.room else "???",
                 "employee_name": asvc.employee.name if asvc.employee else "Unassigned",
                 "refill_data": refill_data,

@@ -207,7 +207,8 @@ async def create_item(
                 unit_price=unit_price,
                 total_amount=initial_stock * unit_price,
                 notes="Initial stock",
-                created_by=current_user.id
+                created_by=current_user.id,
+                destination_location_id=location.id if location else None
             )
             db.add(transaction)
 
@@ -1119,7 +1120,9 @@ def get_transactions(
 
     query = db.query(InventoryTransaction).join(InventoryItem).options(
         joinedload(InventoryTransaction.item),
-        joinedload(InventoryTransaction.user)
+        joinedload(InventoryTransaction.user),
+        joinedload(InventoryTransaction.source_location),
+        joinedload(InventoryTransaction.destination_location)
     )
     
     if item_id:
@@ -1211,12 +1214,12 @@ def get_transactions(
             **trans.__dict__,
             "item_name": trans.item.name if trans.item else None,
             "created_by_name": trans.user.name if trans.user else None,
-            "source_location_name": None,
-            "destination_location_name": None
+            "source_location_name": trans.source_location.name if trans.source_location else None,
+            "destination_location_name": trans.destination_location.name if trans.destination_location else None
         }
 
         # 1. Handle Stock Issues (Transfers)
-        if trans.reference_number and trans.reference_number.startswith("ISS-"):
+        if not trans_dict["source_location_name"] and trans.reference_number and trans.reference_number.startswith("ISS-"):
             issue = db.query(StockIssue).filter(StockIssue.issue_number == trans.reference_number).first()
             if issue:
                 if issue.source_location_id:
@@ -1230,7 +1233,7 @@ def get_transactions(
                         trans_dict["destination_location_name"] = f"{dest_loc.building} - {dest_loc.room_area}" if (dest_loc.building or dest_loc.room_area) else dest_loc.name
 
         # 2. Handle Waste Logs
-        elif trans.reference_number and trans.reference_number.startswith("WASTE-"):
+        elif not trans_dict["source_location_name"] and trans.reference_number and trans.reference_number.startswith("WASTE-"):
             # Import WasteLog locally to avoid circular imports
             from app.models.inventory import WasteLog
             waste = db.query(WasteLog).filter(WasteLog.log_number == trans.reference_number).first()
@@ -1240,7 +1243,7 @@ def get_transactions(
                     trans_dict["source_location_name"] = f"{w_loc.building} - {w_loc.room_area}" if (w_loc.building or w_loc.room_area) else w_loc.name
 
         # 3. Handle Returns and Consumption from Checkout
-        elif trans.reference_number and (trans.reference_number.startswith("RET-") or "RM" in trans.reference_number):
+        elif not trans_dict["source_location_name"] and trans.reference_number and (trans.reference_number.startswith("RET-") or "RM" in (trans.reference_number or "") or "RM" in (trans.notes or "")):
             # Try to extract room number from reference like RET-RM001 or RET-LAUNDRY001
             import re
             room_match = re.search(r'RM(\d+)', trans.reference_number) or re.search(r'RM\s*([A-Za-z0-0-]+)', trans.notes or "")
@@ -2393,7 +2396,9 @@ def get_location_items(
         # and notes=f"... Deducted from Source ID {adjust_source_id}."
         
         is_relevant = False
-        if str(location.id) in (adj.notes or "") and "Source ID" in (adj.notes or ""):
+        if adj.source_location_id == location_id or adj.destination_location_id == location_id:
+             is_relevant = True
+        elif str(location.id) in (adj.notes or "") and "Source ID" in (adj.notes or ""):
              is_relevant = True
         elif adj.reference_number and f"LOC-{location.id}" in adj.reference_number:
              is_relevant = True
@@ -3100,7 +3105,9 @@ def get_all_transactions(
     
     transactions = db.query(InventoryTransaction).options(
         joinedload(InventoryTransaction.item),
-        joinedload(InventoryTransaction.user)
+        joinedload(InventoryTransaction.user),
+        joinedload(InventoryTransaction.source_location),
+        joinedload(InventoryTransaction.destination_location)
     ).order_by(InventoryTransaction.created_at.desc()).offset(skip).limit(limit).all()
     
     result = []
@@ -3109,6 +3116,8 @@ def get_all_transactions(
             **txn.__dict__,
             "item_name": txn.item.name if txn.item else "Unknown Item",
             "created_by_name": txn.user.name if txn.user else "System",
+            "source_location_name": txn.source_location.name if txn.source_location else None,
+            "destination_location_name": txn.destination_location.name if txn.destination_location else None,
             "unit": txn.item.unit if txn.item else ""
         })
         
@@ -3133,6 +3142,10 @@ def get_item_transactions(
         raise HTTPException(status_code=404, detail="Item not found")
         
     transactions = db.query(InventoryTransaction)\
+        .options(
+            joinedload(InventoryTransaction.source_location),
+            joinedload(InventoryTransaction.destination_location)
+        )\
         .filter(InventoryTransaction.item_id == item_id)\
         .order_by(InventoryTransaction.created_at.desc())\
         .all()
@@ -3149,7 +3162,8 @@ def get_item_transactions(
         result.append({
             **txn.__dict__,
             "created_by_name": user.name if user else "System",
-            # We can also add more context about reference (link to PO, etc.)
+            "source_location_name": txn.source_location.name if txn.source_location else None,
+            "destination_location_name": txn.destination_location.name if txn.destination_location else None,
         })
         
     return result
@@ -3237,7 +3251,9 @@ def create_stock_adjustment(
         total_amount=abs(diff) * (item.unit_price or 0) if item.unit_price else 0,
         notes=f"Stock Adjustment by {current_user.name}: {direction} from {current_qty} to {actual_qty}. {adjustment.notes or ''}",
         created_by=current_user.id,
-        reference_number=f"ADJ-{datetime.now().strftime('%Y%m%d%H%M')}"
+        reference_number=f"ADJ-{datetime.now().strftime('%Y%m%d%H%M')}",
+        source_location_id=adjustment.location_id if diff < 0 else None,
+        destination_location_id=adjustment.location_id if diff > 0 else None
     )
     db.add(trx)
     
@@ -3442,7 +3458,9 @@ def return_laundry_items(
         unit_price=0.0,
         reference_number=f"LAUNDRY-RET-{log.id}",
         notes=f"Returned from Laundry to {target_name}",
-        created_by=current_user.id
+        created_by=current_user.id,
+        source_location_id=laundry_loc.id,
+        destination_location_id=target_location_id
     )
     db.add(transaction)
     

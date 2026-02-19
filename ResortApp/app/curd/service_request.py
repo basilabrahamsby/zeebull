@@ -325,6 +325,14 @@ def update_service_request(db: Session, request_id: int, update_data: ServiceReq
         elif update_data.status == "completed":
             request.completed_at = datetime.utcnow()
             
+            # Resolve linked user for transaction logging (avoid FK violation if employee_id != user_id)
+            acting_user_id = None
+            acting_emp_id = update_data.employee_id or request.employee_id
+            if acting_emp_id:
+                acting_emp = db.query(Employee).filter(Employee.id == acting_emp_id).first()
+                if acting_emp:
+                    acting_user_id = acting_emp.user_id
+
             # If this is a delivery request with a food order, update the food order status
             if request.food_order_id and is_completing:
                 food_order = db.query(FoodOrder).filter(FoodOrder.id == request.food_order_id).first()
@@ -414,11 +422,102 @@ def update_service_request(db: Session, request_id: int, update_data: ServiceReq
                                             quantity=actual_move,
                                             reference_number=f"RET-SR-{request.id}",
                                             notes=f"Return from Room {room.number} via Service Request",
-                                            created_by=update_data.employee_id or request.employee_id
+                                            created_by=acting_user_id
                                         ))
                                         print(f"[INVENTORY] Moved {actual_move} of item {item_id} from Room {room.number} to Loc {target_loc_id}")
                 except Exception as e:
                     print(f"[ERROR] Failed to process return items inventory movement: {e}")
+
+            # NEW: Handle Inventory Movement for 'replenishment' or 'refill' completion
+            if request.request_type in ["replenishment", "refill"] and is_completing:
+                try:
+                    import json
+                    from app.models.inventory import LocationStock, InventoryTransaction, AssetMapping, InventoryItem, AssetRegistry, Location
+
+                    # 1. Determine Source Location (Pickup Location)
+                    source_loc_id = request.pickup_location_id
+                    if not source_loc_id:
+                        # Default to Warehouse if not set
+                        wh = db.query(Location).filter(Location.location_type == "WAREHOUSE").first()
+                        source_loc_id = wh.id if wh else None
+                        print(f"[REPLENISHMENT] Pickup location not set for request {request.id}. Defaulting to Warehouse (Loc {source_loc_id}).")
+                    
+                    if not source_loc_id:
+                        print(f"[REPLENISHMENT] No pickup location available, skipping automated stock movement.")
+                    else:
+                        if request.refill_data and request.room_id:
+                            room = db.query(Room).filter(Room.id == request.room_id).first()
+                            replenish_items = json.loads(request.refill_data)
+                            
+                            if room and room.inventory_location_id:
+                                for item_data in replenish_items:
+                                    item_id = item_data.get("item_id")
+                                    # Support both 'quantity' and 'quantity_to_refill' keys
+                                    qty_to_move = float(item_data.get("quantity") or item_data.get("quantity_to_refill") or 1)
+                                    is_fixed_asset = item_data.get("is_fixed_asset", False) or item_data.get("is_asset", False)
+                                    
+                                    if item_id:
+                                        # Deduct from Pickup Location
+                                        pickup_stock = db.query(LocationStock).filter(
+                                            LocationStock.location_id == source_loc_id,
+                                            LocationStock.item_id == item_id
+                                        ).first()
+
+                                        if pickup_stock:
+                                            if pickup_stock.quantity >= qty_to_move:
+                                                pickup_stock.quantity -= qty_to_move
+                                            else:
+                                                print(f"[REPLENISHMENT] Warning: Insufficient stock at pickup loc {source_loc_id} for item {item_id}. Proceeding correctly anyway.")
+                                                pickup_stock.quantity = 0 # Consume whatever is there or go negative? Better to just set 0 if low.
+                                        else:
+                                             print(f"[REPLENISHMENT] Warning: No stock record at pickup loc {source_loc_id} for item {item_id}.")
+                                        
+                                        # Add to Room Location
+                                        room_stock = db.query(LocationStock).filter(
+                                            LocationStock.location_id == room.inventory_location_id,
+                                            LocationStock.item_id == item_id
+                                        ).first()
+                                        
+                                        if room_stock:
+                                            room_stock.quantity += qty_to_move
+                                        else:
+                                            db.add(LocationStock(
+                                                location_id=room.inventory_location_id,
+                                                item_id=item_id,
+                                                quantity=qty_to_move,
+                                                last_updated=datetime.utcnow()
+                                            ))
+                                        
+                                        # Log Transaction
+                                        db.add(InventoryTransaction(
+                                            item_id=item_id,
+                                            transaction_type="transfer",
+                                            quantity=qty_to_move,
+                                            reference_number=f"RPL-SR-{request.id}",
+                                            notes=f"Replenishment for Room {room.number} from Loc {source_loc_id}",
+                                            created_by=acting_user_id
+                                        ))
+                                        
+                                        # FIXED ASSETS: Re-activate mapping or update registry?
+                                        # If it's a fixed asset, we might want to update AssetRegistry location if we are tracking specific serials.
+                                        # But often Replenishment is just "bring a generic bed sheet".
+                                        # If we have deactivated mapping previously, we should re-activate one?
+                                        if is_fixed_asset:
+                                            # Find an inactive mapping and activate it to restore "standard" state
+                                            inactive_mapping = db.query(AssetMapping).filter(
+                                                AssetMapping.location_id == room.inventory_location_id,
+                                                AssetMapping.item_id == item_id,
+                                                AssetMapping.is_active == False
+                                            ).first()
+                                            
+                                            if inactive_mapping:
+                                                inactive_mapping.is_active = True
+                                                print(f"[REPLENISHMENT] Re-activated AssetMapping for {item_id} in Room {room.number}")
+                                            
+                                        print(f"[INVENTORY] Replenished {qty_to_move} of item {item_id} to Room {room.number} from Loc {source_loc_id}")
+
+                except Exception as e:
+                    print(f"[ERROR] Failed to process replenishment items inventory movement: {e}")
 
             # Sync with AssignedService: Heuristic to auto-complete duplicate manual assignments
             if is_completing:
@@ -471,6 +570,8 @@ def update_service_request(db: Session, request_id: int, update_data: ServiceReq
     
     if update_data.employee_id is not None:
         request.employee_id = update_data.employee_id
+    if update_data.pickup_location_id is not None:
+        request.pickup_location_id = update_data.pickup_location_id
     if update_data.description is not None:
         request.description = update_data.description
     
@@ -485,7 +586,6 @@ def update_service_request(db: Session, request_id: int, update_data: ServiceReq
         
         recipient_id = None
         if request.employee_id:
-            from app.models.employee import Employee
             emp = db.query(Employee).filter(Employee.id == request.employee_id).first()
             if emp:
                 recipient_id = emp.user_id

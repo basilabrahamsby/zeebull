@@ -2,6 +2,7 @@ from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Text
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.database import Base
+from app.models.inventory import Location
 
 class ServiceRequest(Base):
     __tablename__ = "service_requests"
@@ -19,9 +20,11 @@ class ServiceRequest(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     started_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
+    pickup_location_id = Column(Integer, ForeignKey("locations.id"), nullable=True)
     
     # Relationships
     food_order = relationship("FoodOrder", foreign_keys=[food_order_id])
     room = relationship("Room", foreign_keys=[room_id])
     employee = relationship("Employee", foreign_keys=[employee_id])
+    pickup_location = relationship("Location", foreign_keys=[pickup_location_id])
 

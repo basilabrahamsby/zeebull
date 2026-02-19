@@ -8979,9 +8979,13 @@ function AssetMappingFormModal({
                       <option value="">Select Asset</option>
                       {fixedAssets.map((item) => {
                         const stock = getStockForLocation(item.id, asset.source_location_id);
+                        // Only disable if a specific source is selected and it has no stock
+                        // If no source is selected (global), allow selection even if stock is 0 (for initial setup)
+                        const isDisabled = asset.source_location_id ? stock <= 0 : false;
+
                         return (
-                          <option key={item.id} value={item.id} disabled={stock <= 0}>
-                            {item.name}
+                          <option key={item.id} value={item.id} disabled={isDisabled}>
+                            {item.name} {asset.source_location_id ? `(${stock})` : ""}
                           </option>
                         );
                       })}

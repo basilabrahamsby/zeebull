@@ -4,6 +4,7 @@ from sqlalchemy import or_, func, and_
 from typing import List, Optional
 from datetime import date, datetime, timedelta
 import traceback
+import json
 
 # Assume your utility and model imports are set up correctly
 from app.utils.auth import get_db, get_current_user
@@ -14,7 +15,7 @@ from app.models.user import User
 from app.models.foodorder import FoodOrder, FoodOrderItem
 from app.models.service import AssignedService, Service
 from app.models.checkout import Checkout, CheckoutVerification, CheckoutPayment, CheckoutRequest as CheckoutRequestModel
-from app.models.inventory import InventoryItem, StockIssue, StockIssueDetail, AssetMapping, AssetRegistry, WasteLog, InventoryTransaction, LocationStock, Location
+from app.models.inventory import InventoryItem, StockIssue, StockIssueDetail, AssetMapping, AssetRegistry, WasteLog, LaundryLog, InventoryTransaction, LocationStock, Location
 from app.models.service_request import ServiceRequest
 from app.curd.inventory import generate_waste_log_number
 from app.schemas.checkout import BillSummary, BillBreakdown, CheckoutFull, CheckoutSuccess, CheckoutRequest, InventoryCheckRequest
@@ -896,24 +897,60 @@ async def handleCompleteCheckoutRequest(
                         
                         # STEP 2: Execute room stock movements
                         if room_stock_record:
-                            # NEW LOGIC: Deduct ONLY used and missing from room stock.
-                            # Damaged items STAY in the room (as Damaged) and Unused items stay for next booking.
-                            total_deduct = used_qty + missing_qty
+                            # NEW LOGIC: Deduct used, missing, and damaged from room stock.
+                            # These items are no longer "good stock" in the room.
+                            total_deduct = used_qty + missing_qty + damage_qty
                             if total_deduct > 0:
                                 room_stock_record.quantity = max(0, room_stock_record.quantity - total_deduct)
                                 room_stock_record.last_updated = datetime.utcnow()
                                 print(f"[CHECKOUT] Deducted used/missing from room stock: {total_deduct} units. Remaining: {room_stock_record.quantity}")
                             
-                            # STEP 3: Return Unused From Pool to Warehouse - ENABLED IF LOCATION SPECIFIED
-                            # "if the items are not returned in that step too, the items stay there in the room for next booking"
+                            # Auto-detect laundry return if target location is of type 'LAUNDRY'
+                            effective_is_laundry = item.is_laundry
+                            effective_laundry_id = item.laundry_location_id
+                            
+                            if not effective_is_laundry and item.return_location_id:
+                                target_loc = db.query(Location).filter(Location.id == item.return_location_id).first()
+                                if target_loc and target_loc.location_type == 'LAUNDRY':
+                                    effective_is_laundry = True
+                                    effective_laundry_id = item.return_location_id
+                                    print(f"[CHECKOUT] Auto-detected laundry return to location {effective_laundry_id}")
+
                             # STEP 3: Return Unused From Pool to Laundry/Warehouse - ENABLED IF LOCATION SPECIFIED
                             # Priority 1: Laundry return
-                            if item.is_laundry and item.laundry_location_id and unused_from_pool > 0:
+                            if effective_is_laundry and effective_laundry_id and unused_from_pool > 0:
                                 room_stock_record.quantity = max(0, room_stock_record.quantity - unused_from_pool)
                                 room_stock_record.last_updated = datetime.utcnow()
-                                print(f"[CHECKOUT] Returning {unused_from_pool} units to LAUNDRY location {item.laundry_location_id}")
+                                print(f"[CHECKOUT] Returning {unused_from_pool} units to LAUNDRY location {effective_laundry_id}")
+                                # Create Laundry Log entry
+                                laundry_entry = LaundryLog(
+                                    item_id=item.item_id,
+                                    source_location_id=room_loc_id,
+                                    room_number=checkout_request.room_number,
+                                    quantity=unused_from_pool,
+                                    status="Incomplete Washing",
+                                    sent_at=datetime.utcnow(),
+                                    created_by=current_user.id,
+                                    notes=f"Checkout Room {checkout_request.room_number}"
+                                )
+                                db.add(laundry_entry)
+                                print(f"[CHECKOUT] Created LaundryLog entry for {unused_from_pool} units")
+
+                                # Handle Replacement Request for Laundry
+                                if item.request_replacement:
+                                    # Create replacement service request
+                                    new_sr = ServiceRequest(
+                                        room_id=room_room.id,
+                                        request_type="replenishment",
+                                        description=f"REPLACEMENT REQUIRED: {inv_item.name} sent to laundry. Fresh unit needed for Room {checkout_request.room_number}.",
+                                        status="pending",
+                                        created_at=datetime.utcnow()
+                                    )
+                                    db.add(new_sr)
+                                    print(f"[CHECKOUT] Created replacement service request for laundry item {inv_item.name}")
+
                                 unused_qty = unused_from_pool
-                                source_loc_id = item.laundry_location_id
+                                source_loc_id = effective_laundry_id
                             # Priority 2: Standard return
                             elif item.return_location_id and unused_from_pool > 0:
                                 room_stock_record.quantity = max(0, room_stock_record.quantity - unused_from_pool)
@@ -955,7 +992,9 @@ async def handleCompleteCheckoutRequest(
                                 total_amount=unused_qty * (inv_item.unit_price or 0),
                                 reference_number=f"RET-{ 'LAUNDRY' if item.is_laundry else 'RM'}{checkout_request.room_number}",
                                 notes=f"{'Laundry' if item.is_laundry else 'Stock'} return: Room {checkout_request.room_number} (Checkout #{checkout_request.id})",
-                                created_by=current_user.id
+                                created_by=current_user.id,
+                                source_location_id=room_loc_id,
+                                destination_location_id=source_loc_id
                             )
                             db.add(return_txn)
                             print(f"[CHECKOUT] Moved {unused_qty} units to {source_loc_id}")
@@ -991,7 +1030,8 @@ async def handleCompleteCheckoutRequest(
                                     total_amount=used_qty * (inv_item.unit_price or 0),
                                     reference_number=f"CONSUME-CHK-{checkout_request.id}",
                                     notes=f"Consumption at checkout - Room {checkout_request.room_number}",
-                                    created_by=current_user.id
+                                    created_by=current_user.id,
+                                    source_location_id=room_loc_id
                                 )
                                 db.add(cons_txn)
                             
@@ -1010,7 +1050,8 @@ async def handleCompleteCheckoutRequest(
                                         total_amount=bad_qty * (inv_item.unit_price or 0.0),
                                         reference_number=f"LOST-RM{checkout_request.room_number}",
                                         notes=f"Missing/Damaged consumable at checkout - Room {checkout_request.room_number}",
-                                        created_by=current_user.id
+                                        created_by=current_user.id,
+                                        source_location_id=room_loc_id
                                     )
                                     db.add(waste_txn)
                                     print(f"[CHECKOUT] Logged {bad_qty} {inv_item.name} as consumption (Missing/Damaged consumable)")
@@ -1046,7 +1087,9 @@ async def handleCompleteCheckoutRequest(
                                         total_amount=bad_qty * (inv_item.unit_price or 0),
                                         reference_number=waste_log_num,
                                         notes=f"Damage/Missing at checkout - Room {checkout_request.room_number}",
-                                        created_by=current_user.id
+                                        created_by=current_user.id,
+                                        source_location_id=room_loc_id,
+                                        destination_location_id=item.waste_location_id if item.is_waste else None
                                     )
                                     db.add(waste_txn)
 
@@ -1071,15 +1114,27 @@ async def handleCompleteCheckoutRequest(
                                     # Handle Replacement Request
                                     if item.request_replacement:
                                         # ServiceRequest already imported at top
+                                        # Determine default pickup location (Warehouse)
+                                        default_store = db.query(Location).filter(Location.location_type == 'WAREHOUSE', Location.is_active == True).first()
+                                        
                                         new_sr = ServiceRequest(
                                             room_id=room_room.id,
                                             request_type="replenishment",
                                             description=f"REPLACEMENT: {inv_item.name} ({bad_qty} units) requested for Room {checkout_request.room_number} during checkout verification.",
                                             status="pending",
-                                            created_at=datetime.utcnow()
+                                            pickup_location_id=default_store.id if default_store else None,
+                                            created_at=datetime.utcnow(),
+                                            refill_data=json.dumps([{
+                                                "item_id": item.item_id,
+                                                "quantity": bad_qty,
+                                                "item_name": inv_item.name,
+                                                "unit": inv_item.unit,
+                                                "is_fixed_asset": is_fixed_asset_local,
+                                                "source_location_id": room_loc_id
+                                            }])
                                         )
                                         db.add(new_sr)
-                                        print(f"[CHECKOUT] Created replacement service request for {inv_item.name}")
+                                        print(f"[CHECKOUT] Created replacement service request for {inv_item.name} (Source: {room_loc_id}, Default Pickup: {default_store.id if default_store else 'None'})")
                                     
                                     # NEW: Specially mark damaged items if they stay in room
                                     if damage_qty > 0:
@@ -1304,9 +1359,16 @@ async def handleCompleteCheckoutRequest(
             
             if asset_record:
                 # 1. Update Asset Status if registry exists
-                asset_record.status = "damaged"
-                asset_record.notes = f"Damaged during checkout. {asset.notes or ''}"
-                print(f"[CHECKOUT] Updated AssetRegistry ID {asset_record.id} status to 'damaged'")
+                if asset.is_damaged:
+                    asset_record.status = "damaged"
+                    asset_record.notes = f"Damaged during checkout. {asset.notes or ''}"
+                    print(f"[CHECKOUT] Updated AssetRegistry ID {asset_record.id} status to 'damaged'")
+                elif asset.is_laundry:
+                    asset_record.status = "in_laundry"
+                    print(f"[CHECKOUT] Updated AssetRegistry ID {asset_record.id} status to 'in_laundry'")
+                elif asset.is_returned:
+                    asset_record.status = "active"
+                    print(f"[CHECKOUT] Updated AssetRegistry ID {asset_record.id} status to 'active' (returned)")
                 
                 target_item_id = asset_record.item_id
                 target_location_id = asset_record.current_location_id
@@ -1322,83 +1384,115 @@ async def handleCompleteCheckoutRequest(
                 t_item = db.query(InventoryItem).filter(InventoryItem.id == target_item_id).first()
                 is_actually_asset = t_item.is_asset_fixed if t_item else True
                 
-                if is_actually_asset:
-                    # 2. Create Waste Log (Maintenance track for assets)
-                    waste_log_num = generate_waste_log_number(db)
-                    waste_log = WasteLog(
-                        log_number=waste_log_num,
-                        item_id=target_item_id,
-                        is_food_item=False,
-                        location_id=target_location_id,
-                        quantity=1,
-                        unit="pcs",
-                        reason_code="Damaged",
-                        action_taken="Charged to Guest",
-                        notes=f"Damaged asset during checkout - Room {checkout_request.room_number}. {asset.notes or ''}",
-                        reported_by=current_user.id,
-                        waste_date=datetime.utcnow()
-                    )
-                    db.add(waste_log)
-                    db.flush() # Ensure visible for next ID generation
-                    print(f"[CHECKOUT] Created waste log {waste_log_num} for damaged asset")
-                    
-                    # Fetch unit price for transaction
-                    unit_price = 0
-                    if t_item: unit_price = t_item.unit_price or 0
+                # Auto-detect laundry return if target location is of type 'LAUNDRY'
+                asset_is_laundry = asset.is_laundry
+                asset_laundry_id = asset.laundry_location_id
+                
+                if not asset_is_laundry and asset.return_location_id:
+                    target_loc = db.query(Location).filter(Location.id == asset.return_location_id).first()
+                    if target_loc and target_loc.location_type == 'LAUNDRY':
+                        asset_is_laundry = True
+                        asset_laundry_id = asset.return_location_id
+                        print(f"[CHECKOUT] Auto-detected asset laundry return for {asset.item_name} to location {asset_laundry_id}")
 
-                    # 3. Create Damage Transaction (Waste type for assets)
-                    damage_txn = InventoryTransaction(
-                        item_id=target_item_id,
-                        transaction_type="waste",
-                        quantity=1,
-                        unit_price=unit_price,
-                        total_amount=asset.replacement_cost,
-                        reference_number=waste_log_num,
-                        notes=f"WASTE: Damaged asset at checkout - Room {checkout_request.room_number}",
-                        created_by=current_user.id
-                    )
-                    db.add(damage_txn)
-                else:
-                    # It's a consumable reported as asset damage (Safety fallback)
-                    # Just log as consumption
-                    damage_txn = InventoryTransaction(
-                        item_id=target_item_id,
-                        transaction_type="waste",
-                        quantity=1,
-                        unit_price=t_item.unit_price if t_item else 0,
-                        total_amount=asset.replacement_cost,
-                        reference_number=f"LOST-DAM-{checkout_request.id}",
-                        notes=f"WASTE: Damaged item at checkout - Room {checkout_request.room_number}",
-                        created_by=current_user.id
-                    )
-                    db.add(damage_txn)
-                    print(f"[CHECKOUT] Logged damaged consumable {t_item.name if t_item else ''} as waste")
-                print(f"[CHECKOUT] Created damage transaction for asset")
+                # DETERMINED LAUNDRY STATUS
+                is_actually_laundry = asset.is_laundry or asset_is_laundry
+                
+                # ENHANCED LOGIC: If no laundry location ID provided but is_laundry is checked, find first available
+                if is_actually_laundry and not asset_laundry_id:
+                     first_laundry = db.query(Location).filter(Location.location_type == 'LAUNDRY', Location.is_active == True).first()
+                     if first_laundry:
+                         asset_laundry_id = first_laundry.id
+                         print(f"[CHECKOUT] Defaulted laundry location for {asset.item_name} to {first_laundry.name} (ID: {asset_laundry_id})")
+
+                # Skip waste/damage logging if it's being sent to Laundry or Return (treat as 'Dirty'/'Moving' not 'Waste')
+                # We skip the specific damage/waste log block if the item is explicitly handled by laundry/return logic
+                should_skip_waste_log = is_actually_laundry or asset.is_returned
+                
+                if asset.is_damaged and not should_skip_waste_log:
+                    if is_actually_asset:
+                        # 2. Create Waste Log (Maintenance track for assets)
+                        waste_log_num = generate_waste_log_number(db)
+                        waste_log = WasteLog(
+                            log_number=waste_log_num,
+                            item_id=target_item_id,
+                            is_food_item=False,
+                            location_id=target_location_id,
+                            quantity=1,
+                            unit="pcs",
+                            reason_code="Damaged",
+                            action_taken="Charged to Guest",
+                            notes=f"Damaged asset during checkout - Room {checkout_request.room_number}. {asset.notes or ''}",
+                            reported_by=current_user.id,
+                            waste_date=datetime.utcnow()
+                        )
+                        db.add(waste_log)
+                        db.flush() # Ensure visible for next ID generation
+                        print(f"[CHECKOUT] Created waste log {waste_log_num} for damaged asset")
+                        
+                        # Fetch unit price for transaction
+                        unit_price = 0
+                        if t_item: unit_price = t_item.unit_price or 0
+
+                        # 3. Create Damage Transaction (Waste type for assets)
+                        damage_txn = InventoryTransaction(
+                            item_id=target_item_id,
+                            transaction_type="waste",
+                            quantity=1,
+                            unit_price=unit_price,
+                            total_amount=asset.replacement_cost,
+                            reference_number=waste_log_num,
+                            notes=f"WASTE: Damaged asset at checkout - Room {checkout_request.room_number}",
+                            created_by=current_user.id,
+                            source_location_id=room_loc_id
+                        )
+                        db.add(damage_txn)
+                    else:
+                        # It's a consumable reported as asset damage (Safety fallback)
+                        # Just log as consumption
+                        damage_txn = InventoryTransaction(
+                            item_id=target_item_id,
+                            transaction_type="waste",
+                            quantity=1,
+                            unit_price=t_item.unit_price if t_item else 0,
+                            total_amount=asset.replacement_cost,
+                            reference_number=f"LOST-DAM-{checkout_request.id}",
+                            notes=f"WASTE: Damaged item at checkout - Room {checkout_request.room_number}",
+                            created_by=current_user.id,
+                            source_location_id=room_loc_id
+                        )
+                        db.add(damage_txn)
+                        print(f"[CHECKOUT] Logged damaged consumable {t_item.name if t_item else ''} as waste")
+                    print(f"[CHECKOUT] Created damage transaction for asset")
                 
                 # 4. Deduct LocationStock (The Fix)
-                loc_stock = db.query(LocationStock).filter(
-                    LocationStock.location_id == target_location_id,
-                    LocationStock.item_id == target_item_id
-                ).first()
-                if loc_stock:
-                    loc_stock.quantity = max(0, loc_stock.quantity - 1)
-                    loc_stock.last_updated = datetime.utcnow()
-                    print(f"[CHECKOUT] Deducted LocationStock for damaged asset: {loc_stock.quantity + 1} -> {loc_stock.quantity}")
+                # Deduct if moving out (laundry, returned, OR waste/damaged)
+                if asset.is_laundry or asset.is_returned or asset.is_waste or asset.is_damaged:
+                    loc_stock = db.query(LocationStock).filter(
+                        LocationStock.location_id == target_location_id,
+                        LocationStock.item_id == target_item_id
+                    ).first()
+                    if loc_stock:
+                        loc_stock.quantity = max(0, loc_stock.quantity - 1)
+                        loc_stock.last_updated = datetime.utcnow()
+                        print(f"[CHECKOUT] Deducted LocationStock for asset movement: {loc_stock.quantity + 1} -> {loc_stock.quantity}")
 
-                # 4b. Deactivate Asset Mapping (DISABLED - User wants persistence until completion)
-                # from app.models.inventory import AssetMapping
-                # db.query(AssetMapping).filter(
-                #    AssetMapping.location_id == target_location_id,
-                #    AssetMapping.item_id == target_item_id
-                # ).update({"is_active": False})
-                print(f"[CHECKOUT] Deactivated Asset Mapping for damaged asset {target_item_id}")
+                # 4b. Deactivate Asset Mapping (ENABLED)
+                # This ensures the item is no longer counted as present in the room
+                # from app.models.inventory import AssetMapping # Removed locally to use global import
+                db.query(AssetMapping).filter(
+                   AssetMapping.location_id == target_location_id,
+                   AssetMapping.item_id == target_item_id
+                ).update({"is_active": False})
+                print(f"[CHECKOUT] Deactivated Asset Mapping for moved asset {target_item_id}")
 
                 # 5. Deduct Global Stock (Only if MISSING or WASTE)
                 inv_item_obj = db.query(InventoryItem).filter(InventoryItem.id == target_item_id).first()
+                
                 if inv_item_obj:
                     # Logic: Only deduct from global stock if it's actually leaving the system
                     # If it's going to LAUNDRY or being RETURNED, it still EXISTS in global stock.
-                    should_deduct_global = should_charge and not (asset.is_laundry or asset.is_returned or asset.is_waste) # Missing
+                    should_deduct_global = should_charge and not (asset_is_laundry or asset.is_returned or asset.is_waste) # Missing
                     if asset.is_waste: should_deduct_global = True # Scrapped
                     
                     if should_deduct_global:
@@ -1406,25 +1500,63 @@ async def handleCompleteCheckoutRequest(
                         inv_item_obj.current_stock -= 1
                         print(f"[CHECKOUT] Deducted Global Stock for lost/waste asset {inv_item_obj.name}: {old_val} -> {inv_item_obj.current_stock}")
                     else:
-                        print(f"[CHECKOUT] Global stock preserved for asset {inv_item_obj.name} (moving to {asset.laundry_location_id if asset.is_laundry else asset.return_location_id if asset.is_returned else 'N/A'})")
+                        print(f"[CHECKOUT] Global stock preserved for asset {inv_item_obj.name} (moving to {asset_laundry_id if asset_is_laundry else asset.return_location_id if asset.is_returned else 'N/A'})")
 
                 # 6. ENHANCED: Laundry/Waste for fixed assets
-                if asset.is_laundry and asset.laundry_location_id:
-                    print(f"[CHECKOUT] Moving asset {asset.item_name} to LAUNDRY location {asset.laundry_location_id}")
+                if is_actually_laundry and asset_laundry_id:
+                    print(f"[CHECKOUT] Moving asset {asset.item_name} to LAUNDRY location {asset_laundry_id}")
                     # Update Registry Location
                     if asset_record:
-                        asset_record.current_location_id = asset.laundry_location_id
+                        asset_record.current_location_id = asset_laundry_id
                         asset_record.status = "in_laundry"
                     
                     # Update LocationStock
-                    laundry_stock = db.query(LocationStock).filter(
-                        LocationStock.location_id == asset.laundry_location_id,
+                    l_stock = db.query(LocationStock).filter(
+                        LocationStock.location_id == asset_laundry_id,
                         LocationStock.item_id == target_item_id
                     ).first()
-                    if laundry_stock:
-                        laundry_stock.quantity += 1
+                    if l_stock:
+                        l_stock.quantity += 1
                     else:
-                        db.add(LocationStock(location_id=asset.laundry_location_id, item_id=target_item_id, quantity=1, last_updated=datetime.utcnow()))
+                        db.add(LocationStock(location_id=asset_laundry_id, item_id=target_item_id, quantity=1, last_updated=datetime.utcnow()))
+                    
+                    # Create Laundry Log entry for Asset
+                    laundry_entry = LaundryLog(
+                        item_id=target_item_id,
+                        source_location_id=target_location_id,
+                        room_number=checkout_request.room_number,
+                        quantity=1,
+                        status="Incomplete Washing",
+                        sent_at=datetime.utcnow(),
+                        created_by=current_user.id,
+                        notes=f"Asset movement at checkout - Room {checkout_request.room_number}"
+                    )
+                    db.add(laundry_entry)
+                    print(f"[CHECKOUT] Created LaundryLog entry for asset {asset.item_name}")
+
+                    # Replacement request logic (Consolidated)
+                    if asset.request_replacement:
+                         # Determine default pickup location
+                         default_store = db.query(Location).filter(Location.location_type == 'WAREHOUSE', Location.is_active == True).first()
+
+                         new_sr = ServiceRequest(
+                            room_id=room_obj.id,
+                            request_type="replenishment",
+                            description=f"REPLACEMENT REQUIRED: {asset.item_name} sent to laundry. Fresh unit needed for Room {checkout_request.room_number}.",
+                            status="pending",
+                            pickup_location_id=default_store.id if default_store else None,
+                            created_at=datetime.utcnow(),
+                            refill_data=json.dumps([{
+                                "item_id": target_item_id,
+                                "quantity": 1,
+                                "item_name": t_item.name if t_item else asset.item_name,
+                                "unit": t_item.unit if t_item else "pcs",
+                                "is_fixed_asset": True,
+                                "source_location_id": target_location_id
+                            }])
+                        )
+                         db.add(new_sr)
+                         print(f"[CHECKOUT] Created laundry replacement request (Pickup: {default_store.id if default_store else 'None'})")
                 
                 elif asset.is_waste and asset.waste_location_id:
                     print(f"[CHECKOUT] Moving damaged asset {asset.item_name} to WASTE location {asset.waste_location_id}")
@@ -1460,17 +1592,30 @@ async def handleCompleteCheckoutRequest(
                     else:
                         db.add(LocationStock(location_id=asset.return_location_id, item_id=target_item_id, quantity=1, last_updated=datetime.utcnow()))
 
-                # 7. ENHANCED: Replacement Request for fixed assets
-                if asset.request_replacement:
+                # 7. ENHANCED: Replacement Request for fixed assets (if not already handled by movement loops)
+                # This catches missing items that are not laundry/return/waste but still need replacement
+                elif asset.request_replacement:
+                    # Determine default pickup location
+                    default_store = db.query(Location).filter(Location.location_type == 'WAREHOUSE', Location.is_active == True).first()
+                    
                     new_sr = ServiceRequest(
                         room_id=room_obj.id,
                         request_type="replenishment",
-                        description=f"REPLACEMENT: Asset {asset.item_name} (Tag: {asset_record.asset_tag if asset_record else 'N/A'}) requested for Room {checkout_request.room_number} during checkout.",
+                        description=f"REPLACEMENT: Asset {asset.item_name} requested for Room {checkout_request.room_number} during checkout.",
                         status="pending",
-                        created_at=datetime.utcnow()
+                        pickup_location_id=default_store.id if default_store else None,
+                        created_at=datetime.utcnow(),
+                        refill_data=json.dumps([{
+                            "item_id": target_item_id,
+                            "quantity": 1,
+                            "item_name": t_item.name if t_item else asset.item_name,
+                            "unit": t_item.unit if t_item else "pcs",
+                            "is_fixed_asset": True,
+                            "source_location_id": target_location_id
+                        }])
                     )
                     db.add(new_sr)
-                    print(f"[CHECKOUT] Created replacement service request for Asset {asset.item_name}")
+                    print(f"[CHECKOUT] Created direct replacement service request (Pickup: {default_store.id if default_store else 'None'})")
 
     if inventory_data_with_charges:
         checkout_request.inventory_data = inventory_data_with_charges
@@ -1686,7 +1831,9 @@ def get_pre_checkout_verification_data(room_number: str, db: Session = Depends(g
                 "replacement_cost": asset.item.selling_price or asset.item.unit_price or 0.0,
                 "serial_number": asset.serial_number,
                 "asset_tag": asset.asset_tag_id,
-                "current_stock": 1 # It's a single unit
+                "current_stock": 1, # It's a single unit
+                "track_laundry_cycle": asset.item.track_laundry_cycle,
+                "is_rentable": asset.item.is_asset_fixed == False # Or some logic to determine if it's a rental asset
             })
             
     # Fallback if no location assigned or empty: return general lists as before (or empty)?
@@ -2045,7 +2192,9 @@ def repair_room_checkout_status(room_number: str, db: Session = Depends(get_db),
                                     transaction_type="transfer_out",
                                     quantity=-qty,
                                     notes=f"Checkout cleanup - returned from Room {room.number} to {target_location.name}",
-                                    created_by=current_user.id if current_user else None
+                                    created_by=current_user.id if current_user else None,
+                                    source_location_id=room.inventory_location_id,
+                                    destination_location_id=target_location.id
                                 ))
                                 
                                 item_stock.quantity = 0

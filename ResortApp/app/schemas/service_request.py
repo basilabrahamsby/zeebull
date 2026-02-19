@@ -15,8 +15,9 @@ class ServiceRequestUpdate(BaseModel):
     status: Optional[str] = None
     employee_id: Optional[int] = None
     description: Optional[str] = None
-    billing_status: Optional[str] = None  # "paid" or "unpaid" for food orders
-    return_location_id: Optional[int] = None # Location to return items to (e.g., Warehouse, Laundry)
+    billing_status: Optional[str] = None
+    return_location_id: Optional[int] = None
+    pickup_location_id: Optional[int] = None
 
 class ServiceRequestOut(BaseModel):
     id: int
@@ -36,6 +37,8 @@ class ServiceRequestOut(BaseModel):
     employee_name: Optional[str] = None
     food_order_billing_status: Optional[str] = None
     food_items: Optional[List[FoodOrderItemOut]] = None
+    pickup_location_id: Optional[int] = None
+    refill_data: Optional[str] = None
     service: Optional[dict] = None # Optional nested service details
     
     model_config = ConfigDict(from_attributes=True)

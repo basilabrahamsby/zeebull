@@ -879,6 +879,22 @@ const Billing = () => {
 
     setCheckingInventory(true);
     try {
+      // 0. Fetch valid return locations first
+      let validLocs = [];
+      let laundryLocId = null;
+      try {
+        const locRes = await api.get('/inventory/locations?limit=100');
+        validLocs = (locRes.data || []).filter(l =>
+          l.is_inventory_point ||
+          ['WAREHOUSE', 'CENTRAL_WAREHOUSE', 'BRANCH_STORE', 'SUB_STORE', 'STORE', 'DEPARTMENT', 'LAUNDRY'].includes(l.location_type)
+        );
+        const laundryLoc = validLocs.find(l => l.location_type === 'LAUNDRY' || l.name?.toLowerCase().includes('laundry'));
+        if (laundryLoc) laundryLocId = laundryLoc.id;
+        setReturnLocations(validLocs);
+      } catch (e) {
+        console.error("Failed to fetch return locations", e);
+      }
+
       // 1. Fetch current inventory details (consumables)
       const res = await api.get(`/bill/checkout-request/${checkoutRequest.request_id}/inventory-details`);
       const details = res.data;
@@ -895,35 +911,33 @@ const Billing = () => {
                 current_stock: item.current_stock,
                 available_stock: item.current_stock, // Default assumption: all present
                 used_qty: 0,
-                missing_qty: 0
+                missing_qty: 0,
+                // Auto-assign laundry location if it's a laundry item
+                return_location_id: item.track_laundry_cycle ? laundryLocId : null
               }));
             }
             if (verificationRes.data.assets) {
-              details.fixed_assets = verificationRes.data.assets.map(asset => ({
-                ...asset,
-                is_damaged: false,
-                damage_notes: "",
-                current_stock: 1,
-                available_stock: 1 // Default assumption: present
-              }));
+              // MERGE: Take existing assets from details but augment with verification flags
+              const existingAssets = details.assets || [];
+              details.fixed_assets = verificationRes.data.assets.map(vAsset => {
+                const existing = existingAssets.find(a => a.id === vAsset.id || a.asset_registry_id === vAsset.asset_registry_id);
+                return {
+                  ...vAsset,
+                  ...existing,
+                  is_present: true,
+                  is_damaged: false,
+                  damage_notes: "",
+                  current_stock: 1,
+                  available_stock: 1,
+                  request_replacement: false,
+                  return_location_id: vAsset.track_laundry_cycle ? laundryLocId : null
+                };
+              });
             }
           }
         } catch (e) {
           console.error("Failed to fetch inventory verification data:", e);
         }
-      }
-
-      // 3. Fetch valid return locations
-      try {
-        const locRes = await api.get('/inventory/locations?limit=100');
-        // Filter for valid return points (Warehouses, Stores, etc.)
-        const validLocs = (locRes.data || []).filter(l =>
-          l.is_inventory_point ||
-          ['WAREHOUSE', 'CENTRAL_WAREHOUSE', 'BRANCH_STORE', 'SUB_STORE', 'STORE', 'DEPARTMENT', 'LAUNDRY'].includes(l.location_type)
-        );
-        setReturnLocations(validLocs);
-      } catch (e) {
-        console.error("Failed to fetch return locations", e);
       }
 
       setCheckoutInventoryDetails(details);
@@ -1011,15 +1025,20 @@ const Billing = () => {
         return_location_id: item.return_location_id // Send user selection
       }));
 
-      // Collect asset damages
+      // Collect asset damages/movements
       const assetDamages = (checkoutInventoryDetails.fixed_assets || [])
-        .filter(asset => asset.is_damaged || (parseInt(asset.available_stock || 0) < parseInt(asset.current_stock || 0)))
         .map(asset => ({
-          asset_registry_id: asset.asset_registry_id,
+          asset_registry_id: asset.asset_registry_id || asset.id,
           item_id: asset.item_id,
-          item_name: asset.item_name,
+          item_name: asset.item_name || asset.name,
           replacement_cost: asset.replacement_cost,
-          notes: asset.damage_notes || (parseInt(asset.available_stock || 0) < parseInt(asset.current_stock || 0) ? "Missing at checkout" : "Damaged")
+          is_present: asset.is_present !== false,
+          is_damaged: asset.is_damaged || false,
+          is_laundry: asset.return_location_id === laundryLocId,
+          laundry_location_id: asset.return_location_id === laundryLocId ? laundryLocId : null,
+          return_location_id: asset.return_location_id,
+          request_replacement: asset.request_replacement || false,
+          notes: asset.damage_notes || (asset.is_present === false ? "Missing at checkout" : asset.is_damaged ? "Damaged" : "")
         }));
 
       const res = await api.post(`/bill/checkout-request/${checkoutInventoryModal}/check-inventory`, {
@@ -2326,6 +2345,7 @@ const Billing = () => {
                                     <th className="py-3 px-4 text-center">Good</th>
                                     <th className="py-3 px-4 text-center">Damaged</th>
                                     <th className="py-3 px-4 text-center">Missing</th>
+                                    <th className="py-3 px-4 text-left">Return To</th>
                                     <th className="py-3 px-4 text-right">Potential Charge</th>
                                   </tr>
                                 </thead>
@@ -2376,6 +2396,33 @@ const Billing = () => {
                                           />
                                         </td>
                                         <td className="py-3 px-4 text-center font-bold text-orange-600">{missing || '-'}</td>
+                                        <td className="py-3 px-4">
+                                          {good > 0 ? (
+                                            <div className="flex flex-col gap-1">
+                                              <select
+                                                className="w-full text-xs border-gray-300 rounded-md"
+                                                value={item.return_location_id || ""}
+                                                onChange={(e) => handleUpdateReturnLocation(originalIdx, e.target.value)}
+                                              >
+                                                <option value="">Auto-detect</option>
+                                                {returnLocations.map(loc => (
+                                                  <option key={loc.id} value={loc.id}>{loc.name}</option>
+                                                ))}
+                                              </select>
+                                              <label className="flex items-center gap-1 text-[10px] text-gray-500 cursor-pointer">
+                                                <input
+                                                  type="checkbox"
+                                                  checked={item.request_replacement || false}
+                                                  onChange={(e) => handleUpdateInventoryVerification(originalIdx, 'request_replacement', e.target.checked)}
+                                                  className="w-3 h-3"
+                                                />
+                                                Replace?
+                                              </label>
+                                            </div>
+                                          ) : (
+                                            <span className="text-gray-400 text-xs">-</span>
+                                          )}
+                                        </td>
                                         <td className="py-3 px-4 text-right font-medium text-red-600">
                                           {chargeAmount > 0 ? `+${formatCurrency(chargeAmount)}` : '-'}
                                         </td>
@@ -2410,11 +2457,12 @@ const Billing = () => {
                             <th className="py-3 px-4 text-center">Quantity</th>
                             <th className="py-3 px-4 text-center">Present</th>
                             <th className="py-3 px-4 text-center">Damaged</th>
+                            <th className="py-3 px-4 text-left">Return To</th>
                             <th className="py-3 px-4 text-left">Condition / Notes</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200">
-                          {checkoutInventoryDetails.assets.map((asset, idx) => (
+                          {(checkoutInventoryDetails.fixed_assets || []).map((asset, idx) => (
                             <tr key={idx} className={`hover:bg-blue-50 ${asset.is_damaged ? 'bg-red-50' : ''}`}>
                               <td className="py-3 px-4 font-medium">{asset.item_name || asset.name}</td>
                               <td className="py-3 px-4 text-center text-gray-600 font-mono text-xs">
@@ -2425,11 +2473,7 @@ const Billing = () => {
                                 <input
                                   type="checkbox"
                                   checked={asset.is_present !== false}
-                                  onChange={(e) => {
-                                    const updated = [...checkoutInventoryDetails.assets];
-                                    updated[idx] = { ...updated[idx], is_present: e.target.checked };
-                                    setCheckoutInventoryDetails({ ...checkoutInventoryDetails, assets: updated });
-                                  }}
+                                  onChange={(e) => handleUpdateAssetDamage(idx, 'is_present', e.target.checked)}
                                   className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
                                 />
                               </td>
@@ -2437,13 +2481,32 @@ const Billing = () => {
                                 <input
                                   type="checkbox"
                                   checked={asset.is_damaged || false}
-                                  onChange={(e) => {
-                                    const updated = [...checkoutInventoryDetails.assets];
-                                    updated[idx] = { ...updated[idx], is_damaged: e.target.checked };
-                                    setCheckoutInventoryDetails({ ...checkoutInventoryDetails, assets: updated });
-                                  }}
+                                  onChange={(e) => handleUpdateAssetDamage(idx, 'is_damaged', e.target.checked)}
                                   className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500"
                                 />
+                              </td>
+                              <td className="py-3 px-4">
+                                <div className="flex flex-col gap-1">
+                                  <select
+                                    className="w-full text-xs border-gray-300 rounded-md"
+                                    value={asset.return_location_id || ""}
+                                    onChange={(e) => handleUpdateAssetDamage(idx, 'return_location_id', e.target.value)}
+                                  >
+                                    <option value="">Staying in Room</option>
+                                    {returnLocations.map(loc => (
+                                      <option key={loc.id} value={loc.id}>{loc.name}</option>
+                                    ))}
+                                  </select>
+                                  <label className="flex items-center gap-1 text-[10px] text-gray-500 cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      checked={asset.request_replacement || false}
+                                      onChange={(e) => handleUpdateAssetDamage(idx, 'request_replacement', e.target.checked)}
+                                      className="w-3 h-3"
+                                    />
+                                    Replace?
+                                  </label>
+                                </div>
                               </td>
                               <td className="py-3 px-4">
                                 {asset.is_damaged ? (
@@ -2451,11 +2514,7 @@ const Billing = () => {
                                     type="text"
                                     placeholder="Describe damage..."
                                     value={asset.damage_notes || ''}
-                                    onChange={(e) => {
-                                      const updated = [...checkoutInventoryDetails.assets];
-                                      updated[idx] = { ...updated[idx], damage_notes: e.target.value };
-                                      setCheckoutInventoryDetails({ ...checkoutInventoryDetails, assets: updated });
-                                    }}
+                                    onChange={(e) => handleUpdateAssetDamage(idx, 'damage_notes', e.target.value)}
                                     className="w-full px-2 py-1 text-xs border border-red-300 rounded bg-red-50 focus:ring-2 focus:ring-red-500 outline-none"
                                   />
                                 ) : (

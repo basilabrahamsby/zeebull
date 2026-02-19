@@ -376,6 +376,8 @@ class InventoryTransactionOut(BaseModel):
     notes: Optional[str] = None
     created_by: Optional[int] = None
     created_by_name: Optional[str] = None
+    source_location_name: Optional[str] = None
+    destination_location_name: Optional[str] = None
     created_at: datetime
     
     class Config:

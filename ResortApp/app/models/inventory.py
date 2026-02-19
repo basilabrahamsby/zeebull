@@ -222,11 +222,15 @@ class InventoryTransaction(Base):
     department = Column(String, nullable=True)  # Department that consumed/used the inventory (Restaurant, Housekeeping, etc.)
     notes = Column(Text, nullable=True)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    source_location_id = Column(Integer, ForeignKey("locations.id"), nullable=True)
+    destination_location_id = Column(Integer, ForeignKey("locations.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     
     item = relationship("InventoryItem", back_populates="transactions")
     purchase_master = relationship("PurchaseMaster")
     user = relationship("User", foreign_keys=[created_by])
+    source_location = relationship("Location", foreign_keys=[source_location_id])
+    destination_location = relationship("Location", foreign_keys=[destination_location_id])
 
 
 # Stock Requisition Model (Internal Request Flow)

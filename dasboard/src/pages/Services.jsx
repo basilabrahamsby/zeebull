@@ -750,21 +750,13 @@ const Services = () => {
             (serviceRequest?.description?.toLowerCase().includes('order')) ||
             (serviceRequest?.request_type === "delivery");
 
-          // If we don't have a payment status yet, check if it's a food order
-          if (billingStatus === null || billingStatus === undefined || billingStatus === "") {
-            const isFoodOrder = (serviceRequest && serviceRequest.food_order_id) ||
-              (assignedService?.service?.name?.toLowerCase().includes('food')) ||
-              (assignedService?.service?.name?.toLowerCase().includes('delivery')) ||
-              (assignedService?.service?.name?.toLowerCase().includes('cleaning')) ||
-              (serviceRequest?.description?.toLowerCase().includes('cleaning')) ||
-              (serviceRequest?.request_type?.toLowerCase().includes('cleaning')) ||
-              (serviceRequest?.request_type === "delivery");
+          // If we don't have a payment status yet (neither passed nor in DB), check if it's billable to show the choice
+          const effectiveBilling = billingStatus || (assignedService?.billing_status !== "unbilled" ? assignedService?.billing_status : null);
 
-            if (isFoodOrder) {
-              console.log("[DEBUG] Food order detected, defaulting to PAID billing status.");
-              billingStatus = "paid";
-            } else {
-              console.log("[DEBUG] Completing service, showing payment/status modal.");
+          if (!effectiveBilling) {
+            // isBillable already covers food orders and other paid services
+            if (isBillable) {
+              console.log("[DEBUG v2.5] Billable service detected, showing payment/status choice modal.");
               setPaymentModal({ requestId: triggeringRequestId || id + 2000000, newStatus });
               return;
             }
@@ -1619,7 +1611,7 @@ const Services = () => {
     }
   };
 
-  const handleAssignEmployeeToRequest = async (requestId, employeeId) => {
+  const handleAssignEmployeeToRequest = async (requestId, employeeId, pickupLocationId = null) => {
     try {
       const idNum = parseInt(requestId);
       // Determine request type based on ID ranges
@@ -1633,7 +1625,11 @@ const Services = () => {
         await api.put(`/bill/checkout-request/${checkoutRequestId}/assign?employee_id=${employeeId}`);
       } else {
         // Regular Service Request
-        await api.put(`/service-requests/${requestId}`, { employee_id: employeeId });
+        const payload = { employee_id: employeeId };
+        if (pickupLocationId) {
+          payload.pickup_location_id = parseInt(pickupLocationId);
+        }
+        await api.put(`/service-requests/${requestId}`, payload);
       }
       fetchServiceRequests();
     } catch (error) {
@@ -1854,6 +1850,7 @@ const Services = () => {
     setQuickAssignModal({
       request: request,
       employeeId: request.employee_id ? request.employee_id.toString() : "",
+      pickupLocationId: request.pickup_location_id ? request.pickup_location_id.toString() : "",
     });
   };
 
@@ -1911,7 +1908,7 @@ const Services = () => {
       // For service requests, just assign the employee to the request
       // The service type is already defined in the request
       if (quickAssignModal.request.id) {
-        await handleAssignEmployeeToRequest(quickAssignModal.request.id, parseInt(quickAssignModal.employeeId));
+        await handleAssignEmployeeToRequest(quickAssignModal.request.id, parseInt(quickAssignModal.employeeId), quickAssignModal.pickupLocationId);
       }
 
       alert("Employee assigned successfully!");
@@ -2459,7 +2456,7 @@ const Services = () => {
                       })),
                       ...serviceRequests.map(r => ({
                         id: `req-${r.id}`,
-                        type: r.request_type === 'cleaning' ? 'Cleaning' : r.request_type === 'refill' ? 'Refill' : 'Request',
+                        type: r.request_type === 'cleaning' ? 'Cleaning' : r.request_type === 'refill' ? 'Refill' : r.request_type === 'replenishment' ? 'Replacement' : 'Request',
                         name: r.description || r.request_type,
                         room: r.room_number || '-',
                         employee: r.employee_name || '-',
@@ -2480,7 +2477,8 @@ const Services = () => {
                           <td className="py-3 px-4">
                             <span className={`px-2 py-1 rounded text-xs font-medium ${item.type === 'Assigned' ? 'bg-blue-100 text-blue-800' :
                               item.type === 'Cleaning' ? 'bg-orange-100 text-orange-800' :
-                                'bg-purple-100 text-purple-800'
+                                item.type === 'Replacement' ? 'bg-indigo-100 text-indigo-800' :
+                                  'bg-purple-100 text-purple-800'
                               }`}>
                               {item.type}
                             </span>
@@ -2657,6 +2655,11 @@ const Services = () => {
                                     }`}>
                                     {request.status || "pending"}
                                   </span>
+                                  {request.billing_status && request.billing_status !== "unbilled" && (
+                                    <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter shadow-sm border ${request.billing_status === 'paid' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-rose-50 text-rose-600 border-rose-100'}`}>
+                                      {request.billing_status}
+                                    </span>
+                                  )}
                                   {(request.status || "").toLowerCase() === "completed" && (
                                     <button
                                       onClick={() => {
@@ -3922,7 +3925,94 @@ const Services = () => {
                           className="w-full border p-3 rounded-lg bg-gray-100 text-gray-600"
                         />
                       </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Description
+                        </label>
+                        <div className="w-full border p-3 rounded-lg bg-indigo-50/50 text-indigo-900 text-xs font-semibold">
+                          {quickAssignModal.request.description || "No description provided."}
+                        </div>
+                      </div>
+
+                      {/* Food Order Details */}
+                      {quickAssignModal.request.food_items && quickAssignModal.request.food_items.length > 0 && (
+                        <div className="bg-orange-50 p-4 rounded-xl border border-orange-100 mt-2">
+                          <h3 className="text-[10px] font-black text-orange-600 uppercase tracking-widest mb-3 flex items-center gap-2">
+                            <Zap size={14} />
+                            Order Payload
+                          </h3>
+                          <div className="space-y-1">
+                            {quickAssignModal.request.food_items.map((item, idx) => (
+                              <div key={idx} className="flex justify-between text-[11px] py-1 border-b border-orange-100/50 last:border-0">
+                                <span className="text-slate-800 font-bold">{item.food_item_name}</span>
+                                <span className="text-orange-700 font-black">x{item.quantity}</span>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="mt-3 pt-2 border-t border-orange-200 flex justify-between items-center">
+                            <span className="text-[10px] font-black text-orange-400 uppercase tracking-widest">Total Valuation</span>
+                            <span className="text-sm font-black text-orange-700">₹{quickAssignModal.request.food_order_amount || 0}</span>
+                          </div>
+                        </div>
+                      )}
                     </>
+                  )}
+
+                  {/* Pickup Location for Replenishment */}
+                  {quickAssignModal.request?.request_type === 'replenishment' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Pickup Location <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        value={quickAssignModal.pickupLocationId || ""}
+                        onChange={(e) => setQuickAssignModal({ ...quickAssignModal, pickupLocationId: e.target.value })}
+                        className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-indigo-400"
+                      >
+                        <option value="">-- Select Pickup Location --</option>
+                        {locations.filter(l => l.location_type === 'STORE' || l.location_type === 'LAUNDRY' || l.location_type === 'WAREHOUSE').map((loc) => (
+                          <option key={loc.id} value={loc.id}>{loc.name} ({loc.location_type})</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {/* Restock Details */}
+                  {quickAssignModal.request?.refill_data && (
+                    <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 mt-2">
+                      <h3 className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-3 flex items-center gap-2">
+                        <Package size={14} />
+                        Restock Details
+                      </h3>
+                      <div className="space-y-2">
+                        {(() => {
+                          try {
+                            const data = typeof quickAssignModal.request.refill_data === 'string'
+                              ? JSON.parse(quickAssignModal.request.refill_data)
+                              : quickAssignModal.request.refill_data;
+
+                            const items = Array.isArray(data) ? data : [];
+
+                            if (items.length === 0) return <p className="text-[10px] text-blue-400 italic">No specific items listed</p>;
+
+                            return items.map((item, idx) => (
+                              <div key={idx} className="flex justify-between items-center text-[11px] py-1 border-b border-blue-100/50 last:border-0 pb-1">
+                                <div className="flex flex-col">
+                                  <span className="text-slate-800 font-black">{item.item_name || 'Unknown Item'}</span>
+                                  <span className="text-[8px] text-blue-500 font-bold uppercase">{item.is_fixed_asset ? 'Fixed Asset' : 'Consumable'}</span>
+                                </div>
+                                <div className="text-right">
+                                  <span className="text-blue-700 font-black px-2 py-0.5 bg-blue-100 rounded-lg">{item.quantity} {item.unit || 'pcs'}</span>
+                                </div>
+                              </div>
+                            ));
+                          } catch (e) {
+                            return <p className="text-[10px] text-red-400 italic">Error parsing items</p>;
+                          }
+                        })()}
+                      </div>
+                    </div>
                   )}
 
                   <div>

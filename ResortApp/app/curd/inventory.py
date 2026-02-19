@@ -484,7 +484,8 @@ def update_purchase_status(db: Session, purchase_id: int, status: str, current_u
                 reference_number=purchase.purchase_number,
                 purchase_master_id=purchase.id,
                 notes=f"Purchase received: {purchase.purchase_number}",
-                created_by=current_user_id or purchase.created_by
+                created_by=current_user_id or purchase.created_by,
+                destination_location_id=purchase.destination_location_id
             )
             db.add(transaction)
 
@@ -560,7 +561,8 @@ def update_purchase_status(db: Session, purchase_id: int, status: str, current_u
                 reference_number=purchase.purchase_number,
                 purchase_master_id=purchase.id,
                 notes=f"Purchase cancelled/reversed: {purchase.purchase_number}",
-                created_by=current_user_id or purchase.created_by
+                created_by=current_user_id or purchase.created_by,
+                source_location_id=purchase.destination_location_id
             )
             db.add(transaction)
     
@@ -861,7 +863,9 @@ def create_stock_issue(db: Session, data: dict, issued_by: int):
                     total_amount=cost,
                     reference_number=issue_number,
                     notes=transaction_notes,
-                    created_by=issued_by
+                    created_by=issued_by,
+                    source_location_id=source_loc_id,
+                    destination_location_id=dest_location_id
                 )
                 db.add(transaction_out)
                 
@@ -876,7 +880,9 @@ def create_stock_issue(db: Session, data: dict, issued_by: int):
                         reference_number=issue_number,
                         notes=f"Stock Received: {issue_number} from {data.get('source_location_id', 'Central')}",
                         created_by=issued_by,
-                        department=dest_location_name  # Track which location received it
+                        department=dest_location_name,  # Track which location received it
+                        source_location_id=source_loc_id,
+                        destination_location_id=dest_location_id
                     )
                     db.add(transaction_in)
                 
@@ -1133,7 +1139,8 @@ def create_waste_log(db: Session, data: dict, reported_by: int):
             total_amount=float(item.unit_price or 0) * data["quantity"],
             reference_number=log_number,
             notes=f"WASTE: {data['reason_code']} - {data.get('notes', '')}", # Add prefix for visibility
-            created_by=reported_by
+            created_by=reported_by,
+            source_location_id=data.get("location_id")
         )
         if transaction.total_amount and transaction.total_amount > 0:
             try:
@@ -1360,7 +1367,9 @@ def create_asset_mapping(db: Session, data: dict, assigned_by: Optional[int] = N
         total_amount=item.unit_price * quantity if item.unit_price else 0,
         reference_number=issue_number, # Link to Stock Issue
         notes=f"Asset Assigned to {dest_name}",
-        created_by=assigned_by
+        created_by=assigned_by,
+        source_location_id=source_loc_id,
+        destination_location_id=data["location_id"]
     )
     db.add(transaction)
     
@@ -1374,7 +1383,9 @@ def create_asset_mapping(db: Session, data: dict, assigned_by: Optional[int] = N
         reference_number=issue_number,
         department=dest_name, # Critical for frontend to show "To Location"
         notes=f"Asset Received from Central Warehouse",
-        created_by=assigned_by
+        created_by=assigned_by,
+        source_location_id=source_loc_id,
+        destination_location_id=data["location_id"]
     )
     db.add(transaction_in)
     
@@ -1649,7 +1660,9 @@ def create_asset_registry(db: Session, data: dict, created_by: int = None):
         # unit_price=?, FIXME: Need item price
         reference_number=asset_tag_id,
         notes=f"Asset Assigned: {source_name} -> {dest_name}",
-        created_by=created_by
+        created_by=created_by,
+        source_location_id=source_loc_id,
+        destination_location_id=data["current_location_id"]
     )
     # Fetch item for price
     item_obj = get_item_by_id(db, data["item_id"])
@@ -1837,7 +1850,8 @@ def process_food_order_usage(db: Session, order_id: int):
             reference_number=f"ORD-{order_id}",
             department=item.category.parent_department if item.category else "Restaurant",
             notes=f"Food Order #{order_id} Consumption from {kitchen_loc.name if kitchen_loc else 'Global Stock'}",
-            created_by=None 
+            created_by=None,
+            source_location_id=kitchen_loc.id if kitchen_loc else None
         )
         db.add(transaction)
     

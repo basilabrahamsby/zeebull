@@ -186,7 +186,8 @@ def deduct_room_consumables(db: Session, room_id: int, consumables: List[Consuma
                 total_amount=(inv_item.unit_price or 0.0) * quantity_to_deduct,
                 reference_number=f"CHECKOUT-{checkout_id}",
                 notes=f"Checkout consumption - Room {room.number if room else 'N/A'}",
-                created_by=created_by
+                created_by=created_by,
+                source_location_id=room.inventory_location_id
             )
             db.add(transaction)
 
@@ -267,7 +268,9 @@ def trigger_linen_cycle(db: Session, room_id: int, checkout_id: int):
             unit_price=0.0,
             reference_number=f"LAUNDRY-{checkout_id}",
             notes=f"Linen to Laundry - Room {room.number}",
-            created_by=None
+            created_by=None,
+            source_location_id=room.inventory_location_id,
+            destination_location_id=laundry_loc.id
         )
         db.add(transaction)
 
