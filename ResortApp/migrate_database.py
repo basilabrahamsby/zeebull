@@ -77,11 +77,15 @@ def migrate_database():
         add_column('package_bookings', 'created_at', 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP')
         print()
 
-        # Table: assigned_services
-        print("Migrating 'assigned_services' table...")
         add_column('assigned_services', 'started_at', 'TIMESTAMP')
         add_column('assigned_services', 'completed_at', 'TIMESTAMP')
         add_column('assigned_services', 'override_charges', 'DOUBLE PRECISION')
+        print()
+
+        # Table: inventory_transactions
+        print("Migrating 'inventory_transactions' table...")
+        add_column('inventory_transactions', 'source_location_id', 'INTEGER REFERENCES locations(id)')
+        add_column('inventory_transactions', 'destination_location_id', 'INTEGER REFERENCES locations(id)')
         print()
 
         print("=" * 60)
