@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback, memo } from "react";
+﻿import React, { useState, useEffect, useRef, useMemo, useCallback, memo } from "react";
 import localLogo from "./assets/logo.jpeg";
 // Lucide React is used for elegant icons
 import { BedDouble, Coffee, ConciergeBell, Package, ChevronRight, ChevronLeft, ChevronDown, Image as ImageIcon, Star, Quote, ChevronUp, MessageSquare, Send, X, Facebook, Instagram, Linkedin, Twitter, Moon, Sun, Droplet, Menu } from 'lucide-react';
@@ -526,244 +526,505 @@ const BackgroundAnimation = ({ theme }) => {
     return (
         <>
             <style>{`
-                /* Resort Golden Orange White Theme Typography & Colors */
-                @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Poppins:wght@300;400;500;600;700&display=swap');
-                
+                /* 
+                   ORCHID RESORT  Ultra-Premium Design System v4
+                   Theme: Midnight Obsidian  Liquid Gold  Platinum
+                   Inspired by: Aman Resorts  The Brando  Six Senses
+                 */
+                @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400;1,600&family=Montserrat:wght@300;400;500;600;700&display=swap');
+
                 :root {
-                    --font-display: 'Cormorant Garamond', serif;
-                    --font-body: 'Poppins', sans-serif;
-                    --color-resort-gold: #d97706;
-                    --color-resort-gold-dark: #b45309;
-                    --color-resort-orange: #ea580c;
-                    --color-resort-amber: #f59e0b;
-                    --color-resort-white: #ffffff;
+                    --font-display:  'Playfair Display', serif;
+                    --font-serif:    'Cormorant Garamond', serif;
+                    --font-body:     'Montserrat', sans-serif;
+
+                    --obsidian:      #0a0a0f;
+                    --obsidian-mid:  #12121a;
+                    --obsidian-soft: #1c1c28;
+                    --ink:           #0d0d16;
+
+                    --gold-deep:     #7a5518;
+                    --gold:          #c8971e;
+                    --gold-warm:     #e2aa30;
+                    --gold-light:    #f5d485;
+                    --gold-pale:     #fdf0c8;
+
+                    --platinum:      #e8e8f0;
+                    --platinum-soft: #c8c8d8;
+                    --silver:        #a8a8b8;
+
+                    --cream:         #faf7f0;
+                    --cream-warm:    #f5ede0;
+                    --parchment:     #ede4d0;
+
+                    --forest:        #1a3d2b;
+                    --forest-mid:    #245c3f;
+
+                    --glass-light:   rgba(255,255,255,0.06);
+                    --glass-border:  rgba(255,255,255,0.09);
+                    --gold-glow:     rgba(200,151,30,0.2);
                 }
-                
-                * {
-                    max-width: 100%;
-                }
-                
+
+                * { box-sizing: border-box; max-width: 100%; }
+                html { scroll-behavior: smooth; }
+
                 body {
                     font-family: var(--font-body);
-                    font-weight: 400;
-                    letter-spacing: 0.01em;
-                    background-color: var(--color-resort-white);
-                    color: var(--color-resort-gold-dark);
+                    font-weight: 300;
+                    font-size: 0.9375rem;
+                    letter-spacing: 0.025em;
+                    line-height: 1.7;
+                    background-color: var(--cream);
+                    color: #2a2a35;
                     overflow-x: hidden;
+                    -webkit-font-smoothing: antialiased;
                 }
-                
-                h1, h2, h3, h4, h5, h6 {
+
+                h1, h2, h3, h4 {
                     font-family: var(--font-display);
-                    font-weight: 700;
-                    letter-spacing: -0.015em;
+                    font-weight: 500;
+                    letter-spacing: 0.03em;
                     max-width: 100%;
                     word-wrap: break-word;
-                    color: var(--color-resort-gold-dark);
+                    color: var(--obsidian);
+                    line-height: 1.2;
                 }
-                
-                section {
-                    width: 100%;
-                    overflow-x: hidden;
+                h5, h6 {
+                    font-family: var(--font-serif);
+                    font-weight: 400;
+                    color: var(--forest-mid);
                 }
-                
-                img {
-                    max-width: 100%;
-                    height: auto;
-                }
-                
+                section { width: 100%; overflow-x: hidden; }
+                img { max-width: 100%; height: auto; }
+
                 .container-custom {
-                    max-width: 95%;
-                    margin-left: auto;
-                    margin-right: auto;
-                    padding-left: 1rem;
-                    padding-right: 1rem;
+                    max-width: 1440px;
+                    margin: 0 auto;
+                    padding-left: 1.5rem;
+                    padding-right: 1.5rem;
                 }
-                
                 @media (min-width: 640px) {
-                    .container-custom {
-                        max-width: 98%;
-                        padding-left: 1.5rem;
-                        padding-right: 1.5rem;
-                    }
+                    .container-custom { padding-left: 2.5rem; padding-right: 2.5rem; }
                 }
-                
-                @media (min-width: 1024px) {
-                    .container-custom {
-                        max-width: 1400px;
-                    }
+                @media (min-width: 1280px) {
+                    .container-custom { padding-left: 4rem; padding-right: 4rem; }
                 }
-                
-                /* Resort Premium Styling */
+
+                /*  Eyebrow Badge  */
+                .section-badge {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 0.7rem;
+                    padding: 0.4rem 1.6rem;
+                    background: transparent;
+                    color: var(--gold);
+                    font-family: var(--font-body);
+                    font-size: 0.58rem;
+                    font-weight: 600;
+                    letter-spacing: 0.38em;
+                    text-transform: uppercase;
+                    border: 1px solid rgba(200,151,30,0.35);
+                }
+                .section-badge::before, .section-badge::after {
+                    content: '';
+                    font-size: 0.42rem;
+                    color: var(--gold);
+                    opacity: 0.7;
+                }
+
+                /*  Gold Divider  */
+                .gold-rule {
+                    display: block;
+                    width: 80px;
+                    height: 1px;
+                    background: linear-gradient(90deg, transparent 0%, var(--gold-warm) 40%, var(--gold-light) 50%, var(--gold-warm) 60%, transparent 100%);
+                    margin: 0 auto;
+                    position: relative;
+                }
+                .gold-rule::after {
+                    content: '';
+                    position: absolute;
+                    top: 50%; left: 50%;
+                    transform: translate(-50%, -50%);
+                    font-size: 0.48rem;
+                    color: var(--gold-warm);
+                    background: var(--cream);
+                    padding: 0 5px;
+                }
+
+                /*  Luxury Card  */
                 .luxury-card {
-                    border-radius: 1rem;
-                    box-shadow: 0 6px 24px -8px rgba(12, 61, 38, 0.25);
-                    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+                    border-radius: 0;
+                    background: #ffffff;
+                    box-shadow: 0 2px 8px rgba(10,10,15,0.06), 0 8px 32px rgba(10,10,15,0.08), 0 0 0 1px rgba(200,151,30,0.1);
+                    transition: box-shadow 0.55s cubic-bezier(0.23,1,0.32,1), transform 0.55s cubic-bezier(0.23,1,0.32,1);
+                    overflow: hidden;
+                    position: relative;
                 }
-                
+                .luxury-card::before {
+                    content: '';
+                    position: absolute;
+                    inset: 0;
+                    background: linear-gradient(135deg, rgba(200,151,30,0.05) 0%, transparent 60%);
+                    opacity: 0;
+                    transition: opacity 0.4s ease;
+                    z-index: 0;
+                    pointer-events: none;
+                }
                 .luxury-card:hover {
-                    box-shadow: 0 24px 40px -12px rgba(12, 61, 38, 0.35), 0 0 0 1px rgba(201, 156, 78, 0.25);
-                    transform: translateY(-4px) scale(1.015);
+                    box-shadow: 0 4px 16px rgba(10,10,15,0.1), 0 28px 64px rgba(10,10,15,0.16), 0 0 0 1px rgba(200,151,30,0.45);
+                    transform: translateY(-7px);
                 }
-                
+                .luxury-card:hover::before { opacity: 1; }
+                .luxury-card:hover .card-image { filter: brightness(1.08) saturate(1.2) contrast(1.04); transform: scale(1.07); }
+
+                .card-image {
+                    width: 100%; height: 100%;
+                    object-fit: cover;
+                    filter: brightness(1) saturate(1.05);
+                    transition: transform 0.9s cubic-bezier(0.23,1,0.32,1), filter 0.6s ease;
+                }
+
+                /*  Gradients  */
                 .premium-gradient {
-                    background: linear-gradient(135deg, #0f5132 0%, #1a7042 60%, #218051 100%);
+                    background: linear-gradient(135deg, var(--obsidian) 0%, var(--obsidian-soft) 60%, #22223a 100%);
                 }
-                
-                .premium-text-gradient {
-                    background: linear-gradient(135deg, #0f5132 0%, #1a7042 100%);
+                .gold-gradient {
+                    background: linear-gradient(135deg, var(--gold-deep) 0%, var(--gold) 35%, var(--gold-warm) 65%, var(--gold-light) 100%);
+                }
+                .gold-text-gradient {
+                    background: linear-gradient(110deg, var(--gold-deep) 0%, var(--gold-warm) 40%, var(--gold-light) 60%, var(--gold) 100%);
                     -webkit-background-clip: text;
                     -webkit-text-fill-color: transparent;
                     background-clip: text;
                 }
-                
-                .luxury-overlay {
-                    background: linear-gradient(180deg, rgba(12, 61, 38, 0.05) 0%, rgba(12, 61, 38, 0.55) 55%, rgba(15, 49, 38, 0.85) 100%);
-                }
-                
-                .section-badge {
-                    display: inline-block;
-                    padding: 0.5rem 1.5rem;
-                    background: rgba(15, 81, 50, 0.08);
-                    color: #0f5132;
-                    font-weight: 600;
-                    letter-spacing: 0.12em;
-                    border-radius: 9999px;
-                    border: 1px solid rgba(201, 156, 78, 0.35);
-                    backdrop-filter: blur(10px);
-                    text-transform: uppercase;
-                }
-                
-                .luxury-shadow {
-                    box-shadow: 0 28px 50px -18px rgba(12, 61, 38, 0.28), 0 0 0 1px rgba(201, 156, 78, 0.12);
-                }
-                
-                .card-image {
-                    max-height: 200px;
-                    object-fit: cover;
-                    filter: brightness(1) saturate(1.05);
-                    transition: all 0.5s ease;
-                }
-                
-                .luxury-card:hover .card-image {
-                    filter: brightness(1.08) saturate(1.2);
-                }
-                
-                .card-title {
-                    font-size: 1.125rem;
-                    margin-bottom: 0.5rem;
-                    font-weight: 700;
-                    letter-spacing: -0.01em;
-                }
-                
-                .card-description {
-                    font-size: 0.875rem;
-                    line-height: 1.6;
-                    color: #4f6f62;
-                }
-                
-                @keyframes slow-pan { 
-                    0% { transform: translate(0, 0) scale(1); }
-                    50% { transform: translate(-3%, 3%) scale(1.05); }
-                    100% { transform: translate(0, 0) scale(1); }
-                }
-                @keyframes fadeInUp {
-                    from { opacity: 0; transform: translateY(30px); }
-                    to { opacity: 1; transform: translateY(0); }
-                }
-                
-                @keyframes fade-in-up {
-                    0% { opacity: 0; transform: translateY(40px); }
-                    100% { opacity: 1; transform: translateY(0); }
-                }
-                
-                @keyframes slide-in-left {
-                    0% { opacity: 0; transform: translateX(-50px); }
-                    100% { opacity: 1; transform: translateX(0); }
-                }
-                
-                @keyframes slide-in-right {
-                    0% { opacity: 0; transform: translateX(50px); }
-                    100% { opacity: 1; transform: translateX(0); }
-                }
-                
-                @keyframes float-gentle {
-                    0%, 100% { transform: translateY(0px); }
-                    50% { transform: translateY(-10px); }
-                }
-                
-                @keyframes bounce-gentle {
-                    0%, 100% { transform: translateY(0px); }
-                    50% { transform: translateY(-8px); }
-                }
-                
-                @keyframes pulse-gentle {
-                    0%, 100% { opacity: 1; transform: scale(1); }
-                    50% { opacity: 0.9; transform: scale(1.02); }
-                }
-                
-                .animate-fade-in-up {
-                    animation: fade-in-up 1s ease-out forwards;
-                    opacity: 0;
-                }
-                
-                .animate-slide-in-left {
-                    animation: slide-in-left 1s ease-out forwards;
-                    opacity: 0;
-                }
-                
-                .animate-slide-in-right {
-                    animation: slide-in-right 1s ease-out forwards;
-                    opacity: 0;
-                }
-                
-                .animate-float-gentle {
-                    animation: float-gentle 3s ease-in-out infinite;
-                }
-                
-                .animate-bounce-gentle {
-                    animation: bounce-gentle 2s ease-in-out infinite;
-                }
-                
-                @keyframes zoom-gentle {
-                    0% { transform: scale(1) translate(0, 0); }
-                    50% { transform: scale(1.08) translate(-2%, 2%); }
-                    100% { transform: scale(1.05) translate(2%, -2%); }
-                }
-                
-                .animate-zoom-gentle {
-                    animation: zoom-gentle 30s ease-in-out infinite;
-                }
-                
-                .animate-pulse-gentle {
-                    animation: pulse-gentle 2s ease-in-out infinite;
+                .premium-text-gradient {
+                    background: linear-gradient(135deg, var(--obsidian) 0%, var(--obsidian-soft) 100%);
+                    -webkit-background-clip: text;
+                    -webkit-text-fill-color: transparent;
+                    background-clip: text;
                 }
 
-                /* Lazy reveal utility - optimized for performance */
-                .reveal { opacity: 0; transform: translateY(18px) scale(.98); filter: blur(6px); will-change: opacity, transform, filter; }
-                .reveal.in { opacity: 1; transform: none; filter: blur(0); transition: opacity .2s ease, transform .2s ease, filter .2s ease; }
-                @keyframes gentle-glow {
-                    0%, 100% { filter: brightness(1) drop-shadow(0 0 20px rgba(245, 158, 11, 0.3)); }
-                    50% { filter: brightness(1.1) drop-shadow(0 0 30px rgba(245, 158, 11, 0.5)); }
+                /*  Hero Overlay  */
+                .hero-overlay {
+                    background: linear-gradient(
+                        160deg,
+                        rgba(10,10,15,0.78) 0%,
+                        rgba(10,10,15,0.25) 38%,
+                        rgba(10,10,15,0.15) 55%,
+                        rgba(10,10,15,0.82) 100%
+                    );
                 }
-                @keyframes gentle-pulse {
-                    0%, 100% { box-shadow: 0 10px 40px rgba(245, 158, 11, 0.3); }
-                    50% { box-shadow: 0 15px 60px rgba(245, 158, 11, 0.6); }
+
+                .luxury-shadow {
+                    box-shadow: 0 4px 16px rgba(10,10,15,0.1), 0 32px 72px rgba(10,10,15,0.18), 0 0 0 1px rgba(200,151,30,0.15);
                 }
-                @keyframes bubble-up { 0% { transform: translate(0, 0) rotate(0deg); } 25% { transform: translate(20px, -25vh) rotate(45deg); } 50% { transform: translate(-20px, -50vh) rotate(90deg); } 75% { transform: translate(20px, -75vh) rotate(135deg); } 100% { transform: translate(0, -110vh) rotate(180deg); } }
-                @keyframes bubble-down { 0% { transform: translate(0, 0) rotate(0deg); } 25% { transform: translate(-20px, 25vh) rotate(-45deg); } 50% { transform: translate(20px, 50vh) rotate(-90deg); } 75% { transform: translate(-20px, 75vh) rotate(-135deg); } 100% { transform: translate(0, 110vh) rotate(-180deg); } }
-                @keyframes bubble-left { 0% { transform: translate(0, 0) rotate(0deg); } 25% { transform: translate(-25vw, 20px) rotate(45deg); } 50% { transform: translate(-50vw, -20px) rotate(90deg); } 75% { transform: translate(-75vw, 20px) rotate(135deg); } 100% { transform: translate(-110vw, 0) rotate(180deg); } }
-                @keyframes bubble-right { 0% { transform: translate(0, 0) rotate(0deg); } 25% { transform: translate(25vw, -20px) rotate(-45deg); } 50% { transform: translate(50vw, 20px) rotate(-90deg); } 75% { transform: translate(75vw, -20px) rotate(-135deg); } 100% { transform: translate(110vw, 0) rotate(-180deg); } }
-                .bubble-up { animation: bubble-up ease-in-out infinite; }
-                .bubble-down { animation: bubble-down ease-in-out infinite; }
-                .bubble-left { animation: bubble-left ease-in-out infinite; }
-                .bubble-right { animation: bubble-right ease-in-out infinite; }
+
+                /*  Buttons  */
+                .btn-gold {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 0.6rem;
+                    padding: 0.95rem 2.6rem;
+                    background: linear-gradient(110deg, var(--gold-deep) 0%, var(--gold) 40%, var(--gold-warm) 70%, var(--gold) 100%);
+                    background-size: 200% 100%;
+                    color: var(--obsidian);
+                    font-family: var(--font-body);
+                    font-size: 0.6rem;
+                    font-weight: 700;
+                    letter-spacing: 0.28em;
+                    text-transform: uppercase;
+                    border: none;
+                    border-radius: 0;
+                    cursor: pointer;
+                    position: relative;
+                    overflow: hidden;
+                    transition: all 0.45s cubic-bezier(0.23,1,0.32,1);
+                    box-shadow: 0 4px 24px rgba(200,151,30,0.42), inset 0 1px 0 rgba(245,212,133,0.55);
+                }
+                .btn-gold::before {
+                    content: '';
+                    position: absolute;
+                    top: 0; left: -100%;
+                    width: 100%; height: 100%;
+                    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.24), transparent);
+                    transition: left 0.55s ease;
+                }
+                .btn-gold:hover {
+                    background-position: right center;
+                    box-shadow: 0 8px 40px rgba(200,151,30,0.58), inset 0 2px 0 rgba(245,212,133,0.7);
+                    transform: translateY(-2px);
+                    letter-spacing: 0.33em;
+                }
+                .btn-gold:hover::before { left: 100%; }
+
+                .btn-ghost {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 0.6rem;
+                    padding: 0.9rem 2.4rem;
+                    background: transparent;
+                    color: white;
+                    font-family: var(--font-body);
+                    font-size: 0.6rem;
+                    font-weight: 600;
+                    letter-spacing: 0.28em;
+                    text-transform: uppercase;
+                    border: 1px solid rgba(255,255,255,0.45);
+                    border-radius: 0;
+                    cursor: pointer;
+                    transition: all 0.35s ease;
+                    backdrop-filter: blur(4px);
+                }
+                .btn-ghost:hover {
+                    background: rgba(255,255,255,0.1);
+                    border-color: rgba(255,255,255,0.8);
+                    letter-spacing: 0.33em;
+                }
+
+                .btn-dark {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 0.6rem;
+                    padding: 0.9rem 2.4rem;
+                    background: var(--obsidian);
+                    color: var(--gold-light);
+                    font-family: var(--font-body);
+                    font-size: 0.6rem;
+                    font-weight: 600;
+                    letter-spacing: 0.28em;
+                    text-transform: uppercase;
+                    border: 1px solid rgba(200,151,30,0.35);
+                    border-radius: 0;
+                    cursor: pointer;
+                    transition: all 0.4s ease;
+                    box-shadow: 0 4px 20px rgba(10,10,15,0.35);
+                }
+                .btn-dark:hover {
+                    background: var(--obsidian-soft);
+                    border-color: var(--gold-warm);
+                    box-shadow: 0 8px 40px rgba(10,10,15,0.5), 0 0 0 1px rgba(200,151,30,0.25);
+                    transform: translateY(-2px);
+                }
+
+                /*  Navigation  */
+                .nav-link {
+                    position: relative;
+                    padding: 0.55rem 0.85rem;
+                    font-family: var(--font-body);
+                    font-size: 0.58rem;
+                    font-weight: 600;
+                    letter-spacing: 0.22em;
+                    text-transform: uppercase;
+                    color: var(--obsidian);
+                    text-decoration: none;
+                    transition: color 0.25s ease;
+                    white-space: nowrap;
+                }
+                .nav-link::after {
+                    content: '';
+                    position: absolute;
+                    bottom: -1px;
+                    left: 0.85rem;
+                    right: 0.85rem;
+                    height: 1px;
+                    background: linear-gradient(90deg, transparent, var(--gold-warm), transparent);
+                    transform: scaleX(0);
+                    transform-origin: center;
+                    transition: transform 0.38s cubic-bezier(0.23,1,0.32,1);
+                }
+                .nav-link:hover { color: var(--gold); }
+                .nav-link:hover::after { transform: scaleX(1); }
+
+                /*  Section Titles  */
+                .section-title {
+                    font-family: var(--font-display);
+                    font-size: clamp(1.7rem, 3.5vw, 3.2rem);
+                    font-weight: 500;
+                    letter-spacing: 0.06em;
+                    color: var(--obsidian);
+                    text-transform: uppercase;
+                    line-height: 1.15;
+                }
+                .section-subtitle {
+                    font-family: var(--font-serif);
+                    font-size: clamp(1.05rem, 2vw, 1.3rem);
+                    font-style: italic;
+                    font-weight: 300;
+                    color: var(--silver);
+                    letter-spacing: 0.03em;
+                }
+
+                /* Taj 2-column editorial section header */
+                .taj-section-header {
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    gap: 3rem 5rem;
+                    align-items: end;
+                    margin-bottom: 4rem;
+                    padding-bottom: 2rem;
+                    border-bottom: 1px solid rgba(200,151,30,0.15);
+                }
+                @media (max-width: 768px) {
+                    .taj-section-header {
+                        grid-template-columns: 1fr;
+                        gap: 1.25rem;
+                    }
+                }
+                .taj-section-header__left {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 0.5rem;
+                }
+                .taj-section-header__eyebrow {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 0.75rem;
+                    font-family: var(--font-body);
+                    font-size: 0.58rem;
+                    font-weight: 600;
+                    letter-spacing: 0.28em;
+                    text-transform: uppercase;
+                    color: var(--gold);
+                    margin-bottom: 0.5rem;
+                }
+                .taj-section-header__eyebrow::before {
+                    content: '';
+                    display: inline-block;
+                    width: 2.5rem;
+                    height: 1px;
+                    background: linear-gradient(90deg, var(--gold-warm), var(--gold-light));
+                    flex-shrink: 0;
+                }
+                .taj-section-header__title {
+                    font-family: var(--font-display);
+                    font-size: clamp(1.8rem, 3.8vw, 3.5rem);
+                    font-weight: 500;
+                    letter-spacing: 0.04em;
+                    color: var(--obsidian);
+                    text-transform: uppercase;
+                    line-height: 1.1;
+                    margin: 0;
+                }
+                .taj-section-header__right {
+                    font-family: var(--font-body);
+                    font-size: 0.88rem;
+                    font-weight: 300;
+                    line-height: 1.85;
+                    color: #6b6b75;
+                    padding-bottom: 0.5rem;
+                }
+
+                /*  Shimmer Gold  */
+                .shimmer-gold {
+                    background: linear-gradient(90deg, var(--gold-deep) 0%, var(--gold-warm) 25%, var(--gold-light) 50%, var(--gold-warm) 75%, var(--gold-deep) 100%);
+                    background-size: 300% auto;
+                    -webkit-background-clip: text;
+                    -webkit-text-fill-color: transparent;
+                    background-clip: text;
+                    animation: shimmer 5s linear infinite;
+                }
+
+                /*  Price Badge  */
+                .price-badge {
+                    display: inline-flex;
+                    align-items: center;
+                    padding: 0.45rem 1.1rem;
+                    background: rgba(10,10,15,0.9);
+                    color: var(--gold-light);
+                    font-family: var(--font-body);
+                    font-size: 0.72rem;
+                    font-weight: 600;
+                    letter-spacing: 0.1em;
+                    border: 1px solid rgba(200,151,30,0.5);
+                    backdrop-filter: blur(12px);
+                    box-shadow: 0 2px 16px rgba(0,0,0,0.3), inset 0 1px 0 rgba(200,151,30,0.2);
+                }
+
+                /*  Availability Badges  */
+                .avail-badge-available   { background: rgba(10,40,22,0.92); color: #7ecba0; border-color: rgba(40,140,80,0.4); }
+                .avail-badge-unavailable { background: rgba(40,10,10,0.92); color: #e8a0a0; border-color: rgba(140,40,40,0.4); }
+
+                /*  Reveal  */
+                .reveal { opacity: 0; transform: translateY(28px); filter: blur(5px); will-change: opacity, transform, filter; }
+                .reveal.in { opacity: 1; transform: none; filter: blur(0); transition: opacity 0.65s cubic-bezier(0.23,1,0.32,1), transform 0.65s cubic-bezier(0.23,1,0.32,1), filter 0.65s ease; }
+
+                /*  Keyframes  */
+                @keyframes fade-in-up { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: translateY(0); } }
+                @keyframes fade-in    { from { opacity: 0; } to { opacity: 1; } }
+                @keyframes slide-in-left   { from { opacity: 0; transform: translateX(-56px); } to { opacity: 1; transform: translateX(0); } }
+                @keyframes slide-in-right  { from { opacity: 0; transform: translateX(56px);  } to { opacity: 1; transform: translateX(0); } }
+                @keyframes zoom-gentle { 0% { transform: scale(1) translate(0,0); } 40% { transform: scale(1.07) translate(-1%,1%); } 100% { transform: scale(1.045) translate(1%,-1%); } }
+                @keyframes float-gentle { 0%,100% { transform: translateY(0px); } 50% { transform: translateY(-10px); } }
+                @keyframes bounce-gentle { 0%,100% { transform: translateY(0px) translateX(-50%); } 50% { transform: translateY(-7px) translateX(-50%); } }
+                @keyframes shimmer { 0% { background-position: -300% center; } 100% { background-position: 300% center; } }
+                @keyframes bounce-dot { 0%,80%,100% { transform: scale(0); } 40% { transform: scale(1.0); } }
+                @keyframes pulse-line { 0%,100% { opacity: 0.5; width: 36px; } 50% { opacity: 1; width: 68px; } }
+                @keyframes auto-scroll         { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+                @keyframes auto-scroll-reverse  { from { transform: translateX(-50%); } to { transform: translateX(0); } }
+                @keyframes auto-scroll-bobbing  { 0% { transform: translate(0,0); } 25% { transform: translate(-12.5%,3px); } 50% { transform: translate(-25%,0); } 75% { transform: translate(-37.5%,-3px); } 100% { transform: translate(-50%,0); } }
+                @keyframes auto-scroll-bobbing-reverse { 0% { transform: translate(-50%,0); } 25% { transform: translate(-37.5%,3px); } 50% { transform: translate(-25%,0); } 75% { transform: translate(-12.5%,-3px); } 100% { transform: translate(0,0); } }
+
+                .animate-fade-in-up    { animation: fade-in-up   0.95s cubic-bezier(0.23,1,0.32,1) forwards; opacity: 0; }
+                .animate-fade-in       { animation: fade-in       0.85s ease-out forwards; opacity: 0; }
+                .animate-slide-left    { animation: slide-in-left 0.95s cubic-bezier(0.23,1,0.32,1) forwards; opacity: 0; }
+                .animate-slide-right   { animation: slide-in-right 0.95s cubic-bezier(0.23,1,0.32,1) forwards; opacity: 0; }
+                .animate-zoom-gentle   { animation: zoom-gentle  32s ease-in-out infinite alternate; }
+                .animate-float-gentle  { animation: float-gentle 4.5s ease-in-out infinite; }
+                .animate-bounce-gentle { animation: bounce-gentle 2.8s ease-in-out infinite; position: absolute; left: 50%; }
+                .animate-bounce-dot > div { animation: bounce-dot 1.4s infinite ease-in-out both; }
+                .horizontal-scroll-container { -ms-overflow-style: none; scrollbar-width: none; }
+                .horizontal-scroll-container::-webkit-scrollbar { display: none; }
+
+                /*  Glassmorphism  */
+                .glass-panel {
+                    background: rgba(255,255,255,0.07);
+                    backdrop-filter: blur(20px) saturate(1.5);
+                    -webkit-backdrop-filter: blur(20px) saturate(1.5);
+                    border: 1px solid rgba(255,255,255,0.1);
+                }
+                .glass-panel-dark {
+                    background: rgba(10,10,15,0.78);
+                    backdrop-filter: blur(20px) saturate(1.5);
+                    -webkit-backdrop-filter: blur(20px) saturate(1.5);
+                    border: 1px solid rgba(200,151,30,0.2);
+                }
+
+                /*  Ornamental corner frames  */
+                .corner-frame { position: relative; }
+                .corner-frame::before, .corner-frame::after {
+                    content: '';
+                    position: absolute;
+                    width: 18px; height: 18px;
+                    border-color: rgba(200,151,30,0.55);
+                    border-style: solid;
+                    transition: all 0.42s ease;
+                    z-index: 2;
+                    pointer-events: none;
+                }
+                .corner-frame::before { top: 8px; left: 8px; border-width: 1px 0 0 1px; }
+                .corner-frame::after  { bottom: 8px; right: 8px; border-width: 0 1px 1px 0; }
+                .corner-frame:hover::before, .corner-frame:hover::after { width: 26px; height: 26px; border-color: var(--gold-warm); }
+
+                /*  Scroll indicator  */
+                .scroll-indicator {
+                    width: 1px; height: 60px;
+                    background: linear-gradient(180deg, transparent, var(--gold-warm), transparent);
+                    margin: 0 auto;
+                    animation: float-gentle 2.5s ease-in-out infinite;
+                }
             `}</style>
-            <ul className="absolute top-0 left-0 w-full h-full overflow-hidden z-0">
-                {bubbles}
+            <ul className="absolute top-0 left-0 w-full h-full overflow-hidden z-0 pointer-events-none">
+                {/* Fine grain texture overlay */}
+                <li className="absolute inset-0" style={{
+                    backgroundImage: 'repeating-linear-gradient(135deg, transparent, transparent 60px, rgba(200,151,30,0.018) 60px, rgba(200,151,30,0.018) 61px)',
+                    pointerEvents: 'none'
+                }}></li>
             </ul>
         </>
     );
 };
+
 
 /**
  * A helper function to ensure a URL is valid for an external link.
@@ -884,6 +1145,14 @@ export default function App() {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [isGeneralBookingOpen, setIsGeneralBookingOpen] = useState(false);
     const [showAmenities, setShowAmenities] = useState(false);
+    const [isNavScrolled, setIsNavScrolled] = useState(false);
+
+    // Scroll-aware navbar
+    React.useEffect(() => {
+        const onScroll = () => setIsNavScrolled(window.scrollY > 60);
+        window.addEventListener('scroll', onScroll, { passive: true });
+        return () => window.removeEventListener('scroll', onScroll);
+    }, []);
 
     const [bookingData, setBookingData] = useState({
         room_ids: [],
@@ -2102,18 +2371,32 @@ export default function App() {
                     </div>
                 )}
 
-                <header className={`fixed left-0 right-0 z-50 h-20 md:h-24 ${bannerMessage.text ? 'top-16' : 'top-0'} transition-all duration-300`}>
-                    {/* Blur Background */}
-                    <div className="absolute inset-0 bg-white/80 dark:bg-black/80 backdrop-blur-md border-b border-white/20 dark:border-white/10"></div>
+                <header className={`fixed left-0 right-0 z-50 ${bannerMessage.text ? 'top-16' : 'top-0'} transition-all duration-500`} style={{ height: '72px' }}>
+                    {/* Scroll-aware navbar background */}
+                    <div className="absolute inset-0" style={{
+                        background: isNavScrolled ? 'rgba(250,246,240,0.97)' : 'rgba(250,246,240,0.0)',
+                        backdropFilter: isNavScrolled ? 'blur(20px)' : 'none',
+                        borderBottom: isNavScrolled ? '1px solid rgba(201,168,76,0.2)' : '1px solid transparent',
+                        boxShadow: isNavScrolled ? '0 2px 24px rgba(10,10,15,0.08)' : 'none',
+                        transition: 'all 0.5s cubic-bezier(0.23,1,0.32,1)'
+                    }}></div>
 
                     <div className="container mx-auto px-4 sm:px-6 md:px-12 h-full flex items-center justify-between relative z-10">
                         {/* Logo */}
-                        <div className="flex items-center space-x-3 h-full">
-                            <div className="p-3 md:p-4 rounded-xl flex items-center justify-center shadow-lg border-2 bg-gradient-to-br from-gray-800 via-gray-900 to-black" style={{ borderColor: 'rgba(212, 175, 55, 0.3)' }}>
+                        <div className="flex items-center h-full">
+                            <div className="flex items-center justify-center" style={{
+                                padding: '0.4rem',
+                                borderRadius: '3px',
+                                background: isNavScrolled ? 'linear-gradient(135deg,#0e3d2a,#1b5e40)' : 'rgba(10,10,15,0.55)',
+                                border: '1px solid rgba(201,168,76,0.45)',
+                                backdropFilter: 'blur(8px)',
+                                transition: 'all 0.5s ease'
+                            }}>
                                 <img
                                     src={logoSrc}
                                     alt="Resort logo"
-                                    className="h-10 md:h-12 w-auto object-contain drop-shadow-md"
+                                    className="object-contain drop-shadow-md"
+                                    style={{ height: '40px', width: 'auto' }}
                                     loading="lazy"
                                     onError={() => {
                                         setLogoIndex((prev) => {
@@ -2126,114 +2409,47 @@ export default function App() {
                         </div>
 
                         {/* Desktop Navigation Menu */}
-                        <nav className="hidden lg:flex items-center space-x-1">
-                            <a
-                                href="#packages"
-                                onClick={(e) => {
-                                    e.preventDefault();
-                                    document.getElementById('packages')?.scrollIntoView({ behavior: 'smooth' });
-                                    setIsMobileMenuOpen(false);
-                                }}
-                                className="px-4 py-2 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:text-[#0f5132] dark:hover:text-amber-400 transition-colors duration-200 rounded-lg hover:bg-white/50 dark:hover:bg-white/10"
-                            >
-                                Exclusive Deals
-                            </a>
-                            <a
-                                href="#rooms-section"
-                                onClick={(e) => {
-                                    e.preventDefault();
-                                    document.getElementById('rooms-section')?.scrollIntoView({ behavior: 'smooth' });
-                                    setIsMobileMenuOpen(false);
-                                }}
-                                className="px-4 py-2 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:text-[#0f5132] dark:hover:text-amber-400 transition-colors duration-200 rounded-lg hover:bg-white/50 dark:hover:bg-white/10"
-                            >
-                                Rooms
-                            </a>
-                            <a
-                                href="#services"
-                                onClick={(e) => {
-                                    e.preventDefault();
-                                    const servicesSection = document.querySelector('[data-services-section]');
-                                    if (servicesSection) {
-                                        servicesSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                                    }
-                                    setIsMobileMenuOpen(false);
-                                }}
-                                className="px-4 py-2 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:text-[#0f5132] dark:hover:text-amber-400 transition-colors duration-200 rounded-lg hover:bg-white/50 dark:hover:bg-white/10"
-                            >
-                                Services
-                            </a>
-                            <a
-                                href="#food"
-                                onClick={(e) => {
-                                    e.preventDefault();
-                                    const foodSection = document.querySelector('[data-food-section]');
-                                    if (foodSection) {
-                                        foodSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                                    }
-                                    setIsMobileMenuOpen(false);
-                                }}
-                                className="px-4 py-2 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:text-[#0f5132] dark:hover:text-amber-400 transition-colors duration-200 rounded-lg hover:bg-white/50 dark:hover:bg-white/10"
-                            >
-                                Food
-                            </a>
-                            <a
-                                href="#gallery"
-                                onClick={(e) => {
-                                    e.preventDefault();
-                                    const gallerySection = document.querySelector('[data-gallery-section]');
-                                    if (gallerySection) {
-                                        gallerySection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                                    }
-                                    setIsMobileMenuOpen(false);
-                                }}
-                                className="px-4 py-2 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:text-[#0f5132] dark:hover:text-amber-400 transition-colors duration-200 rounded-lg hover:bg-white/50 dark:hover:bg-white/10"
-                            >
-                                Gallery
-                            </a>
-                            <a
-                                href="#reviews"
-                                onClick={(e) => {
-                                    e.preventDefault();
-                                    const reviewsSection = document.querySelector('[data-reviews-section]');
-                                    if (reviewsSection) {
-                                        reviewsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                                    }
-                                    setIsMobileMenuOpen(false);
-                                }}
-                                className="px-4 py-2 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:text-[#0f5132] dark:hover:text-amber-400 transition-colors duration-200 rounded-lg hover:bg-white/50 dark:hover:bg-white/10"
-                            >
-                                Reviews
-                            </a>
-                            <a
-                                href="#contact"
-                                onClick={(e) => {
-                                    e.preventDefault();
-                                    const contactSection = document.querySelector('[data-contact-section]');
-                                    if (contactSection) {
-                                        contactSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                                    }
-                                    setIsMobileMenuOpen(false);
-                                }}
-                                className="px-4 py-2 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:text-[#0f5132] dark:hover:text-amber-400 transition-colors duration-200 rounded-lg hover:bg-white/50 dark:hover:bg-white/10"
-                            >
-                                Contact
-                            </a>
+                        <nav className="hidden lg:flex items-center" style={{ gap: '0.25rem' }}>
+                            {[
+                                { label: 'Exclusive Deals', target: 'packages', type: 'id' },
+                                { label: 'Rooms', target: 'rooms-section', type: 'id' },
+                                { label: 'Services', target: '[data-services-section]', type: 'selector' },
+                                { label: 'Food', target: '[data-food-section]', type: 'selector' },
+                                { label: 'Gallery', target: '[data-gallery-section]', type: 'selector' },
+                                { label: 'Reviews', target: '[data-reviews-section]', type: 'selector' },
+                                { label: 'Contact', target: '[data-contact-section]', type: 'selector' },
+                            ].map(({ label, target, type }) => (
+                                <a
+                                    key={label}
+                                    href={`#${label.toLowerCase()}`}
+                                    className="nav-link"
+                                    style={{ color: isNavScrolled ? 'var(--obsidian)' : 'rgba(255,255,255,0.92)' }}
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        const el = type === 'id' ? document.getElementById(target) : document.querySelector(target);
+                                        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                        setIsMobileMenuOpen(false);
+                                    }}
+                                >
+                                    {label}
+                                </a>
+                            ))}
                         </nav>
 
                         {/* Book Now Button & Mobile Menu Toggle */}
-                        <div className="flex items-center space-x-3">
+                        <div className="flex items-center" style={{ gap: '0.75rem' }}>
                             <button
                                 onClick={() => { setShowAmenities(false); setIsGeneralBookingOpen(true); }}
-                                className="hidden sm:block px-6 md:px-8 py-2.5 md:py-3.5 text-xs md:text-sm font-bold text-[#1a472a] bg-gradient-to-r from-[#d4af37] via-[#f4d03f] to-[#d4af37] rounded-lg shadow-xl hover:shadow-2xl hover:from-[#f4d03f] hover:via-[#ffd700] hover:to-[#f4d03f] transition-all duration-300 transform hover:scale-105 border-2 border-[#b8941f] uppercase tracking-wider focus:outline-none focus:ring-4 focus:ring-[#d4af37]/50"
+                                className="btn-gold hidden sm:inline-flex"
                             >
-                                Book Now
+                                Reserve Now
                             </button>
 
                             {/* Mobile Menu Toggle */}
                             <button
                                 onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                                className="lg:hidden p-2 text-gray-700 dark:text-gray-300 hover:text-[#0f5132] dark:hover:text-amber-400 transition-colors rounded-lg hover:bg-white/50 dark:hover:bg-white/10"
+                                className="lg:hidden p-2 transition-colors rounded"
+                                style={{ color: isNavScrolled ? 'var(--obsidian)' : 'rgba(255,255,255,0.9)' }}
                                 aria-label="Toggle menu"
                             >
                                 {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
@@ -2243,110 +2459,44 @@ export default function App() {
 
                     {/* Mobile Navigation Menu */}
                     {isMobileMenuOpen && (
-                        <div className="lg:hidden absolute top-full left-0 right-0 bg-white/95 dark:bg-black/95 backdrop-blur-md border-b border-white/20 dark:border-white/10 shadow-xl">
-                            <nav className="container mx-auto px-4 py-4 space-y-2">
-                                <a
-                                    href="#packages"
-                                    onClick={(e) => {
-                                        e.preventDefault();
-                                        document.getElementById('packages')?.scrollIntoView({ behavior: 'smooth' });
-                                        setIsMobileMenuOpen(false);
-                                    }}
-                                    className="block px-4 py-3 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:text-[#0f5132] dark:hover:text-amber-400 hover:bg-white/50 dark:hover:bg-white/10 rounded-lg transition-colors"
-                                >
-                                    Exclusive Deals
-                                </a>
-                                <a
-                                    href="#rooms-section"
-                                    onClick={(e) => {
-                                        e.preventDefault();
-                                        document.getElementById('rooms-section')?.scrollIntoView({ behavior: 'smooth' });
-                                        setIsMobileMenuOpen(false);
-                                    }}
-                                    className="block px-4 py-3 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:text-[#0f5132] dark:hover:text-amber-400 hover:bg-white/50 dark:hover:bg-white/10 rounded-lg transition-colors"
-                                >
-                                    Rooms
-                                </a>
-                                <a
-                                    href="#services"
-                                    onClick={(e) => {
-                                        e.preventDefault();
-                                        const servicesSection = document.querySelector('[data-services-section]');
-                                        if (servicesSection) {
-                                            servicesSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                                        }
-                                        setIsMobileMenuOpen(false);
-                                    }}
-                                    className="block px-4 py-3 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:text-[#0f5132] dark:hover:text-amber-400 hover:bg-white/50 dark:hover:bg-white/10 rounded-lg transition-colors"
-                                >
-                                    Services
-                                </a>
-                                <a
-                                    href="#food"
-                                    onClick={(e) => {
-                                        e.preventDefault();
-                                        const foodSection = document.querySelector('[data-food-section]');
-                                        if (foodSection) {
-                                            foodSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                                        }
-                                        setIsMobileMenuOpen(false);
-                                    }}
-                                    className="block px-4 py-3 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:text-[#0f5132] dark:hover:text-amber-400 hover:bg-white/50 dark:hover:bg-white/10 rounded-lg transition-colors"
-                                >
-                                    Food
-                                </a>
-                                <a
-                                    href="#gallery"
-                                    onClick={(e) => {
-                                        e.preventDefault();
-                                        const gallerySection = document.querySelector('[data-gallery-section]');
-                                        if (gallerySection) {
-                                            gallerySection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                                        }
-                                        setIsMobileMenuOpen(false);
-                                    }}
-                                    className="block px-4 py-3 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:text-[#0f5132] dark:hover:text-amber-400 hover:bg-white/50 dark:hover:bg-white/10 rounded-lg transition-colors"
-                                >
-                                    Gallery
-                                </a>
-                                <a
-                                    href="#reviews"
-                                    onClick={(e) => {
-                                        e.preventDefault();
-                                        const reviewsSection = document.querySelector('[data-reviews-section]');
-                                        if (reviewsSection) {
-                                            reviewsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                                        }
-                                        setIsMobileMenuOpen(false);
-                                    }}
-                                    className="block px-4 py-3 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:text-[#0f5132] dark:hover:text-amber-400 hover:bg-white/50 dark:hover:bg-white/10 rounded-lg transition-colors"
-                                >
-                                    Reviews
-                                </a>
-                                <a
-                                    href="#contact"
-                                    onClick={(e) => {
-                                        e.preventDefault();
-                                        const contactSection = document.querySelector('[data-contact-section]');
-                                        if (contactSection) {
-                                            contactSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                                        }
-                                        setIsMobileMenuOpen(false);
-                                    }}
-                                    className="block px-4 py-3 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:text-[#0f5132] dark:hover:text-amber-400 hover:bg-white/50 dark:hover:bg-white/10 rounded-lg transition-colors"
-                                >
-                                    Contact
-                                </a>
-                                <button
-                                    onClick={() => {
-                                        setShowAmenities(false);
-                                        setIsGeneralBookingOpen(true);
-                                        setIsMobileMenuOpen(false);
-                                    }}
-                                    className="w-full mt-4 px-6 py-3 text-sm font-bold text-[#1a472a] bg-gradient-to-r from-[#d4af37] via-[#f4d03f] to-[#d4af37] rounded-lg shadow-xl hover:shadow-2xl hover:from-[#f4d03f] hover:via-[#ffd700] hover:to-[#f4d03f] transition-all duration-300 transform hover:scale-105 border-2 border-[#b8941f] uppercase tracking-wider"
-                                >
-                                    Book Now
-                                </button>
+                        <div className="lg:hidden absolute top-full left-0 right-0 shadow-xl" style={{ background: 'rgba(250,246,240,0.97)', backdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(201,168,76,0.25)' }}>
+                            <nav className="container mx-auto px-4 py-6" style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                {[
+                                    { label: 'Exclusive Deals', target: 'packages', type: 'id' },
+                                    { label: 'Rooms', target: 'rooms-section', type: 'id' },
+                                    { label: 'Services', target: '[data-services-section]', type: 'selector' },
+                                    { label: 'Food', target: '[data-food-section]', type: 'selector' },
+                                    { label: 'Gallery', target: '[data-gallery-section]', type: 'selector' },
+                                    { label: 'Reviews', target: '[data-reviews-section]', type: 'selector' },
+                                    { label: 'Contact', target: '[data-contact-section]', type: 'selector' },
+                                ].map(({ label, target, type }) => (
+                                    <a
+                                        key={label}
+                                        href={`#${label.toLowerCase()}`}
+                                        className="nav-link block"
+                                        style={{ textAlign: 'left' }}
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            const el = type === 'id' ? document.getElementById(target) : document.querySelector(target);
+                                            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                            setIsMobileMenuOpen(false);
+                                        }}
+                                    >
+                                        {label}
+                                    </a>
+                                ))}
+                                <div style={{ marginTop: '1rem' }}>
+                                    <button
+                                        onClick={() => {
+                                            setShowAmenities(false);
+                                            setIsGeneralBookingOpen(true);
+                                            setIsMobileMenuOpen(false);
+                                        }}
+                                        className="btn-gold w-full justify-center"
+                                    >
+                                        Reserve Now
+                                    </button>
+                                </div>
                             </nav>
                         </div>
                     )}
@@ -2356,7 +2506,8 @@ export default function App() {
                     {/* Hero Banner Section - Image Only */}
                     <div
                         ref={bannerRef}
-                        className="relative w-full h-screen overflow-hidden bg-white"
+                        className="relative w-full h-screen overflow-hidden"
+                        style={{ background: 'linear-gradient(160deg, #0a0a0f 0%, #12121a 45%, #1c1c28 70%, #0a0a0f 100%)' }}
                     >
                         {bannerData.length > 0 ? (
                             <>
@@ -2372,25 +2523,38 @@ export default function App() {
                                 ))}
                             </>
                         ) : (
-                            <div className="absolute inset-0 bg-gray-100"></div>
+                            /* Cinematic dark fallback — matches our obsidian overlay */
+                            <div className="absolute inset-0" style={{
+                                background: 'radial-gradient(ellipse at 60% 50%, rgba(28,28,40,1) 0%, rgba(10,10,15,1) 100%)'
+                            }}>
+                                {/* Fine diagonal texture */}
+                                <div style={{ position: 'absolute', inset: 0, backgroundImage: 'repeating-linear-gradient(135deg, transparent, transparent 80px, rgba(200,151,30,0.025) 80px, rgba(200,151,30,0.025) 81px)', pointerEvents: 'none' }} />
+                            </div>
                         )}
+
+                        {/* Luxury hero overlay */}
+                        <div className="absolute inset-0 hero-overlay z-[1]"></div>
 
                         {/* Hero Content */}
                         <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-6 z-10">
                             <div className="max-w-5xl mx-auto">
+                                {/* Eyebrow badge */}
+                                <div className="animate-fade-in-up" style={{ animationDelay: '0.1s', marginBottom: '1.5rem' }}>
+                                    <span className="section-badge" style={{ color: 'rgba(232,213,163,0.9)', borderColor: 'rgba(201,168,76,0.6)', letterSpacing: '0.3em' }}>A Sanctuary of Serenity</span>
+                                </div>
+
                                 {/* Contact Info */}
                                 {resortInfo && (
-                                    <div className="flex flex-wrap items-center justify-center gap-6 md:gap-8 mb-10 text-white text-sm md:text-base drop-shadow-lg animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
+                                    <div className="flex flex-wrap items-center justify-center gap-4 md:gap-6 mb-8 text-white/80 text-xs drop-shadow-lg animate-fade-in-up" style={{ animationDelay: '0.2s', fontFamily: 'var(--font-display)', letterSpacing: '0.12em' }}>
                                         {resortInfo.email && (
-                                            <span className="flex items-center gap-2 px-4 py-2 bg-black/50 backdrop-blur-sm rounded-lg border border-white/20 shadow-md animate-float-gentle" style={{ animationDelay: '0.3s' }}>
-                                                <span className="text-white">✉</span>
-                                                {resortInfo.email}
+                                            <span className="flex items-center gap-2">
+                                                <span>✉</span>{resortInfo.email}
                                             </span>
                                         )}
+                                        {resortInfo.email && resortInfo.phone && <span style={{ color: 'rgba(201,168,76,0.6)' }}>·</span>}
                                         {resortInfo.phone && (
-                                            <span className="flex items-center gap-2 px-4 py-2 bg-black/50 backdrop-blur-sm rounded-lg border border-white/20 shadow-md animate-float-gentle" style={{ animationDelay: '0.4s' }}>
-                                                <span className="text-white">📞</span>
-                                                {resortInfo.phone}
+                                            <span className="flex items-center gap-2">
+                                                <span>☎</span>{resortInfo.phone}
                                             </span>
                                         )}
                                     </div>
@@ -2398,37 +2562,43 @@ export default function App() {
 
                                 {/* Main Heading - Banner Title and Description */}
                                 {bannerData.length > 0 && bannerData[currentBannerIndex] && (
-                                    <div className="mb-10 animate-fade-in-up" style={{ animationDelay: '0.5s' }}>
+                                    <div style={{ marginBottom: '2.5rem' }}>
                                         {bannerData[currentBannerIndex].title && (
-                                            <h1 className="text-2xl md:text-3xl lg:text-4xl font-extrabold mb-4 leading-tight text-white drop-shadow-2xl animate-slide-in-left">
+                                            <h1 className="animate-slide-left" style={{ fontSize: 'clamp(2rem,6vw,4.5rem)', fontFamily: 'var(--font-display)', fontWeight: '600', letterSpacing: '0.06em', color: '#ffffff', textShadow: '0 2px 20px rgba(0,0,0,0.5)', lineHeight: '1.15', marginBottom: '0.75rem', animationDelay: '0.4s' }}>
                                                 {bannerData[currentBannerIndex].title}
                                             </h1>
                                         )}
                                         {bannerData[currentBannerIndex].subtitle && (
-                                            <p className="text-3xl md:text-4xl lg:text-5xl font-medium leading-relaxed text-white/90 drop-shadow-lg animate-slide-in-right">
+                                            <p className="animate-slide-right" style={{ fontFamily: 'var(--font-serif)', fontSize: 'clamp(1.1rem,3vw,1.8rem)', fontStyle: 'italic', fontWeight: '300', color: 'rgba(232,213,163,0.95)', textShadow: '0 1px 12px rgba(0,0,0,0.4)', animationDelay: '0.55s' }}>
                                                 {bannerData[currentBannerIndex].subtitle}
                                             </p>
                                         )}
                                     </div>
                                 )}
                                 {(!bannerData.length || !bannerData[currentBannerIndex]) && (
-                                    <h1 className="text-4xl md:text-6xl lg:text-8xl font-extrabold mb-10 leading-tight text-white drop-shadow-2xl animate-fade-in-up">
-                                        Stay enjoying the cozy indoors
+                                    <h1 className="animate-fade-in-up" style={{ fontSize: 'clamp(2rem,6vw,4.5rem)', fontFamily: 'var(--font-display)', fontWeight: '600', letterSpacing: '0.06em', color: '#ffffff', textShadow: '0 2px 20px rgba(0,0,0,0.5)', lineHeight: '1.2', marginBottom: '2rem', animationDelay: '0.4s' }}>
+                                        Where Nature Meets
                                         <br />
-                                        and tranquil outdoors.
+                                        <span style={{ fontFamily: 'var(--font-serif)', fontStyle: 'italic', fontWeight: '300', color: 'rgba(232,213,163,0.95)' }}>Luxury &amp; Serenity</span>
                                     </h1>
                                 )}
-                            </div>
 
-                            {/* Book Now Button at Bottom */}
-                            <div className="absolute bottom-20 left-1/2 -translate-x-1/2 animate-bounce-gentle">
-                                <button
-                                    type="button"
-                                    onClick={() => { setShowAmenities(false); setIsGeneralBookingOpen(true); }}
-                                    className="px-12 py-5 bg-black/80 text-white font-bold text-lg md:text-xl rounded-xl shadow-2xl hover:bg-black/90 transition-all duration-300 transform hover:scale-105 border-2 border-white/30 uppercase tracking-wider backdrop-blur-sm animate-pulse-gentle"
-                                >
-                                    Book Now
-                                </button>
+                                {/* Gold divider */}
+                                <div className="animate-fade-in-up" style={{ animationDelay: '0.6s', marginBottom: '2.5rem' }}>
+                                    <span className="gold-rule" style={{ display: 'inline-block' }}></span>
+                                </div>
+
+                                {/* CTA Button */}
+                                <div className="animate-fade-in-up" style={{ animationDelay: '0.75s' }}>
+                                    <button
+                                        type="button"
+                                        onClick={() => { setShowAmenities(false); setIsGeneralBookingOpen(true); }}
+                                        className="btn-gold"
+                                    >
+                                        Reserve Your Escape
+                                        <ChevronRight style={{ width: '1rem', height: '1rem' }} />
+                                    </button>
+                                </div>
                             </div>
                         </div>
 
@@ -2449,23 +2619,29 @@ export default function App() {
                         )}
                     </div>
 
-                    {/* Exclusive Deals Section - Resort Style */}
-                    <section id="packages" className="bg-gradient-to-b from-[#f4ede1] via-[#f9f4ea] to-white py-20 transition-colors duration-500">
-                        <div className="w-full mx-auto px-2 sm:px-4 md:px-6">
-                            {/* Section Header */}
+                    {/* ── Signature Experiences ─────────────────────────── */}
+                    <section id="packages" style={{ backgroundColor: '#ffffff', paddingTop: '6rem', paddingBottom: '6rem' }}>
+                        <div className="w-full mx-auto px-4 sm:px-8 md:px-16">
+                            {/* Section Header — Taj Style */}
                             <div className="text-center mb-16">
-                                <span className="inline-block px-6 py-2 bg-[#0f5132]/10 text-[#0f5132] text-sm font-semibold tracking-[0.35em] uppercase rounded-full border border-[#d8c9ac] mb-4">
-                                    ✦ Exclusive Deals ✦
+                                <span className="section-badge" style={{ marginBottom: '1.25rem', display: 'inline-flex' }}>
+                                    Signature Experiences
                                 </span>
-                                <h2 className="text-4xl md:text-5xl font-extrabold text-[#153a2c] mb-4">
-                                    EXCLUSIVE DEALS FOR MEMORABLE EXPERIENCES
-                                </h2>
+                                <div style={{ marginTop: '1.25rem', marginBottom: '0.75rem' }}>
+                                    <h2 className="section-title" style={{ fontStyle: 'normal', letterSpacing: '0.12em' }}>
+                                        Curated for the Discerning
+                                    </h2>
+                                </div>
+                                <p className="section-subtitle" style={{ marginTop: '0.75rem' }}>
+                                    Every package crafted as a personal story of discovery
+                                </p>
+                                <div style={{ marginTop: '1.5rem' }}><span className="gold-rule"></span></div>
                             </div>
 
-                            {/* Packages - Mountain Shadows Style */}
+                            {/* Packages — Editorial Grid */}
                             {packages.length > 0 ? (
-                                <div className="space-y-12">
-                                    {/* Featured Large Package */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4rem' }}>
+                                    {/* Featured: Full-width editorial split */}
                                     {packages[0] && (() => {
                                         const featuredPkg = packages[0];
                                         const imgIndex = packageImageIndex[featuredPkg.id] || 0;
@@ -2473,21 +2649,21 @@ export default function App() {
                                         return (
                                             <div
                                                 key={featuredPkg.id}
-                                                className={`${theme.bgCard} rounded-3xl overflow-hidden shadow-2xl border ${theme.border} transition-all duration-500 hover:shadow-3xl reveal`}
+                                                className="luxury-card corner-frame reveal"
                                                 style={{ transitionDelay: '80ms' }}
                                             >
                                                 <div className="flex flex-col md:flex-row items-stretch">
-                                                    {/* Large Image Section - Left */}
-                                                    <div className="w-full md:w-1/2 h-80 md:h-[500px] overflow-hidden relative">
+                                                    {/* Image — Left half, full-bleed */}
+                                                    <div className="w-full md:w-1/2" style={{ height: '520px', overflow: 'hidden', position: 'relative' }}>
                                                         <img
                                                             src={currentImage ? getImageUrl(currentImage.image_url) : ITEM_PLACEHOLDER}
                                                             alt={featuredPkg.title}
-                                                            className="w-full h-full object-cover transition-transform duration-700 hover:scale-110 reveal"
+                                                            className="card-image"
                                                             loading="lazy"
                                                             onError={(e) => { e.target.src = ITEM_PLACEHOLDER; }}
                                                         />
-                                                        {/* Price badge - large card */}
-                                                        <div className="absolute bottom-4 left-4 bg-[#0f5132]/90 text-white font-extrabold text-2xl md:text-3xl px-4 py-2 rounded-xl shadow-lg border border-white/20 backdrop-blur-sm">
+                                                        {/* Taj-style price badge — bottom-left */}
+                                                        <div className="price-badge" style={{ position: 'absolute', bottom: '1.5rem', left: '1.5rem' }}>
                                                             {formatCurrency(featuredPkg.price || 0)}
                                                         </div>
                                                         {/* Image Slider Dots */}
@@ -2507,26 +2683,26 @@ export default function App() {
                                                         )}
                                                     </div>
 
-                                                    {/* Content Section - Right */}
-                                                    <div className={`w-full md:w-1/2 p-8 md:p-12 flex flex-col justify-center ${theme.bgCard}`}>
-                                                        <h3 className={`text-4xl md:text-5xl font-extrabold ${theme.textPrimary} mb-2 leading-tight`}>
+                                                    {/* Content — Right half, editorial */}
+                                                    <div className="w-full md:w-1/2" style={{ padding: '3.5rem', display: 'flex', flexDirection: 'column', justifyContent: 'center', backgroundColor: '#ffffff' }}>
+                                                        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(1.6rem,3vw,2.5rem)', fontWeight: '400', color: 'var(--obsidian)', marginBottom: '0.5rem', letterSpacing: '0.02em' }}>
                                                             {featuredPkg.title}
                                                         </h3>
                                                         {featuredPkg.duration && (
-                                                            <p className={`text-xl md:text-2xl ${theme.textSecondary} mb-6 font-medium`}>
+                                                            <p style={{ fontFamily: 'var(--font-serif)', fontSize: '1.05rem', fontStyle: 'italic', color: 'var(--silver)', marginBottom: '1.5rem', letterSpacing: '0.04em' }}>
                                                                 {featuredPkg.duration}
                                                             </p>
                                                         )}
-                                                        <div className="w-20 h-1 bg-gradient-to-r from-[#0f5132] via-[#1a7042] to-[#c99c4e] mb-6"></div>
-                                                        <p className={`text-base md:text-lg ${theme.textSecondary} leading-relaxed mb-6`}>
+                                                        <div style={{ width: '48px', height: '1px', background: 'linear-gradient(90deg, var(--gold-warm), var(--gold-light))', marginBottom: '1.5rem' }}></div>
+                                                        <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.9rem', fontWeight: '300', lineHeight: '1.8', color: '#555', marginBottom: '2rem' }}>
                                                             {featuredPkg.description}
                                                         </p>
-                                                        {/* Price Section */}
-                                                        <div className="mb-6 pt-4 border-t border-gray-200">
-                                                            <p className={`text-sm ${theme.textSecondary} mb-2`}>Starting from</p>
-                                                            <p className={`text-3xl md:text-4xl font-extrabold ${theme.textAccent} mb-6`}>
+                                                        {/* Price */}
+                                                        <div style={{ paddingTop: '1.5rem', borderTop: '1px solid rgba(200,151,30,0.2)', marginBottom: '2rem' }}>
+                                                            <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.62rem', fontWeight: '600', letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--silver)', marginBottom: '0.4rem' }}>Starting from</p>
+                                                            <p style={{ fontFamily: 'var(--font-display)', fontSize: '2rem', fontWeight: '500', color: 'var(--obsidian)' }}>
                                                                 {formatCurrency(featuredPkg.price || 0)}
-                                                                <span className={`text-lg ${theme.textSecondary} font-normal ml-2`}>/package</span>
+                                                                <span style={{ fontFamily: 'var(--font-body)', fontSize: '0.8rem', fontWeight: '300', color: 'var(--silver)', marginLeft: '0.5rem' }}>/package</span>
                                                             </p>
                                                         </div>
 
@@ -2641,223 +2817,138 @@ export default function App() {
                     </section>
 
                     {/* Luxury Villa Showcase Section */}
-                    <section id="rooms-section" className="bg-gradient-to-b from-white via-[#f4ede1] to-[#efe1ce] py-20 transition-colors duration-500">
-                        <div className="w-full mx-auto px-2 sm:px-4 md:px-6">
-                            {/* Section Header */}
-                            <div className="text-center mb-16">
-                                <span className="inline-block px-6 py-2 bg-[#0f5132]/10 text-[#0f5132] text-sm font-semibold tracking-[0.35em] uppercase rounded-full border border-[#d8c9ac] mb-4">
-                                    ✦ LUXURY ACCOMMODATION ✦
-                                </span>
-                                <h2 className={`text-4xl md:text-5xl font-extrabold ${theme.textPrimary} mb-4`}>
-                                    Sustainable Luxury Cottages with Unforgettable Views
-                                </h2>
-                                <p className={`text-lg ${theme.textSecondary} max-w-3xl mx-auto leading-relaxed`}>
-                                    Experience the perfect blend of luxury and sustainability in our eco-friendly cottages with panoramic lake and forest views
-                                </p>
+                    <section id="rooms-section" style={{ backgroundColor: '#faf7f0', paddingTop: '5.5rem', paddingBottom: '5.5rem' }}>
+                        <div className="w-full mx-auto px-4 sm:px-8 md:px-16">
+                            {/* Taj 2-column section header */}
+                            <div className="taj-section-header">
+                                <div className="taj-section-header__left">
+                                    <span className="taj-section-header__eyebrow">Luxury Accommodation</span>
+                                    <h2 className="taj-section-header__title">Our Rooms &amp;<br />Cottages</h2>
+                                </div>
+                                <div className="taj-section-header__right">
+                                    Experience the perfect union of luxury and nature in our eco-conscious cottages. Panoramic lake and forest views frame every morning, while curated amenities ensure uncompromising comfort.
+                                </div>
                             </div>
 
-                            {/* Info Banner - Show when dates not selected */}
+                            {/* Info Banner - no dates selected */}
                             {(!bookingData.check_in || !bookingData.check_out) && (
-                                <div className="mb-8">
-                                    <div className={`inline-block w-full p-4 ${theme.bgSecondary} rounded-xl border ${theme.border} shadow-sm`}>
-                                        <div className="flex items-center gap-3 justify-center flex-wrap">
-                                            <BedDouble className={`w-5 h-5 ${theme.textAccent}`} />
-                                            <p className={`text-sm ${theme.textSecondary}`}>
-                                                Select check-in and check-out dates above to check room availability for your stay
-                                            </p>
-                                            <button
-                                                onClick={() => { setShowAmenities(false); setIsGeneralBookingOpen(true); }}
-                                                className={`px-4 py-2 text-xs font-semibold ${theme.buttonBg} ${theme.buttonText} rounded-full shadow hover:shadow-md transition-all duration-300 transform hover:scale-105`}
-                                            >
-                                                Select Dates
-                                            </button>
-                                        </div>
-                                    </div>
+                                <div style={{ marginBottom: '2.5rem', padding: '1rem 1.5rem', border: '1px solid rgba(200,151,30,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
+                                    <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.78rem', color: '#6b6b75', letterSpacing: '0.03em' }}>
+                                        Select check-in and check-out dates above to check room availability for your stay
+                                    </p>
+                                    <button
+                                        onClick={() => { setShowAmenities(false); setIsGeneralBookingOpen(true); }}
+                                        style={{ fontFamily: 'var(--font-body)', fontSize: '0.58rem', fontWeight: '600', letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--gold)', background: 'none', border: '1px solid rgba(200,151,30,0.4)', padding: '0.45rem 1.1rem', cursor: 'pointer' }}
+                                    >
+                                        Select Dates
+                                    </button>
                                 </div>
                             )}
 
-                            {/* Availability Info - Show when dates are selected */}
+                            {/* Availability dates banner */}
                             {bookingData.check_in && bookingData.check_out && Object.keys(roomAvailability).length > 0 && (
-                                <div className="mb-6">
-                                    <div className={`inline-block w-full p-3 ${theme.bgCard} rounded-lg border ${theme.border} shadow-sm`}>
-                                        <p className={`text-sm ${theme.textPrimary} text-center`}>
-                                            Showing availability for <span className="font-semibold">{bookingData.check_in}</span> to <span className="font-semibold">{bookingData.check_out}</span>
-                                        </p>
-                                    </div>
+                                <div style={{ marginBottom: '2rem', padding: '0.7rem 1.5rem', borderLeft: '2px solid var(--gold)', background: 'rgba(200,151,30,0.06)' }}>
+                                    <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.76rem', color: 'var(--obsidian)', letterSpacing: '0.03em' }}>
+                                        Showing availability for <strong>{bookingData.check_in}</strong> → <strong>{bookingData.check_out}</strong>
+                                    </p>
                                 </div>
                             )}
 
-                            {/* Villa Grid - Always show ALL rooms */}
+                            {/* Room Cards Grid */}
                             {rooms.length > 0 ? (
                                 <>
-                                    <div className="mb-4 text-center">
-                                        <p className={`text-sm ${theme.textSecondary}`}>
-                                            Showing all <span className="font-semibold ${theme.textPrimary}">{rooms.length}</span> rooms
-                                        </p>
-                                    </div>
-                                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                                        {rooms.map((room, index) => (
-                                            <div
-                                                key={room.id}
-                                                className={`group relative ${theme.bgCard} rounded-2xl overflow-hidden luxury-shadow transition-all duration-300 transition-all duration-500 transform hover:-translate-y-2 border ${theme.cardBorder || theme.border}`}
-                                            >
-                                                {/* Image Container with Overlay */}
-                                                <div className="relative h-48 overflow-hidden">
-                                                    <img
-                                                        src={getImageUrl(room.image_url)}
-                                                        alt={room.type}
-                                                        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
-                                                        onError={(e) => { e.target.src = ITEM_PLACEHOLDER; }}
-                                                    />
-                                                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
+                                    <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.68rem', letterSpacing: '0.18em', color: '#9a9a9a', textTransform: 'uppercase', marginBottom: '1.75rem' }}>
+                                        Showing all {rooms.length} rooms
+                                    </p>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '1.5rem', alignItems: 'start' }}>
+                                        {rooms.map((room, idx) => {
+                                            const isBooked = bookingData.check_in && bookingData.check_out && !roomAvailability[room.id];
+                                            const hasDateFilter = !!(bookingData.check_in && bookingData.check_out);
+                                            return (
+                                                <div
+                                                    key={room.id}
+                                                    className="group"
+                                                    style={{ position: 'relative', cursor: isBooked ? 'not-allowed' : 'pointer', opacity: isBooked ? 0.7 : 1 }}
+                                                >
+                                                    {/* Tall full-bleed image — sharp corners */}
+                                                    <div style={{ position: 'relative', height: idx % 3 === 1 ? '420px' : '370px', overflow: 'hidden', background: 'var(--obsidian)' }}>
+                                                        <img
+                                                            src={getImageUrl(room.image_url)}
+                                                            alt={room.type}
+                                                            style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'transform 0.9s cubic-bezier(0.23,1,0.32,1)', filter: isBooked ? 'grayscale(40%)' : 'none' }}
+                                                            className={isBooked ? '' : 'group-hover:scale-[1.05]'}
+                                                            onError={(e) => { e.target.src = ITEM_PLACEHOLDER; }}
+                                                        />
+                                                        {/* Subtle bottom vignette */}
+                                                        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(10,10,15,0.32) 0%, transparent 50%)', pointerEvents: 'none' }} />
 
-                                                    {/* Luxury Badge */}
-                                                    <div className="absolute top-4 left-4">
-                                                        <span className="px-4 py-2 bg-gradient-to-r from-[#0f5132] to-[#1a7042] text-white text-xs font-semibold uppercase tracking-[0.3em] rounded-full shadow-lg">
-                                                            Premium Villa
-                                                        </span>
+                                                        {/* Availability dot — top-right, only when dates selected */}
+                                                        {hasDateFilter && (
+                                                            <div style={{ position: 'absolute', top: '1rem', right: '1rem', padding: '0.3rem 0.8rem', background: isBooked ? 'rgba(180,30,30,0.88)' : 'rgba(20,130,60,0.85)', backdropFilter: 'blur(6px)', fontFamily: 'var(--font-body)', fontSize: '0.55rem', fontWeight: '600', letterSpacing: '0.2em', textTransform: 'uppercase', color: '#ffffff' }}>
+                                                                {isBooked ? 'Booked' : 'Available'}
+                                                            </div>
+                                                        )}
                                                     </div>
 
-                                                    {/* Availability Badge - Only show when dates are selected */}
-                                                    {bookingData.check_in && bookingData.check_out && (
-                                                        <div className="absolute top-4 right-4">
-                                                            {roomAvailability[room.id] ? (
-                                                                <span className="px-4 py-2 rounded-full text-xs font-bold shadow-lg bg-green-500 text-white">
-                                                                    Available
-                                                                </span>
-                                                            ) : (
-                                                                <span className="px-4 py-2 rounded-full text-xs font-bold shadow-lg bg-red-500 text-white">
-                                                                    Booked
-                                                                </span>
-                                                            )}
-                                                        </div>
-                                                    )}
-
-                                                    {/* Hover Effect Overlay */}
-                                                    <div className="absolute inset-0 bg-transparent group-hover:bg-[#0f5132]/10 transition-all duration-500" />
+                                                    {/* White caption plate */}
+                                                    <div style={{
+                                                        position: 'relative',
+                                                        marginTop: '-2.75rem',
+                                                        marginLeft: '1rem',
+                                                        marginRight: '1rem',
+                                                        background: '#ffffff',
+                                                        padding: '1.4rem 1.6rem 1.6rem',
+                                                        boxShadow: '0 8px 32px rgba(10,10,15,0.1)',
+                                                        zIndex: 2,
+                                                        transition: 'box-shadow 0.4s ease'
+                                                    }}>
+                                                        {/* Room type */}
+                                                        <h3 style={{ fontFamily: 'var(--font-body)', fontSize: '0.65rem', fontWeight: '600', letterSpacing: '0.24em', textTransform: 'uppercase', color: 'var(--obsidian)', marginBottom: '0.5rem', lineHeight: '1.5' }}>
+                                                            {room.type}
+                                                        </h3>
+                                                        {/* Room number */}
+                                                        <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.6rem', letterSpacing: '0.1em', color: '#9a9a9a', marginBottom: '0.75rem' }}>
+                                                            Room #{room.number}
+                                                        </p>
+                                                        {/* Gold hairline */}
+                                                        <div style={{ height: '1px', width: '1.75rem', background: 'linear-gradient(90deg,var(--gold-warm),var(--gold-light))', marginBottom: '0.85rem' }} />
+                                                        {/* Price */}
+                                                        <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.6rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#9a9a9a', marginBottom: '0.2rem' }}>Starting from</p>
+                                                        <p style={{ fontFamily: 'var(--font-display)', fontSize: '1.3rem', fontWeight: '500', color: 'var(--obsidian)', letterSpacing: '0.02em', marginBottom: '1rem' }}>
+                                                            {formatCurrency(room.price)}<span style={{ fontSize: '0.65rem', fontFamily: 'var(--font-body)', color: '#9a9a9a', fontWeight: '400', marginLeft: '0.3rem' }}>/night</span>
+                                                        </p>
+                                                        {/* CTA */}
+                                                        <button
+                                                            onClick={() => !isBooked && handleOpenRoomBookingForm(room.id)}
+                                                            disabled={isBooked}
+                                                            style={{
+                                                                fontFamily: 'var(--font-body)',
+                                                                fontSize: '0.58rem',
+                                                                fontWeight: '600',
+                                                                letterSpacing: '0.2em',
+                                                                textTransform: 'uppercase',
+                                                                color: isBooked ? '#aaa' : 'var(--gold)',
+                                                                background: 'none',
+                                                                border: 'none',
+                                                                cursor: isBooked ? 'not-allowed' : 'pointer',
+                                                                padding: 0,
+                                                                display: 'inline-flex',
+                                                                alignItems: 'center',
+                                                                gap: '0.3rem',
+                                                                transition: 'color 0.25s ease'
+                                                            }}
+                                                        >
+                                                            {isBooked ? 'Not Available' : 'Book Now'} &rsaquo;
+                                                        </button>
+                                                    </div>
                                                 </div>
-
-                                                {/* Content */}
-                                                <div className="p-4 space-y-4">
-                                                    <h3 className={`text-2xl font-bold ${theme.textCardPrimary || theme.textPrimary} group-hover:${theme.textCardAccent || theme.textAccent} transition-colors`}>
-                                                        {room.type}
-                                                    </h3>
-                                                    <div className={`flex items-center gap-2 text-sm ${theme.textCardSecondary || theme.textSecondary}`}>
-                                                        <BedDouble className={`w-5 h-5 ${theme.textCardAccent || theme.textAccent}`} />
-                                                        <span>Room #{room.number}</span>
-                                                    </div>
-
-                                                    {/* Features */}
-                                                    {(room.air_conditioning || room.wifi || room.bathroom || room.living_area || room.terrace || room.parking || room.kitchen || room.family_room || room.bbq || room.garden || room.dining || room.breakfast) && (
-                                                        <div className="flex flex-wrap items-center gap-2 text-sm mt-2">
-                                                            {room.air_conditioning && (
-                                                                <span className="flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs">
-                                                                    <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                                                                    AC
-                                                                </span>
-                                                            )}
-                                                            {room.wifi && (
-                                                                <span className="flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs">
-                                                                    <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                                                                    WiFi
-                                                                </span>
-                                                            )}
-                                                            {room.bathroom && (
-                                                                <span className="flex items-center gap-1 px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs">
-                                                                    <span className="w-2 h-2 rounded-full bg-purple-500"></span>
-                                                                    Bathroom
-                                                                </span>
-                                                            )}
-                                                            {room.living_area && (
-                                                                <span className="flex items-center gap-1 px-2 py-1 bg-orange-100 text-orange-700 rounded-full text-xs">
-                                                                    <span className="w-2 h-2 rounded-full bg-orange-500"></span>
-                                                                    Living
-                                                                </span>
-                                                            )}
-                                                            {room.terrace && (
-                                                                <span className="flex items-center gap-1 px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs">
-                                                                    <span className="w-2 h-2 rounded-full bg-yellow-500"></span>
-                                                                    Terrace
-                                                                </span>
-                                                            )}
-                                                            {room.parking && (
-                                                                <span className="flex items-center gap-1 px-2 py-1 bg-indigo-100 text-indigo-700 rounded-full text-xs">
-                                                                    <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
-                                                                    Parking
-                                                                </span>
-                                                            )}
-                                                            {room.kitchen && (
-                                                                <span className="flex items-center gap-1 px-2 py-1 bg-pink-100 text-pink-700 rounded-full text-xs">
-                                                                    <span className="w-2 h-2 rounded-full bg-pink-500"></span>
-                                                                    Kitchen
-                                                                </span>
-                                                            )}
-                                                            {room.family_room && (
-                                                                <span className="flex items-center gap-1 px-2 py-1 bg-teal-100 text-teal-700 rounded-full text-xs">
-                                                                    <span className="w-2 h-2 rounded-full bg-teal-500"></span>
-                                                                    Family
-                                                                </span>
-                                                            )}
-                                                            {room.bbq && (
-                                                                <span className="flex items-center gap-1 px-2 py-1 bg-red-100 text-red-700 rounded-full text-xs">
-                                                                    <span className="w-2 h-2 rounded-full bg-red-500"></span>
-                                                                    BBQ
-                                                                </span>
-                                                            )}
-                                                            {room.garden && (
-                                                                <span className="flex items-center gap-1 px-2 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs">
-                                                                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                                                                    Garden
-                                                                </span>
-                                                            )}
-                                                            {room.dining && (
-                                                                <span className="flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 rounded-full text-xs">
-                                                                    <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-                                                                    Dining
-                                                                </span>
-                                                            )}
-                                                            {room.breakfast && (
-                                                                <span className="flex items-center gap-1 px-2 py-1 bg-cyan-100 text-cyan-700 rounded-full text-xs">
-                                                                    <span className="w-2 h-2 rounded-full bg-cyan-500"></span>
-                                                                    Breakfast
-                                                                </span>
-                                                            )}
-                                                        </div>
-                                                    )}
-
-                                                    {/* Price */}
-                                                    <div className={`flex items-baseline justify-between pt-2 border-t ${theme.cardBorder || theme.border}`}>
-                                                        <div>
-                                                            <p className={`text-sm ${theme.textCardSecondary || theme.textSecondary}`}>Starting from</p>
-                                                            <p className={`text-3xl font-extrabold ${theme.textCardAccent || theme.textAccent}`}>
-                                                                {formatCurrency(room.price)}
-                                                                <span className={`text-sm ${theme.textCardSecondary || theme.textSecondary} font-normal`}>/night</span>
-                                                            </p>
-                                                        </div>
-                                                    </div>
-
-                                                    {/* CTA Button */}
-                                                    <button
-                                                        onClick={() => handleOpenRoomBookingForm(room.id)}
-                                                        disabled={bookingData.check_in && bookingData.check_out && !roomAvailability[room.id]}
-                                                        className={`w-full mt-4 px-6 py-3 font-bold rounded-lg shadow-lg transition-all duration-300 transform hover:scale-105 flex items-center justify-center gap-2 uppercase tracking-wider ${bookingData.check_in && bookingData.check_out && !roomAvailability[room.id]
-                                                            ? 'bg-gray-400 text-gray-700 cursor-not-allowed opacity-50'
-                                                            : 'bg-gradient-to-r from-[#d4af37] via-[#f4d03f] to-[#d4af37] text-[#1a472a] border-2 border-[#b8941f] hover:from-[#f4d03f] hover:via-[#ffd700] hover:to-[#f4d03f] hover:shadow-[0_0_30px_rgba(212,175,55,0.6)]'
-                                                            }`}
-                                                    >
-                                                        {bookingData.check_in && bookingData.check_out && !roomAvailability[room.id] ? 'Not Available' : 'Book Now'}
-                                                        <ChevronRight className="w-5 h-5" />
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 </>
                             ) : (
-                                <div className="text-center py-12">
-                                    <BedDouble className={`w-16 h-16 ${theme.textSecondary} mx-auto mb-4`} />
-                                    <p className={`text-lg font-semibold ${theme.textPrimary} mb-2`}>No rooms available</p>
-                                    <p className={`${theme.textSecondary}`}>No rooms found in the system.</p>
+                                <div style={{ textAlign: 'center', padding: '4rem 0' }}>
+                                    <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.78rem', letterSpacing: '0.1em', color: '#9a9a9a' }}>No rooms found in the system.</p>
                                 </div>
                             )}
 
@@ -2865,19 +2956,17 @@ export default function App() {
                     </section>
 
                     {/* Signature Experiences Section - Resort Style */}
-                    <section className="bg-gradient-to-b from-[#f4ede1] via-[#f9f4ea] to-white py-20 transition-colors duration-500">
-                        <div className="w-full mx-auto px-2 sm:px-4 md:px-6">
-                            {/* Section Header */}
-                            <div className="text-center mb-16">
-                                <span className="inline-block px-6 py-2 bg-[#0f5132]/10 text-[#0f5132] text-sm font-semibold tracking-[0.35em] uppercase rounded-full border border-[#d8c9ac] mb-4">
-                                    ✦ Signature Experiences ✦
-                                </span>
-                                <h2 className={`text-4xl md:text-5xl font-extrabold ${theme.textPrimary} mb-4`}>
-                                    SIGNATURE EXPERIENCES AT THE BEST LUXURY RESORT
-                                </h2>
-                                <p className={`text-lg ${theme.textSecondary} max-w-3xl mx-auto leading-relaxed`}>
-                                    Guests can enjoy a range of curated in-house activities designed to explore the region's rich flora and fauna
-                                </p>
+                    <section style={{ backgroundColor: '#ffffff', paddingTop: '5.5rem', paddingBottom: '5.5rem' }}>
+                        <div className="w-full mx-auto px-4 sm:px-8 md:px-16">
+                            {/* Taj 2-column section header */}
+                            <div className="taj-section-header">
+                                <div className="taj-section-header__left">
+                                    <span className="taj-section-header__eyebrow">Curated Activities</span>
+                                    <h2 className="taj-section-header__title">In-House<br />Experiences</h2>
+                                </div>
+                                <div className="taj-section-header__right">
+                                    Guests can enjoy a range of curated in-house activities designed to explore the region's rich flora, fauna, and cultural heritage — each crafted for wonder and discovery.
+                                </div>
                             </div>
 
                             {totalSignatureExperiences > 0 ? (
@@ -3061,82 +3150,119 @@ export default function App() {
                     )}
 
                     {/* Premium Services Showcase Section */}
-                    <section data-services-section className={`${theme.bgCard} py-20 transition-colors duration-500`}>
-                        <div className="w-full mx-auto px-2 sm:px-4 md:px-6">
-                            {/* Section Header */}
-                            <div className="text-center mb-16">
-                                <span className="inline-block px-6 py-2 bg-[#0f5132]/10 text-[#0f5132] text-sm font-semibold tracking-[0.35em] uppercase rounded-full border border-[#d8c9ac] mb-4">
-                                    ✦ Premium Services ✦
-                                </span>
-                                <h2 className={`text-4xl md:text-5xl font-extrabold ${theme.textPrimary} mb-4`}>
-                                    WORLD-CLASS AMENITIES & SERVICES
-                                </h2>
-                                <p className={`text-lg ${theme.textSecondary} max-w-3xl mx-auto leading-relaxed`}>
-                                    Experience unparalleled luxury with our comprehensive range of world-class amenities and personalized services
-                                </p>
+                    <section data-services-section style={{ backgroundColor: '#faf7f0', paddingTop: '5.5rem', paddingBottom: '8rem' }}>
+                        <div className="w-full mx-auto px-4 sm:px-8 md:px-16">
+                            {/* Taj 2-column section header */}
+                            <div className="taj-section-header">
+                                <div className="taj-section-header__left">
+                                    <span className="taj-section-header__eyebrow">Premium Services</span>
+                                    <h2 className="taj-section-header__title">World-Class<br />Amenities</h2>
+                                </div>
+                                <div className="taj-section-header__right">
+                                    Every service is conceived as a personal gesture of care — from bespoke spa rituals to curated dining experiences. Our team anticipates your needs before you voice them.
+                                </div>
                             </div>
 
                             {services.length > 0 ? (
-                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-                                    {services.slice(0, 3).map((service) => (
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '1.25rem', alignItems: 'start' }}>
+                                    {services.slice(0, 3).map((service, idx) => (
                                         <div
                                             key={service.id}
-                                            className="relative group overflow-hidden rounded-[26px] bg-white shadow-[0_18px_35px_rgba(12,61,38,0.18)] transition-transform duration-500 hover:-translate-y-3"
+                                            className="group"
+                                            style={{ position: 'relative', cursor: 'pointer' }}
+                                            onClick={() => handleOpenServiceBookingForm(service.id)}
                                         >
-                                            <div className="relative h-64 overflow-hidden">
+                                            {/* Tall image — sharp edges */}
+                                            <div style={{
+                                                position: 'relative',
+                                                height: idx === 1 ? '430px' : '380px',
+                                                overflow: 'hidden',
+                                                background: 'var(--obsidian)'
+                                            }}>
                                                 {service.images && service.images.length > 0 ? (
                                                     <img
                                                         src={getImageUrl(service.images[0].image_url)}
                                                         alt={service.name}
-                                                        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                                                        style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'transform 0.9s cubic-bezier(0.23,1,0.32,1)' }}
+                                                        className="group-hover:scale-[1.06]"
                                                         onError={(e) => { e.target.src = ITEM_PLACEHOLDER; }}
                                                     />
                                                 ) : (
-                                                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-[#0f5132]/15 via-[#1a7042]/15 to-[#c99c4e]/20">
-                                                        <ConciergeBell className="w-12 h-12 text-[#0f5132]" />
+                                                    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg,rgba(28,28,40,0.95),rgba(10,10,15,1))' }}>
+                                                        <ConciergeBell style={{ width: '2.5rem', height: '2.5rem', color: 'var(--gold)' }} />
                                                     </div>
                                                 )}
-                                                <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/15 to-transparent" />
-                                                <div className="absolute bottom-4 left-0 right-0 px-6 text-white">
-                                                    <h3 className="text-3xl md:text-4xl font-extrabold text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] drop-shadow-[0_4px_12px_rgba(0,0,0,0.6)]" style={{ textShadow: '0 0 20px rgba(255,255,255,0.3), 0 2px 8px rgba(0,0,0,0.9), 0 4px 12px rgba(0,0,0,0.7)' }}>{service.name}</h3>
-                                                </div>
+                                                {/* Subtle depth gradient */}
+                                                <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(10,10,15,0.28) 0%, transparent 55%)', pointerEvents: 'none' }} />
                                             </div>
-                                            <div className="p-6 space-y-4">
-                                                <p className="text-sm text-[#4f6f62] leading-relaxed">
-                                                    {service.description}
-                                                </p>
+
+                                            {/* White caption plate — protrudes below image */}
+                                            <div style={{
+                                                position: 'relative',
+                                                marginTop: '-2.75rem',
+                                                marginLeft: '1rem',
+                                                marginRight: '1rem',
+                                                background: '#ffffff',
+                                                padding: '1.4rem 1.6rem 1.6rem',
+                                                boxShadow: '0 8px 32px rgba(10,10,15,0.1)',
+                                                transition: 'box-shadow 0.4s ease',
+                                                zIndex: 2
+                                            }}>
+                                                <h3 style={{
+                                                    fontFamily: 'var(--font-body)',
+                                                    fontSize: '0.65rem',
+                                                    fontWeight: '600',
+                                                    letterSpacing: '0.24em',
+                                                    textTransform: 'uppercase',
+                                                    color: 'var(--obsidian)',
+                                                    marginBottom: '0.6rem',
+                                                    lineHeight: '1.6'
+                                                }}>{service.name}</h3>
+                                                <div style={{ height: '1px', width: '1.75rem', background: 'linear-gradient(90deg,var(--gold-warm),var(--gold-light))', marginBottom: '0.75rem' }} />
                                                 <button
                                                     type="button"
-                                                    onClick={() => handleOpenServiceBookingForm(service.id)}
-                                                    className="inline-flex items-center gap-2 text-sm font-semibold text-[#0f5132] hover:text-[#1a7042] transition-colors"
+                                                    onClick={(e) => { e.stopPropagation(); handleOpenServiceBookingForm(service.id); }}
+                                                    style={{
+                                                        fontFamily: 'var(--font-body)',
+                                                        fontSize: '0.58rem',
+                                                        fontWeight: '600',
+                                                        letterSpacing: '0.2em',
+                                                        textTransform: 'uppercase',
+                                                        color: 'var(--gold)',
+                                                        background: 'none',
+                                                        border: 'none',
+                                                        cursor: 'pointer',
+                                                        padding: 0,
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        gap: '0.3rem',
+                                                        transition: 'color 0.25s ease'
+                                                    }}
                                                 >
-                                                    Explore Service
-                                                    <ChevronRight className="w-4 h-4" />
+                                                    Explore &rsaquo;
                                                 </button>
                                             </div>
                                         </div>
                                     ))}
                                 </div>
                             ) : (
-                                <p className={`text-center py-12 ${theme.textSecondary}`}>No services available at the moment.</p>
+                                <p style={{ textAlign: 'center', padding: '3rem 0', color: 'var(--silver)', fontFamily: 'var(--font-body)' }}>No services available at the moment.</p>
                             )}
                         </div>
                     </section>
 
                     {/* Premium Cuisine Section - Mountain Shadows Style */}
-                    <section data-food-section className={`bg-gradient-to-b ${theme.bgCard} ${theme.bgSecondary} py-20 pb-28 transition-colors duration-500`}>
-                        <div className="w-full mx-auto px-2 sm:px-4 md:px-6">
-                            {/* Section Header */}
-                            <div className="text-center mb-16">
-                                <span className="inline-block px-6 py-2 bg-[#0f5132]/10 text-[#0f5132] text-sm font-semibold tracking-[0.35em] uppercase rounded-full border border-[#d8c9ac] mb-4">
-                                    ✦ Savor the Art ✦
-                                </span>
-                                <h2 className={`text-4xl md:text-5xl font-extrabold ${theme.textPrimary} mb-4`}>
-                                    SAVOR THE ART OF CUISINE
-                                </h2>
-                                <p className={`text-lg ${theme.textSecondary} max-w-3xl mx-auto leading-relaxed`}>
-                                    Experience the art of cuisine at our luxury resort. Enjoy a diverse menu featuring international favorites and authentic local flavors, crafted to delight every palate.
-                                </p>
+                    <section data-food-section style={{ backgroundColor: '#faf7f0', paddingTop: '5.5rem', paddingBottom: '6rem' }}>
+                        <div className="w-full mx-auto px-4 sm:px-8 md:px-16">
+                            {/* Taj 2-column section header */}
+                            <div className="taj-section-header">
+                                <div className="taj-section-header__left">
+                                    <span className="taj-section-header__eyebrow">Savor the Art</span>
+                                    <h2 className="taj-section-header__title">Our Culinary<br />Offerings</h2>
+                                </div>
+                                <div className="taj-section-header__right">
+                                    From the freshest farm-to-table breakfasts to candlelit multi-course dinners, our chefs craft each dish as an expression of the region's rich culinary heritage and seasonal abundance.
+                                </div>
                             </div>
 
                             {foodItems.length > 0 ? (
@@ -4115,7 +4241,7 @@ export default function App() {
                         </a>
                     </div>
                 </footer>
-            </div>
+            </div >
         </>
     );
 }

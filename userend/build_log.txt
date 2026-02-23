@@ -1,0 +1,44 @@
+﻿
+> orchid-resort-userend@1.0.0 build
+> react-scripts build && npm run copy-assets && npm run copy-build
+
+Creating an optimized production build...
+node.exe : Browserslist: browsers data (caniuse-lite) is 8 months old. Please run:
+At C:\Program Files\nodejs\npm.ps1:29 char:3
++   & $NODE_EXE $NPM_CLI_JS $args
++   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Browserslist: b...ld. Please run::Strin 
+   g) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+Browserslist: browsers data (caniuse-lite) is 8 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+Compiled successfully.
+
+File sizes after gzip:
+
+  80.85 kB (-20 B)  build\static\js\main.e6ee4cd4.js
+  12.8 kB           build\static\css\main.0fa40bfa.css
+
+The project was built assuming it is hosted at /orchid/.
+You can control this with the homepage field in your package.json.
+
+The build folder is ready to be deployed.
+
+Find out more about deployment here:
+
+  https://cra.link/deployment
+
+
+> orchid-resort-userend@1.0.0 copy-assets
+> node scripts/copyAssets.js
+
+No public/assets directory found. Skipping asset copy.
+
+> orchid-resort-userend@1.0.0 copy-build
+> node scripts/copyBuild.js
+
+Copied build output from C:\releasing\New Orchid\userend\build to C:\releasing\New Orchid\build
