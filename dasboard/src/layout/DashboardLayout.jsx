@@ -199,9 +199,13 @@ export default function DashboardLayout({ children }) {
 
 
   const { role, permissions, user, isSuperadmin: isSuper, hasModuleAccess } = usePermissions();
-  const { branches, activeBranchId, switchBranch, activeBranch } = useBranch();
+  // Sync activeBranchId for non-superadmins and refresh branches on mount
+  const { branches, activeBranchId, switchBranch, activeBranch, refreshBranches } = useBranch();
+  
+  useEffect(() => {
+    refreshBranches(); // Ensure branches are loaded after login
+  }, []);
 
-  // Sync activeBranchId for non-superadmins
   useEffect(() => {
     if (user && !user.is_superadmin && user.branch_id) {
       if (activeBranchId.toString() !== user.branch_id.toString()) {

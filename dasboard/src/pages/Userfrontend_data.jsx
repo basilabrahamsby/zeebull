@@ -160,7 +160,12 @@ const SimpleModal = ({ isOpen, onClose, onSubmit, fields, initialData, title, is
       }
       setImagePreviews(previews);
     } else {
-      setFormState({});
+      const defaultState = {};
+      const branchField = fields.find(f => f.name === 'branch_id');
+      if (branchField && branchField.options && branchField.options.length === 1) {
+        defaultState.branch_id = branchField.options[0].id.toString();
+      }
+      setFormState(defaultState);
       setImagePreviews([]);
       setSelectedFiles([]);
     }
