@@ -80,7 +80,7 @@ def get_service_requests(
     """
     # Authorization logic: Only admins/managers see everything; staff see assigned or unassigned tasks
     user_role = current_user.role.name.lower() if current_user.role else "guest"
-    is_admin = user_role in ["admin", "manager", "owner", "superadmin"]
+    is_admin = user_role in ["admin", "manager", "owner", "superadmin"] or getattr(current_user, 'is_superadmin', False)
     
     current_employee_id = None
     if current_user.employee:
@@ -332,9 +332,14 @@ def get_service_requests(
         checkout_requests = checkout_query.order_by(CheckoutRequestModel.created_at.desc()).limit(limit).offset(skip).all()
         
         # Optimization: Pre-fetch rooms
-        room_numbers = [cr.room_number for cr in checkout_requests if cr.room_number]
-        rooms = db.query(Room).filter(Room.number.in_(room_numbers)).all()
-        room_map = {r.number: r for r in rooms}
+        room_numbers = [str(cr.room_number) for cr in checkout_requests if cr.room_number]
+        room_query = db.query(Room).filter(Room.number.in_(room_numbers))
+        if branch_id:
+            room_query = room_query.filter(Room.branch_id == branch_id)
+        rooms = room_query.all()
+        
+        # Consistent keying by string room number
+        room_map = {str(r.number): r for r in rooms}
         
         # Optimization: Pre-fetch items
         item_ids = set()
@@ -352,41 +357,43 @@ def get_service_requests(
         for cr in checkout_requests:
             try:
                 room = room_map.get(str(cr.room_number))
-                if room:
-                    enriched_inventory_data = []
-                    if cr.inventory_data:
-                        for item in cr.inventory_data:
-                            enriched_item = item.copy()
-                            if ('item_name' not in enriched_item or not enriched_item['item_name']) and enriched_item.get('item_id'):
-                                inv_item = inventory_items.get(enriched_item.get('item_id'))
-                                if inv_item:
-                                    enriched_item['item_name'] = inv_item.name
-                                    if 'item_code' not in enriched_item:
-                                        enriched_item['item_code'] = inv_item.item_code
-                            enriched_inventory_data.append(enriched_item)
+                # Always append checkout request - use room_id=None as fallback if room not found
+                # (Previously: silently dropped if room wasn't in room_map due to branch mismatch)
+                room_id = room.id if room else None
+                enriched_inventory_data = []
+                if cr.inventory_data:
+                    for item in cr.inventory_data:
+                        enriched_item = item.copy()
+                        if ('item_name' not in enriched_item or not enriched_item['item_name']) and enriched_item.get('item_id'):
+                            inv_item = inventory_items.get(enriched_item.get('item_id'))
+                            if inv_item:
+                                enriched_item['item_name'] = inv_item.name
+                                if 'item_code' not in enriched_item:
+                                    enriched_item['item_code'] = inv_item.item_code
+                        enriched_inventory_data.append(enriched_item)
 
-                    result.append({
-                        "id": cr.id + 1000000, 
-                        "food_order_id": None,
-                        "room_id": room.id,
-                        "employee_id": cr.employee_id,
-                        "request_type": "checkout_verification",
-                        "type": "checkout_verification", # Alias for mobile app
-                        "description": f"Checkout inventory verification for Room {cr.room_number} - Guest: {cr.guest_name}",
-                        "status": str(cr.status) if cr.status else "pending",
-                        "created_at": cr.created_at.isoformat() if cr.created_at else None,
-                        "started_at": cr.started_at.isoformat() if getattr(cr, 'started_at', None) else None,
-                        "completed_at": cr.completed_at.isoformat() if cr.completed_at else None,
-                        "is_checkout_request": True,
-                        "is_assigned_service": False,
-                        "checkout_request_id": cr.id,
-                        "room_number": str(cr.room_number) if cr.room_number else None,
-                        "guest_name": str(cr.guest_name) if cr.guest_name else None,
-                        "employee_name": str(cr.employee.name) if cr.employee and cr.employee.name else None,
-                        "inventory_notes": cr.inventory_notes,
-                        "asset_damages": [item for item in enriched_inventory_data if item.get('is_fixed_asset')],
-                        "inventory_data_with_charges": [item for item in enriched_inventory_data if not item.get('is_fixed_asset')]
-                    })
+                result.append({
+                    "id": cr.id + 1000000, 
+                    "food_order_id": None,
+                    "room_id": room_id,
+                    "employee_id": cr.employee_id,
+                    "request_type": "checkout_verification",
+                    "type": "checkout_verification", # Alias for mobile app
+                    "description": f"Checkout inventory verification for Room {cr.room_number} - Guest: {cr.guest_name}",
+                    "status": str(cr.status) if cr.status else "pending",
+                    "created_at": cr.created_at.isoformat() if cr.created_at else None,
+                    "started_at": cr.started_at.isoformat() if getattr(cr, 'started_at', None) else None,
+                    "completed_at": cr.completed_at.isoformat() if cr.completed_at else None,
+                    "is_checkout_request": True,
+                    "is_assigned_service": False,
+                    "checkout_request_id": cr.id,
+                    "room_number": str(cr.room_number) if cr.room_number else None,
+                    "guest_name": str(cr.guest_name) if cr.guest_name else None,
+                    "employee_name": str(cr.employee.name) if cr.employee and cr.employee.name else None,
+                    "inventory_notes": cr.inventory_notes,
+                    "asset_damages": [item for item in enriched_inventory_data if item.get('is_fixed_asset')],
+                    "inventory_data_with_charges": [item for item in enriched_inventory_data if not item.get('is_fixed_asset')]
+                })
             except Exception as e:
                 print(f"[ERROR] Error converting checkout request {cr.id}: {e}")
                 continue
