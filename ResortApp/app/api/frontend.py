@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
 from sqlalchemy.orm import Session, joinedload
 import os
 import shutil
@@ -44,7 +44,7 @@ print(f"Upload directory set to: {UPLOAD_DIR}")  # Debug log
 
 # ---------- Header & Banner ----------
 @router.get("/header-banner/", response_model=list[schemas.HeaderBanner])
-def list_header_banner(db: Session = Depends(get_db), skip: int = 0, limit: int = 20, branch_id: int | None = None):
+def list_header_banner(db: Session = Depends(get_db), skip: int = 0, limit: int = 20, branch_id: int | None = Query(None, alias="active_branch")):
     query = db.query(models.HeaderBanner).options(joinedload(models.HeaderBanner.branch))
     if branch_id is not None:
         query = query.filter(models.HeaderBanner.branch_id == branch_id)
@@ -180,13 +180,16 @@ async def update_header_banner(
             
             image_url = f"/{image_url}" if not image_url.startswith('/') else image_url
 
-        obj = schemas.HeaderBannerUpdate(
-            title=title,
-            subtitle=subtitle,
-            is_active=is_active_bool,
-            image_url=image_url,
-            branch_id=branch_id
-        )
+        update_data = {
+            "title": title,
+            "subtitle": subtitle,
+            "is_active": is_active_bool,
+            "branch_id": branch_id
+        }
+        if image_url:
+            update_data["image_url"] = image_url
+
+        obj = schemas.HeaderBannerUpdate(**update_data)
         return crud.update(db, models.HeaderBanner, item_id, obj)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to update header banner: {str(e)}")
@@ -199,7 +202,7 @@ def delete_header_banner(item_id: int, db: Session = Depends(get_db), current_us
 
 # ---------- Check Availability ----------
 @router.get("/check-availability/", response_model=list[schemas.CheckAvailability])
-def list_check_availability(db: Session = Depends(get_db), skip: int = 0, limit: int = 20, branch_id: int | None = None):
+def list_check_availability(db: Session = Depends(get_db), skip: int = 0, limit: int = 20, branch_id: int | None = Query(None, alias="active_branch")):
     query = db.query(models.CheckAvailability).options(joinedload(models.CheckAvailability.branch))
     if branch_id is not None:
         query = query.filter(models.CheckAvailability.branch_id == branch_id)
@@ -237,7 +240,7 @@ def delete_check_availability(item_id: int, db: Session = Depends(get_db), curre
 
 # ---------- Gallery ----------
 @router.get("/gallery/", response_model=list[schemas.Gallery])
-def list_gallery(db: Session = Depends(get_db), skip: int = 0, limit: int = 20, branch_id: int | None = None):
+def list_gallery(db: Session = Depends(get_db), skip: int = 0, limit: int = 20, branch_id: int | None = Query(None, alias="active_branch")):
     query = db.query(models.Gallery).options(joinedload(models.Gallery.branch))
     if branch_id is not None:
         query = query.filter(models.Gallery.branch_id == branch_id)
@@ -357,12 +360,15 @@ async def update_gallery(
             if existing:
                 image_url = existing.image_url
 
-        obj = schemas.GalleryCreate(
-            caption=caption,
-            is_active=is_active,
-            image_url=image_url,
-            branch_id=branch_id
-        )
+        update_data = {
+            "caption": caption,
+            "is_active": is_active,
+            "branch_id": branch_id
+        }
+        if image_url:
+            update_data["image_url"] = image_url
+
+        obj = schemas.GalleryCreate(**update_data)
         return crud.update(db, models.Gallery, item_id, obj)
     except HTTPException:
         raise
@@ -380,7 +386,7 @@ def delete_gallery(item_id: int, db: Session = Depends(get_db), current_user: Us
 
 # ---------- Reviews ----------
 @router.get("/reviews/", response_model=list[schemas.Review])
-def list_reviews(db: Session = Depends(get_db), skip: int = 0, limit: int = 20, branch_id: int | None = None):
+def list_reviews(db: Session = Depends(get_db), skip: int = 0, limit: int = 20, branch_id: int | None = Query(None, alias="active_branch")):
     query = db.query(models.Review).options(joinedload(models.Review.branch))
     if branch_id is not None:
         query = query.filter(models.Review.branch_id == branch_id)
@@ -426,7 +432,7 @@ def delete_review(item_id: int, db: Session = Depends(get_db), current_user: Use
 
 # ---------- Resort Info ----------
 @router.get("/resort-info/", response_model=list[schemas.ResortInfo])
-def list_resort_info(db: Session = Depends(get_db), skip: int = 0, limit: int = 20, branch_id: int | None = None):
+def list_resort_info(db: Session = Depends(get_db), skip: int = 0, limit: int = 20, branch_id: int | None = Query(None, alias="active_branch")):
     query = db.query(models.ResortInfo).options(joinedload(models.ResortInfo.branch))
     if branch_id is not None:
         query = query.filter(models.ResortInfo.branch_id == branch_id)
@@ -471,7 +477,7 @@ def delete_resort_info(item_id: int, db: Session = Depends(get_db), current_user
 
 # ---------- Signature Experiences ----------
 @router.get("/signature-experiences/", response_model=list[schemas.SignatureExperience])
-def list_signature_experiences(db: Session = Depends(get_db), skip: int = 0, limit: int = 20, branch_id: int | None = None):
+def list_signature_experiences(db: Session = Depends(get_db), skip: int = 0, limit: int = 20, branch_id: int | None = Query(None, alias="active_branch")):
     query = db.query(models.SignatureExperience).options(joinedload(models.SignatureExperience.branch))
     if branch_id is not None:
         query = query.filter(models.SignatureExperience.branch_id == branch_id)
@@ -570,7 +576,7 @@ def delete_signature_experience(item_id: int, db: Session = Depends(get_db), cur
 
 # ---------- Plan Your Wedding ----------
 @router.get("/plan-weddings/", response_model=list[schemas.PlanWedding])
-def list_plan_weddings(db: Session = Depends(get_db), skip: int = 0, limit: int = 20, branch_id: int | None = None):
+def list_plan_weddings(db: Session = Depends(get_db), skip: int = 0, limit: int = 20, branch_id: int | None = Query(None, alias="active_branch")):
     query = db.query(models.PlanWedding).options(joinedload(models.PlanWedding.branch))
     if branch_id is not None:
         query = query.filter(models.PlanWedding.branch_id == branch_id)
@@ -669,7 +675,7 @@ def delete_plan_wedding(item_id: int, db: Session = Depends(get_db), current_use
 
 # ---------- Nearby Attractions ----------
 @router.get("/nearby-attractions/", response_model=list[schemas.NearbyAttraction])
-def list_nearby_attractions(db: Session = Depends(get_db), skip: int = 0, limit: int = 20, branch_id: int | None = None):
+def list_nearby_attractions(db: Session = Depends(get_db), skip: int = 0, limit: int = 20, branch_id: int | None = Query(None, alias="active_branch")):
     try:
         # Verify model is available
         if not hasattr(models, 'NearbyAttraction'):
@@ -789,7 +795,7 @@ def delete_nearby_attraction(item_id: int, db: Session = Depends(get_db), curren
 
 
 @router.get("/nearby-attraction-banners/", response_model=list[schemas.NearbyAttractionBanner])
-def list_nearby_attraction_banners(db: Session = Depends(get_db), skip: int = 0, limit: int = 20, branch_id: int | None = None):
+def list_nearby_attraction_banners(db: Session = Depends(get_db), skip: int = 0, limit: int = 20, branch_id: int | None = Query(None, alias="active_branch")):
     query = db.query(models.NearbyAttractionBanner).options(joinedload(models.NearbyAttractionBanner.branch))
     if branch_id is not None:
         query = query.filter(models.NearbyAttractionBanner.branch_id == branch_id)

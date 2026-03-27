@@ -15,7 +15,7 @@ class BaseSchema(BaseModel):
 class HeaderBannerBase(BaseSchema):
     title: str
     subtitle: str
-    image_url: str
+    image_url: str | None = None
     branch_id: int | None = None
 
 class HeaderBannerCreate(HeaderBannerBase):
@@ -49,7 +49,7 @@ class CheckAvailability(CheckAvailabilityBase):
 
 # Gallery
 class GalleryBase(BaseSchema):
-    image_url: str
+    image_url: str | None = None
     caption: str
 
 class GalleryCreate(GalleryBase):
@@ -92,7 +92,7 @@ class ResortInfo(ResortInfoBase):
 class SignatureExperienceBase(BaseSchema):
     title: str
     description: str
-    image_url: str
+    image_url: str | None = None
     extra_images: str | None = None
 
 class SignatureExperienceCreate(SignatureExperienceBase):
@@ -112,7 +112,7 @@ class SignatureExperience(SignatureExperienceBase):
 class PlanWeddingBase(BaseSchema):
     title: str
     description: str
-    image_url: str
+    image_url: str | None = None
     extra_images: str | None = None
 
 class PlanWeddingCreate(PlanWeddingBase):
@@ -132,7 +132,7 @@ class PlanWedding(PlanWeddingBase):
 class NearbyAttractionBase(BaseSchema):
     title: str
     description: str
-    image_url: str
+    image_url: str | None = None
     extra_images: str | None = None
     map_link: str | None = None
 
@@ -157,7 +157,7 @@ class NearbyAttraction(NearbyAttractionBase):
 class NearbyAttractionBannerBase(BaseSchema):
     title: str
     subtitle: str
-    image_url: str
+    image_url: str | None = None
     extra_images: str | None = None
     map_link: str | None = None
 
