@@ -231,7 +231,7 @@ app.add_middleware(PerformanceMiddleware)
 
 # Static file directories - use absolute paths so they work regardless of working directory
 _MAIN_DIR = os.path.dirname(os.path.abspath(__file__))
-_UPLOADS_DIR = os.path.join(_MAIN_DIR, "uploads")
+_UPLOADS_DIR = os.path.join(os.path.dirname(_MAIN_DIR), "uploads")
 _STATIC_DIR = os.path.join(_MAIN_DIR, "static")
 os.makedirs(_UPLOADS_DIR, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=_UPLOADS_DIR), name="uploads")
