@@ -179,7 +179,7 @@ export default function BranchManagement() {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {localBranches.map((branch) => (
                         <div key={branch.id} className={`relative bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-xl transition-all duration-300 group ${!branch.is_active ? 'opacity-75 grayscale-[0.2]' : ''}`}>
-                            {branch.image_url ? (
+                            {branch.image_url && String(branch.image_url).trim() !== '' && String(branch.image_url).toLowerCase() !== 'null' ? (
                                 <div className="h-40 w-full overflow-hidden border-b border-gray-100">
                                     <img
                                         src={branch.image_url.startsWith('http') ? branch.image_url : `${api.defaults.baseURL.replace('/api', '')}${branch.image_url}`}
