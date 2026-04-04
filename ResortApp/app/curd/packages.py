@@ -1,6 +1,10 @@
 from sqlalchemy.orm import Session, joinedload
-from fastapi import HTTPException
-from typing import List
+from fastapi import HTTPException, UploadFile
+from typing import List, Optional, Union
+import uuid
+import os
+import shutil
+from datetime import datetime
 
 from app.models.Package import Package, PackageImage, PackageBooking, PackageBookingRoom
 from app.models.room import Room
@@ -165,11 +169,24 @@ def get_or_create_guest_user(db: Session, email: str, mobile: str, name: str, br
         raise ValueError(f"Failed to create or find guest user: {str(e)}")
 
 def book_package(db: Session, booking: PackageBookingCreate, branch_id: int = None):
-    # If branch_id is not provided, try to derive it from the first room
-    if branch_id is None and booking.room_ids:
-        first_room = db.query(Room).filter(Room.id == booking.room_ids[0]).first()
-        if first_room:
-            branch_id = first_room.branch_id
+    # If branch_id is not provided, try to derive it from the package or first room
+    selected_package = db.query(Package).filter(Package.id == booking.package_id).first()
+    if not selected_package:
+        raise HTTPException(status_code=404, detail="Package not found")
+
+    if branch_id is None:
+        if booking.room_ids:
+            first_room = db.query(Room).filter(Room.id == booking.room_ids[0]).first()
+            if first_room:
+                branch_id = first_room.branch_id
+        
+        # Fallback to package's branch_id if still None
+        if branch_id is None:
+            branch_id = selected_package.branch_id
+        
+        # FINAL FALLBACK: If still None (Global Package), use branch 1 as active branch
+        if branch_id is None:
+            branch_id = 1
     # Find or create guest user based on email and mobile
     guest_user_id = None
     # Normalize email and mobile - convert empty strings to None, handle None safely
@@ -237,40 +254,41 @@ def book_package(db: Session, booking: PackageBookingCreate, branch_id: int = No
             )
 
     # CRITICAL FIX: Check for conflicts BEFORE creating the booking
-    # This prevents invalid bookings from being created in the database
-    for room_id in booking.room_ids:
-        # Check for conflicts with package bookings (simplified overlap check: start1 < end2 AND start2 < end1)
-        package_conflict = (
-            db.query(PackageBookingRoom)
-            .join(PackageBooking)
-            .filter(
-                PackageBookingRoom.room_id == room_id,
-                PackageBooking.branch_id == branch_id,
-                PackageBooking.status.in_(["booked", "checked-in", "checked_in"]),  # Only check for active bookings
-                PackageBooking.check_in < booking.check_out,
-                PackageBooking.check_out > booking.check_in
+    # Only if room_ids are provided
+    if booking.room_ids:
+        for room_id in booking.room_ids:
+            # Check for conflicts with package bookings (simplified overlap check: start1 < end2 AND start2 < end1)
+            package_conflict = (
+                db.query(PackageBookingRoom)
+                .join(PackageBooking)
+                .filter(
+                    PackageBookingRoom.room_id == room_id,
+                    PackageBooking.branch_id == branch_id,
+                    PackageBooking.status.in_(["booked", "checked-in", "checked_in"]),  # Only check for active bookings
+                    PackageBooking.check_in < booking.check_out,
+                    PackageBooking.check_out > booking.check_in
+                )
+                .first()
             )
-            .first()
-        )
 
-        # Check for conflicts with regular bookings (simplified overlap check: start1 < end2 AND start2 < end1)
-        from app.models.booking import Booking, BookingRoom
-        regular_conflict = (
-            db.query(BookingRoom)
-            .join(Booking)
-            .filter(
-                BookingRoom.room_id == room_id,
-                Booking.branch_id == branch_id,
-                Booking.status.in_(["booked", "checked-in", "checked_in"]),  # Only check for active bookings
-                Booking.check_in < booking.check_out,
-                Booking.check_out > booking.check_in
+            # Check for conflicts with regular bookings (simplified overlap check: start1 < end2 AND start2 < end1)
+            from app.models.booking import Booking, BookingRoom
+            regular_conflict = (
+                db.query(BookingRoom)
+                .join(Booking)
+                .filter(
+                    BookingRoom.room_id == room_id,
+                    Booking.branch_id == branch_id,
+                    Booking.status.in_(["booked", "checked-in", "checked_in"]),  # Only check for active bookings
+                    Booking.check_in < booking.check_out,
+                    Booking.check_out > booking.check_in
+                )
+                .first()
             )
-            .first()
-        )
 
-        if package_conflict or regular_conflict:
-            room = db.query(Room).filter(Room.id == room_id).first()
-            raise HTTPException(status_code=400, detail=f"Room {room.number if room else room_id} is not available for the selected dates.")
+            if package_conflict or regular_conflict:
+                room = db.query(Room).filter(Room.id == room_id).first()
+                raise HTTPException(status_code=400, detail=f"Room {room.number if room else room_id} is not available for the selected dates.")
 
     # Calculate calculated_total_amount based on package price and duration
     # Note: Package price is typically per night.
@@ -318,14 +336,15 @@ def book_package(db: Session, booking: PackageBookingCreate, branch_id: int = No
     db.refresh(db_booking)
 
     # Assign multiple rooms (conflicts already checked, safe to proceed)
-    for room_id in booking.room_ids:
-        # Update the room's status to 'Booked'
-        room_to_update = db.query(Room).filter(Room.id == room_id).first()
-        if room_to_update:
-            room_to_update.status = "Booked"
+    if booking.room_ids:
+        for room_id in booking.room_ids:
+            # Update the room's status to 'Booked'
+            room_to_update = db.query(Room).filter(Room.id == room_id).first()
+            if room_to_update:
+                room_to_update.status = "Booked"
 
-        db_room_link = PackageBookingRoom(package_booking_id=db_booking.id, room_id=room_id, branch_id=branch_id)
-        db.add(db_room_link)
+            db_room_link = PackageBookingRoom(package_booking_id=db_booking.id, room_id=room_id, branch_id=branch_id)
+            db.add(db_room_link)
 
     db.commit()
 
@@ -366,14 +385,12 @@ def get_package(db: Session, package_id: int):
 
 import os
 import shutil
-import uuid
-from datetime import datetime
-from fastapi import UploadFile
+# ------------------- Package Check-in -------------------
 
 UPLOAD_DIR = "uploads/checkin_proofs"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-def check_in_package(db: Session, booking_id: int, id_card_image: UploadFile = None, guest_photo: UploadFile = None, amenityAllocation: str = None):
+def check_in_package(db: Session, booking_id: int, id_card_image: UploadFile = None, guest_photo: UploadFile = None, room_ids: str = None, amenityAllocation: str = None):
     try:
         booking = db.query(PackageBooking).filter(PackageBooking.id == booking_id).first()
         if not booking:
@@ -382,6 +399,53 @@ def check_in_package(db: Session, booking_id: int, id_card_image: UploadFile = N
         normalized_status = (booking.status or "").strip().lower().replace("_", "-").replace(" ", "-")
         if normalized_status != "booked":
             return False, f"Booking is not in 'booked' state. Current status: {booking.status}"
+
+        # 0. Handle room assignment for "Soft Allocated" package bookings
+        if room_ids:
+            try:
+                import json
+                id_list = json.loads(room_ids)
+                if id_list:
+                    print(f"[DEBUG] Assigning rooms {id_list} to package booking {booking.id}")
+                    
+                    # Check for existing assignments to avoid duplicates
+                    existing_room_ids = {br.room_id for br in booking.rooms}
+                    
+                    for r_id in id_list:
+                        if r_id not in existing_room_ids:
+                            target_room = db.query(Room).filter(Room.id == r_id).first()
+                            if not target_room:
+                                 return False, f"Room ID {r_id} not found"
+                            
+                            # Availability Guard
+                            from app.models.booking import BookingRoom as BR, Booking as B
+                            regular_conflict = db.query(BR).join(B).filter(
+                                BR.room_id == r_id,
+                                B.status.in_(["Booked", "Checked-in"]),
+                                B.check_in < booking.check_out,
+                                B.check_out > booking.check_in
+                            ).first()
+
+                            package_conflict = db.query(PackageBookingRoom).join(PackageBooking).filter(
+                                PackageBookingRoom.room_id == r_id,
+                                PackageBooking.status.in_(["booked", "checked-in"]),
+                                PackageBooking.id != booking.id,
+                                PackageBooking.check_in < booking.check_out,
+                                PackageBooking.check_out > booking.check_in
+                            ).first()
+                            
+                            if regular_conflict or package_conflict:
+                                return False, f"Room {target_room.number} is already booked for these dates."
+
+                            new_pbr = PackageBookingRoom(package_booking_id=booking.id, room_id=r_id, branch_id=booking.branch_id)
+                            db.add(new_pbr)
+                    
+                    db.flush()
+                    db.refresh(booking)
+            except Exception as e:
+                 print(f"[ERROR] Package room assignment failed: {e}")
+                 db.rollback()
+                 return False, f"Failed to assign rooms: {str(e)}"
 
         # CRITICAL: Check if any of the rooms are ALREADY occupied (Checked-in) by another booking
         if booking.rooms:

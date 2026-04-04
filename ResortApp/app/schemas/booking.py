@@ -8,10 +8,7 @@ from .checkout import CheckoutFull
 class RoomOut(BaseModel):
     id: int
     number: str
-    type: Optional[str] = None
-    price: Optional[float] = None
-    adults: int
-    children: int
+    room_type_id: Optional[int] = None
     status: str
     image_url: Optional[str] = None
 
@@ -30,7 +27,10 @@ class BookingRoomOut(BaseModel):
 
 # This schema is used when creating a new booking
 class BookingCreate(BaseModel):
-    room_ids: List[int]
+    room_ids: List[int] = []
+    room_type_id: Optional[int] = None
+    source: str = "Admin"
+    external_id: Optional[str] = None
     guest_name: str
     guest_mobile: str
     guest_email: str

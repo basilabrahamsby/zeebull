@@ -315,7 +315,10 @@ def get_service_request(db: Session, request_id: int):
     return request
 
 def update_service_request(db: Session, request_id: int, update_data: ServiceRequestUpdate, branch_id: int):
-    request = db.query(ServiceRequest).filter(ServiceRequest.id == request_id, ServiceRequest.branch_id == branch_id).first()
+    query = db.query(ServiceRequest).filter(ServiceRequest.id == request_id)
+    if branch_id:  # Only filter by branch if a specific branch is specified (not enterprise/all view)
+        query = query.filter(ServiceRequest.branch_id == branch_id)
+    request = query.first()
     if not request:
         return None
     

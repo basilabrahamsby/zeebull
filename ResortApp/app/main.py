@@ -47,6 +47,8 @@ from app.api import (
     branch,
     notification,
     activity_logs,
+    calendar,
+    legal,
 )
 from app.api.settings import router as settings_router
 from app.api import reports_module
@@ -108,7 +110,6 @@ app = FastAPI(
     title="Resort Management System",
     description="Complete resort management system with booking, payments, and customer management",
     version="1.0.0",
-    redirect_slashes=False,  # Prevent automatic trailing slash redirects
 )
 
 @app.on_event("startup")
@@ -219,13 +220,27 @@ class PerformanceMiddleware(BaseHTTPMiddleware):
             elif any(p in path for p in ["/rooms", "/packages", "/services", "/food-items", "/inventory/items"]):
                 response.headers["Cache-Control"] = "public, max-age=300"  # 5 minutes
             else:
-                response.headers["Cache-Control"] = "public, max-age=999"  # Changed to 999 to verify deployment
+                response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+                print(f"[DEBUG-PERF] Disabled Cache for: {path}")
         
         # Log slow requests (> 1 second)
         if process_time > 1.0:
             print(f"[PERF] Slow request: {request.method} {request.url.path} took {process_time:.2f}s")
         
         return response
+
+@app.middleware("http")
+async def absolute_path_redirect_middleware(request: Request, call_next):
+    path = request.url.path
+    # Catch accidental absolute path URLs from stale frontend/cache
+    if path.lower().startswith("/c:/") or "resortapp/uploads/" in path.lower():
+        if "/uploads/" in path.lower():
+            idx = path.lower().find("/uploads/")
+            new_path = path[idx:]
+            print(f"[FIX] Redirecting absolute path URL {path} to {new_path}")
+            from fastapi.responses import RedirectResponse
+            return RedirectResponse(url=new_path)
+    return await call_next(request)
 
 app.add_middleware(PerformanceMiddleware)
 
@@ -307,12 +322,15 @@ app.include_router(branch.router, prefix="/api", tags=["Branches"])
 app.include_router(service_request.router, prefix="/api", tags=["Service Requests"])
 app.include_router(account.router, prefix="/api", tags=["Accounts"])
 app.include_router(gst_reports.router, prefix="/api", tags=["GST Reports"])
+app.include_router(notification.router, prefix="/api/notifications", tags=["Notifications"])
+app.include_router(activity_logs.router, prefix="/api/activity-logs", tags=["Activity Logs"])
+app.include_router(calendar.router, prefix="/api/calendar", tags=["Pricing Calendar"])
+app.include_router(legal.router, prefix="/api/legal", tags=["Legal Documents"])
+print(f"[DEBUG] Legal Router Routes:")
+for r in legal.router.routes:
+    print(f"   [DEBUG] {r.path} - Methods: {r.methods}")
 app.include_router(reports_module.router, prefix="/api", tags=["Reports Module"])
 app.include_router(attendance.router, prefix="/api", tags=["Attendance"])
-
-# Notification system re-enabled
-app.include_router(notification.router, prefix="/api", tags=["Notifications"])
-app.include_router(activity_logs.router, prefix="/api", tags=["Activity Logs"])
 
 # Include comprehensive reports router if it was imported successfully
 if comprehensive_reports is not None:
@@ -457,5 +475,5 @@ if __name__ == "__main__":
     import os
 
     # Get port from environment or default to 8012 for Orchid (Avoiding 8011 conflict)
-    port = int(os.getenv("PORT", 8012))
+    port = int(os.getenv("PORT", 8011))
     uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)

@@ -11,8 +11,53 @@ import { getImageUrl } from "../utils/imageUtils";
 import { useBranch } from "../contexts/BranchContext";
 import { jwtDecode } from "jwt-decode";
 import { usePermissions } from "../hooks/usePermissions";
+import { 
+  Wifi, Snowflake, Bath, Tv, Shield, SprayCan, ConciergeBell, Shirt, 
+  Armchair, Sun, DoorOpen, Users, Utensils, Wine, 
+  Mountain, Waves, Leaf, Flame, Car, 
+  Waves as Pool, Thermometer, UserPlus, Dumbbell, Flower2, 
+  PawPrint, Accessibility, Coffee, PlusCircle, History, ChevronDown, CheckCircle2, XCircle, AlertCircle, Trash2
+} from "lucide-react";
 
-// Utility moved to utils/imageUtils.js
+export const COMPREHENSIVE_AMENITIES = [
+  // Essentials
+  { name: 'wifi', label: 'Free WiFi', icon: Wifi, short: 'WiFi', category: 'Essentials' },
+  { name: 'air_conditioning', label: 'Air Conditioning', icon: Snowflake, short: 'AC', category: 'Essentials' },
+  { name: 'bathroom', label: 'Private Bathroom', icon: Bath, short: 'Bathroom', category: 'Essentials' },
+  { name: 'tv', label: 'Flat-screen TV', icon: Tv, short: 'TV', category: 'Essentials' },
+  { name: 'safe_box', label: 'Safe Box', icon: Shield, short: 'Safe', category: 'Essentials' },
+  { name: 'housekeeping', label: 'Daily Housekeeping', icon: SprayCan, short: 'Housekeeping', category: 'Essentials' },
+  { name: 'room_service', label: 'Room Service', icon: ConciergeBell, short: 'Room Svc', category: 'Essentials' },
+  { name: 'laundry_service', label: 'Laundry Service', icon: Shirt, short: 'Laundry', category: 'Essentials' },
+  
+  // Living Space
+  { name: 'living_area', label: 'Living Room', icon: Armchair, short: 'Living Area', category: 'Living Space' },
+  { name: 'terrace', label: 'Terrace', icon: Sun, short: 'Terrace', category: 'Living Space' },
+  { name: 'balcony', label: 'Balcony', icon: DoorOpen, short: 'Balcony', category: 'Living Space' },
+  { name: 'family_room', label: 'Family Room', icon: Users, short: 'Family', category: 'Living Space' },
+  { name: 'kitchen', label: 'Kitchen', icon: Utensils, short: 'Kitchen', category: 'Living Space' },
+  { name: 'dining', label: 'Dining Area', icon: Armchair, short: 'Dining', category: 'Living Space' },
+  { name: 'mini_bar', label: 'Mini Bar', icon: Wine, short: 'Mini Bar', category: 'Living Space' },
+  
+  // Outdoor & Views
+  { name: 'mountain_view', label: 'Mountain View', icon: Mountain, short: 'Mtn View', category: 'Outdoor & Views' },
+  { name: 'ocean_view', label: 'Ocean View', icon: Waves, short: 'Ocean View', category: 'Outdoor & Views' },
+  { name: 'garden', label: 'Garden', icon: Leaf, short: 'Garden', category: 'Outdoor & Views' },
+  { name: 'bbq', label: 'BBQ', icon: Flame, short: 'BBQ', category: 'Outdoor & Views' },
+  { name: 'parking', label: 'Free Parking', icon: Car, short: 'Parking', category: 'Outdoor & Views' },
+  
+  // Premium & Wellness
+  { name: 'private_pool', label: 'Private Pool', icon: Pool, short: 'Pvt Pool', category: 'Premium & Wellness' },
+  { name: 'hot_tub', label: 'Hot Tub', icon: Thermometer, short: 'Hot Tub', category: 'Premium & Wellness' },
+  { name: 'fireplace', label: 'Fireplace', icon: Flame, short: 'Fireplace', category: 'Premium & Wellness' },
+  { name: 'gym_access', label: 'Gym Access', icon: Dumbbell, short: 'Gym', category: 'Premium & Wellness' },
+  { name: 'spa_access', label: 'Spa Access', icon: Flower2, short: 'Spa', category: 'Premium & Wellness' },
+  
+  // Stay Preferences
+  { name: 'pet_friendly', label: 'Pet Friendly', icon: PawPrint, short: 'Pets OK', category: 'Stay Preferences' },
+  { name: 'wheelchair_accessible', label: 'Wheelchair Accessible', icon: Accessibility, short: 'Accessible', category: 'Stay Preferences' },
+  { name: 'breakfast', label: 'Breakfast Service', icon: Coffee, short: 'Breakfast', category: 'Stay Preferences' }
+];
 
 // KPI Card for quick stats
 const KpiCard = ({ title, value, icon, color }) => (
@@ -42,8 +87,8 @@ const BookingModal = ({ onClose, roomNumber, bookings, filter, setFilter, checki
   });
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-2 sm:p-4">
-      <div className="bg-white p-4 sm:p-6 rounded-xl sm:rounded-2xl shadow-lg relative max-w-5xl w-full max-h-[90vh] sm:max-h-[80vh] overflow-hidden">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-start z-50 p-2 sm:p-4 overflow-y-auto">
+      <div className="bg-white p-4 sm:p-6 rounded-xl sm:rounded-2xl shadow-lg relative max-w-5xl w-full my-8">
         <button
           onClick={onClose}
           className="absolute top-2 sm:top-4 right-2 sm:right-4 text-gray-500 hover:text-gray-800 text-2xl font-bold z-10 w-8 h-8 flex items-center justify-center"
@@ -129,7 +174,7 @@ const BookingModal = ({ onClose, roomNumber, bookings, filter, setFilter, checki
           </div>
         ) : (
           <div className="text-center py-8 text-gray-500">
-            <div className="text-4xl mb-4">📅</div>
+            <div className="text-4xl mb-4">(Booking)</div>
             <p className="text-lg font-medium">No {filter !== 'all' ? filter : ''} bookings found for Room {roomNumber}</p>
             <p className="text-sm mt-2">Try changing the filter or this room has no booking history</p>
           </div>
@@ -142,11 +187,12 @@ const BookingModal = ({ onClose, roomNumber, bookings, filter, setFilter, checki
 const RoomImageGallery = ({ room, getImageUrl, setSelectedImage }) => {
   const [currentIndex, setCurrentIndex] = React.useState(0);
   const images = [];
+  
+  // Collect images from the room itself
   if (room.image_url) images.push(room.image_url);
-
   if (room.extra_images) {
     try {
-      const extras = JSON.parse(room.extra_images);
+      const extras = typeof room.extra_images === 'string' ? JSON.parse(room.extra_images) : room.extra_images;
       if (Array.isArray(extras)) {
         extras.forEach(img => {
           if (img && !images.includes(img)) images.push(img);
@@ -155,6 +201,31 @@ const RoomImageGallery = ({ room, getImageUrl, setSelectedImage }) => {
     } catch (e) {
       console.error("Error parsing extra images:", e);
     }
+  }
+
+  // Fallback to room_type images if room has none
+  if (images.length === 0 && room.room_type) {
+    if (room.room_type.image_url) images.push(room.room_type.image_url);
+    if (room.room_type.extra_images) {
+      try {
+        const typeExtras = typeof room.room_type.extra_images === 'string' ? JSON.parse(room.room_type.extra_images) : room.room_type.extra_images;
+        if (Array.isArray(typeExtras)) {
+          typeExtras.forEach(img => {
+            if (img && !images.includes(img)) images.push(img);
+          });
+        }
+      } catch (e) {
+        console.error("Error parsing room_type extra images:", e);
+      }
+    }
+  }
+
+  // Double fallback: if still no images, use room.images if available (some APIs use this)
+  if (images.length === 0 && room.images && Array.isArray(room.images)) {
+    room.images.forEach(img => {
+      const imgPath = typeof img === 'object' ? (img.url || img.path) : img;
+      if (imgPath && !images.includes(imgPath)) images.push(imgPath);
+    });
   }
 
   const nextImg = (e) => {
@@ -171,8 +242,10 @@ const RoomImageGallery = ({ room, getImageUrl, setSelectedImage }) => {
     return (
       <div className="relative h-48 bg-gray-200 flex items-center justify-center text-gray-400">
         <i className="fas fa-image text-3xl"></i>
-        <span className={`absolute top-2 right-2 px-3 py-1 text-xs font-semibold text-white rounded-full ${room.status === 'Available' ? 'bg-green-500' : room.status === 'Booked' ? 'bg-red-500' : 'bg-yellow-500'
-          }`}>{room.status}</span>
+        {room.status && (
+          <span className={`absolute top-2 right-2 px-3 py-1 text-xs font-semibold text-white rounded-full ${room.status === 'Available' ? 'bg-green-500' : room.status === 'Booked' ? 'bg-red-500' : 'bg-yellow-500'
+            }`}>{room.status}</span>
+        )}
       </div>
     );
   }
@@ -221,8 +294,10 @@ const RoomImageGallery = ({ room, getImageUrl, setSelectedImage }) => {
         </>
       )}
 
-      <span className={`absolute top-2 right-2 px-3 py-1 text-xs font-semibold text-white rounded-full ${room.status === 'Available' ? 'bg-green-500' : room.status === 'Booked' ? 'bg-red-500' : 'bg-yellow-500'
-        }`}>{room.status}</span>
+      {room.status && (
+        <span className={`absolute top-2 right-2 px-3 py-1 text-xs font-semibold text-white rounded-full ${room.status === 'Available' ? 'bg-green-500' : room.status === 'Booked' ? 'bg-red-500' : 'bg-yellow-500'
+          }`}>{room.status}</span>
+      )}
     </div>
   );
 };
@@ -250,11 +325,386 @@ const ImageModal = ({ imageUrl, onClose }) => {
   );
 };
 
+// --- NEW COMPONENT: Room Type Modal ---
+const RoomTypeModal = ({ onClose, type, isEditing, onSubmit, branches, isEnterpriseView, branchId, setBranchId }) => {
+  const [formData, setFormData] = useState({
+    name: type?.name || "",
+    base_price: type?.base_price || "",
+    weekend_price: type?.weekend_price || "",
+    long_weekend_price: type?.long_weekend_price || "",
+    holiday_price: type?.holiday_price || "",
+    total_inventory: type?.total_inventory || 0,
+    capacity: type?.adults_capacity || 2,
+    description: type?.description || "",
+    
+    // Amenities dynamically generated
+    ...COMPREHENSIVE_AMENITIES.reduce((acc, curr) => {
+      acc[curr.name] = type?.[curr.name] || false;
+      return acc;
+    }, {}),
+    
+    // Images
+    images: [],
+    existingImages: []
+  });
+
+  const [previewImages, setPreviewImages] = useState([]);
+
+  // Populate existing images on edit
+  useEffect(() => {
+    if (isEditing && type) {
+      const existing = [];
+      if (type.image_url) existing.push(type.image_url);
+      if (type.extra_images) {
+        try {
+          const extras = JSON.parse(type.extra_images);
+          if (Array.isArray(extras)) {
+            extras.forEach(img => { if (img && !existing.includes(img)) existing.push(img); });
+          }
+        } catch(e) {}
+      }
+      setFormData(prev => ({ ...prev, existingImages: existing }));
+      setPreviewImages(existing); // Assuming `getImageUrl` will be mapped during render
+    }
+  }, [isEditing, type]);
+
+  const handleChange = (e) => {
+    const { name, value, type, checked, files } = e.target;
+    if (name === "images") {
+      const selectedFiles = Array.from(files || []);
+      if (selectedFiles.length === 0) return;
+
+      const currentPreviews = [];
+      const readNext = (index) => {
+        if (index >= selectedFiles.length) {
+          setPreviewImages(prev => [...prev, ...currentPreviews]);
+          return;
+        }
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          currentPreviews.push(reader.result);
+          readNext(index + 1);
+        };
+        reader.readAsDataURL(selectedFiles[index]);
+      };
+      readNext(0);
+
+      setFormData(prev => ({ ...prev, images: [...prev.images, ...selectedFiles] }));
+    } else if (type === "checkbox") {
+      setFormData(prev => ({ ...prev, [name]: checked }));
+    } else {
+      setFormData(prev => ({ ...prev, [name]: value }));
+    }
+  };
+
+  const removeImage = (idx) => {
+    const src = previewImages[idx];
+    const isNew = src && src.startsWith('data:');
+
+    if (isNew) {
+      let fileIdx = 0;
+      for (let i = 0; i < idx; i++) {
+        if (previewImages[i] && previewImages[i].startsWith('data:')) fileIdx++;
+      }
+      setFormData(prev => {
+        const updatedImages = [...prev.images];
+        updatedImages.splice(fileIdx, 1);
+        return { ...prev, images: updatedImages };
+      });
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        existingImages: prev.existingImages.filter(url => {
+          // Compare cleanly considering absolute vs relative paths
+          return !url.includes(src.split("/").pop());
+        })
+      }));
+    }
+    setPreviewImages(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleLocalSubmit = (e) => {
+    e.preventDefault();
+    const data = new FormData();
+    data.append("name", formData.name);
+    data.append("base_price", formData.base_price || 0);
+    if (formData.weekend_price) data.append("weekend_price", formData.weekend_price);
+    if (formData.long_weekend_price) data.append("long_weekend_price", formData.long_weekend_price);
+    if (formData.holiday_price) data.append("holiday_price", formData.holiday_price);
+    data.append("total_inventory", formData.total_inventory || 0);
+    data.append("capacity", formData.capacity || 2);
+    if (formData.description) data.append("description", formData.description);
+
+    // Boolean features
+    COMPREHENSIVE_AMENITIES.forEach(feature => {
+      data.append(feature.name, formData[feature.name] ? "true" : "false");
+    });
+    
+    // Images
+    if (formData.images && formData.images.length > 0) {
+      formData.images.forEach(img => {
+        data.append("images", img);
+      });
+    }
+    
+    if (isEditing) {
+      data.append("existing_images", JSON.stringify(formData.existingImages));
+    }
+
+    if (isEnterpriseView && !isEditing) {
+      if (!branchId) return toast.error("Please assign to a branch.");
+      data.append("branch_id", branchId);
+    }
+    
+    onSubmit(data);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-start z-50 p-4 overflow-y-auto">
+      <div className="bg-white p-6 rounded-2xl shadow-2xl relative max-w-4xl w-full my-8 animate-in fade-in zoom-in duration-300">
+        <button onClick={onClose} className="absolute top-4 right-4 text-gray-500 hover:text-gray-800 text-3xl font-bold">&times;</button>
+        <h2 className="text-2xl font-bold mb-6 text-gray-800">{isEditing ? "(Edit) Edit Room Type" : "(New) Add New Room Type"}</h2>
+        
+        <form onSubmit={handleLocalSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="space-y-6">
+              <div className="bg-gradient-to-br from-white to-indigo-50/30 p-5 rounded-2xl border border-indigo-100/50 shadow-sm space-y-5">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-200">
+                    <i className="fas fa-info-circle text-white text-xs"></i>
+                  </div>
+                  <span className="text-sm font-black text-indigo-900 uppercase tracking-wider">General Information</span>
+                </div>
+                
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-[11px] font-black text-indigo-400 uppercase tracking-tighter mb-1.5 ml-1">Type Name <span className="text-red-500">*</span></label>
+                    <div className="relative group">
+                      <i className="fas fa-tag absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-indigo-500 transition-colors"></i>
+                      <input 
+                        name="name" 
+                        value={formData.name} 
+                        onChange={handleChange} 
+                        required 
+                        className="w-full pl-10 pr-4 py-3 border-2 border-gray-100 rounded-2xl focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all font-bold text-gray-800 bg-white/50 focus:bg-white" 
+                        placeholder="e.g. Luxury Garden Villa" 
+                      />
+                    </div>
+                  </div>
+
+                  <div className="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100/50 space-y-4">
+                    <h4 className="text-xs font-black text-indigo-700 uppercase tracking-wider flex items-center gap-2 mb-1"><i className="fas fa-tags"></i> Pricing Tiers</h4>
+                    <div className="grid grid-cols-2 gap-4">
+                      {/* Weekday */}
+                      <div>
+                        <label className="block text-[10px] font-black text-indigo-400 uppercase tracking-tighter mb-1.5 ml-1">Weekday (Base) <span className="text-red-500">*</span></label>
+                        <div className="relative group">
+                          <i className="fas fa-wallet absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-indigo-500 transition-colors"></i>
+                          <input type="number" name="base_price" value={formData.base_price} onChange={handleChange} required className="w-full pl-10 pr-3 py-2.5 border-2 border-gray-100 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all font-black text-indigo-600 bg-white" placeholder="0" />
+                        </div>
+                      </div>
+                      {/* Weekend */}
+                      <div>
+                        <label className="block text-[10px] font-black text-indigo-400 uppercase tracking-tighter mb-1.5 ml-1">Weekend</label>
+                        <div className="relative group">
+                          <i className="fas fa-wallet absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-indigo-500 transition-colors"></i>
+                          <input type="number" name="weekend_price" value={formData.weekend_price} onChange={handleChange} className="w-full pl-10 pr-3 py-2.5 border-2 border-gray-100 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all font-black text-indigo-600 bg-white" placeholder="Optional" />
+                        </div>
+                      </div>
+                      {/* Long Weekend */}
+                      <div>
+                        <label className="block text-[10px] font-black text-indigo-400 uppercase tracking-tighter mb-1.5 ml-1">Long W.E.</label>
+                        <div className="relative group">
+                          <i className="fas fa-wallet absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-indigo-500 transition-colors"></i>
+                          <input type="number" name="long_weekend_price" value={formData.long_weekend_price} onChange={handleChange} className="w-full pl-10 pr-3 py-2.5 border-2 border-gray-100 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all font-black text-indigo-600 bg-white" placeholder="Optional" />
+                        </div>
+                      </div>
+                      {/* Holiday */}
+                      <div>
+                        <label className="block text-[10px] font-black text-indigo-400 uppercase tracking-tighter mb-1.5 ml-1">Holiday</label>
+                        <div className="relative group">
+                          <i className="fas fa-wallet absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-indigo-500 transition-colors"></i>
+                          <input type="number" name="holiday_price" value={formData.holiday_price} onChange={handleChange} className="w-full pl-10 pr-3 py-2.5 border-2 border-gray-100 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all font-black text-indigo-600 bg-white" placeholder="Optional" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[11px] font-black text-indigo-400 uppercase tracking-tighter mb-1.5 ml-1">Adult Capacity <span className="text-red-500">*</span></label>
+                      <div className="relative group">
+                        <i className="fas fa-users absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-indigo-500 transition-colors"></i>
+                        <input 
+                          type="number" 
+                          name="capacity" 
+                          value={formData.capacity} 
+                          onChange={handleChange} 
+                          required 
+                          className="w-full pl-10 pr-4 py-3 border-2 border-gray-100 rounded-2xl focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all font-bold text-gray-800 bg-white/50 focus:bg-white" 
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                     <label className="block text-[11px] font-black text-indigo-400 uppercase tracking-tighter mb-1.5 ml-1">Online Inventory <span className="text-red-500">*</span></label>
+                     <div className="relative group">
+                       <i className="fas fa-hotel absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-indigo-500 transition-colors"></i>
+                       <input 
+                        type="number" 
+                        name="total_inventory" 
+                        value={formData.total_inventory} 
+                        onChange={handleChange} 
+                        required 
+                        className="w-full pl-10 pr-4 py-3 border-2 border-gray-100 rounded-2xl focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all font-bold text-gray-800 bg-white/50 focus:bg-white" 
+                        placeholder="Room count" 
+                       />
+                     </div>
+                     <p className="text-[10px] text-gray-500 mt-2 font-medium flex items-center gap-1">
+                       <i className="fas fa-circle-exclamation text-indigo-400 text-[8px]"></i> Visible on booking engine.
+                     </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+                <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-2">
+                  <i className="fas fa-align-left text-xs"></i> Overview / Description
+                </label>
+                <textarea 
+                  name="description" 
+                  value={formData.description} 
+                  onChange={handleChange} 
+                  className="w-full p-4 border-2 border-gray-50 rounded-2xl focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all min-h-[100px] text-sm text-gray-600 leading-relaxed bg-gray-50/30 focus:bg-white" 
+                  placeholder="Tell us about this room type..."
+                />
+              </div>
+          </div>
+
+          <div className="space-y-6">
+               {/* Multiple Images Upload */}
+                <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+                    <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                      <i className="fas fa-images text-xs"></i> Visual Gallery
+                    </label>
+                    <div className="border-2 border-dashed border-gray-200 rounded-2xl p-6 text-center cursor-pointer hover:bg-indigo-50 hover:border-indigo-300 transition-all relative group">
+                      <input
+                        type="file"
+                        name="images"
+                        multiple
+                        accept="image/*"
+                        onChange={handleChange}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      />
+                      <div className="text-gray-400 group-hover:text-indigo-500 transition-colors">
+                        <i className="fas fa-cloud-upload-alt text-3xl mb-2"></i>
+                        <p className="text-xs font-bold">Drop rooms images here</p>
+                        <p className="text-[10px] opacity-60">Multi-image enabled</p>
+                      </div>
+                    </div>
+                    {previewImages.length > 0 && (
+                      <div className="mt-4 grid grid-cols-3 gap-2">
+                        {previewImages.map((src, idx) => {
+                          const displaySrc = (typeof src === 'string' && src.startsWith('data:')) ? src : getImageUrl(src);
+                          return (
+                          <div key={idx} className="relative group rounded-xl overflow-hidden border border-gray-200 aspect-square shadow-sm">
+                            <img src={displaySrc} alt={`Preview ${idx + 1}`} className="w-full h-full object-cover" />
+                            <button
+                              type="button"
+                              onClick={() => removeImage(idx)}
+                              className="absolute top-1 right-1 bg-red-500 text-white w-5 h-5 rounded-lg flex justify-center items-center opacity-0 group-hover:opacity-100 transition-opacity text-xs"
+                            >
+                              &times;
+                            </button>
+                            {idx === 0 && (
+                                <span className="absolute bottom-1 left-1 bg-indigo-600 text-white text-[8px] px-1.5 py-0.5 rounded-md font-black uppercase tracking-tighter">
+                                  Cover
+                                </span>
+                            )}
+                          </div>
+                        )})}
+                      </div>
+                    )}
+                  </div>
+
+              {isEnterpriseView && !isEditing && (
+                <div className="bg-indigo-600 p-5 rounded-2xl shadow-lg shadow-indigo-100">
+                  <label className="block text-xs font-black text-indigo-100 uppercase tracking-widest mb-2 flex items-center gap-2">
+                    <i className="fas fa-code-branch text-xs"></i> Deployment Branch <span className="text-indigo-300">*</span>
+                  </label>
+                  <select 
+                    value={branchId} 
+                    onChange={(e) => setBranchId(e.target.value)} 
+                    required 
+                    className="w-full p-3 bg-white/10 border border-white/20 rounded-xl text-white font-bold focus:ring-4 focus:ring-white/20 outline-none transition-all"
+                  >
+                    <option value="" className="text-gray-800">-- Choose Target Branch --</option>
+                    {branches.map(b => <option key={b.id} value={b.id} className="text-gray-800">{b.name}</option>)}
+                  </select>
+                </div>
+              )}
+          </div>
+          
+          <div className="bg-gray-50 p-5 rounded-2xl border border-gray-200 md:col-span-2">
+            <label className="block text-sm font-black text-gray-800 mb-5 pb-2 border-b border-gray-200 flex items-center gap-2">
+              <i className="fas fa-list-check text-indigo-600"></i> Amenities & Details
+            </label>
+            <div className="space-y-6">
+              {[...new Set(COMPREHENSIVE_AMENITIES.map(a => a.category))].map(category => (
+                <div key={category} className="space-y-3">
+                  <h4 className="text-xs font-black text-indigo-600 uppercase tracking-widest flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-600"></span>
+                    {category}
+                  </h4>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                    {COMPREHENSIVE_AMENITIES.filter(a => a.category === category).map(amenity => (
+                      <label key={amenity.name} className={`flex items-center space-x-3 cursor-pointer p-2.5 rounded-xl transition-all border ${formData[amenity.name] ? 'bg-indigo-50 border-indigo-200 shadow-sm' : 'hover:bg-white hover:border-gray-300 border-transparent'}`}>
+                        <input
+                          type="checkbox"
+                          name={amenity.name}
+                          checked={formData[amenity.name]}
+                          onChange={handleChange}
+                          className="w-5 h-5 text-indigo-600 border-gray-300 rounded-lg focus:ring-indigo-500 transition-all cursor-pointer"
+                        />
+                        <span className={`text-sm font-bold flex items-center transition-colors ${formData[amenity.name] ? 'text-indigo-700' : 'text-gray-600'}`}>
+                          <amenity.icon className={`w-5 h-5 text-center mr-2 ${formData[amenity.name] ? 'text-indigo-500' : 'text-gray-400'}`} />
+                          {amenity.label}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="md:col-span-2 mt-2 pt-4 border-t flex gap-3">
+            <button type="submit" className="flex-1 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white font-bold py-3 rounded-xl hover:shadow-lg transition-all active:scale-95 shadow shrink-0">
+              {isEditing ? "Save Changes" : "Create Room Type"}
+            </button>
+            <button type="button" onClick={onClose} className="px-8 py-3 border border-gray-300 rounded-xl font-semibold hover:bg-gray-50 transition-colors">
+              Cancel
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
 const Rooms = ({ noLayout = false }) => {
   const [rooms, setRooms] = useState([]);
+  const [roomTypes, setRoomTypes] = useState([]); // New state for room types
+  const [activeTab, setActiveTab] = useState("rooms"); // "rooms" or "types"
+  const [showAddTypeModal, setShowAddTypeModal] = useState(false);
+  const [isEditingType, setIsEditingType] = useState(false);
+  const [editTypeData, setEditTypeData] = useState(null);
+  const [selectedBranchForType, setSelectedBranchForType] = useState("");
+
   const [form, setForm] = useState({
     number: "",
-    type: "",
+    room_type_id: "", // Refactored from 'type'
+    type: "", // Keeping for backward compat in frontend logic until fully switched
     price: "",
     status: "Available",
     adults: 2,
@@ -270,7 +720,6 @@ const Rooms = ({ noLayout = false }) => {
     family_room: false,
     bbq: false,
     garden: false,
-    dining: false,
     dining: false,
     breakfast: false,
     existingImages: [], // Track existing image URLs
@@ -312,7 +761,17 @@ const Rooms = ({ noLayout = false }) => {
 
   useEffect(() => {
     fetchRooms();
+    fetchRoomTypes();
   }, []);
+
+  const fetchRoomTypes = async () => {
+    try {
+      const res = await API.get("/rooms/types");
+      setRoomTypes(res.data || []);
+    } catch (error) {
+      console.error("Error fetching room types:", error);
+    }
+  };
 
   // Cleanup object URLs to prevent memory leaks
   // useEffect(() => {
@@ -381,6 +840,47 @@ const Rooms = ({ noLayout = false }) => {
     } catch (error) {
       console.error("Error fetching bookings:", error);
       toast.error("Failed to fetch bookings.");
+    }
+  };
+
+  const handleRoomTypeSubmit = async (typeData) => {
+    try {
+      if (isEditingType) {
+        await API.put(`/rooms/types/${editTypeData.id}`, typeData);
+        toast.success("Room type updated successfully!");
+      } else {
+        const config = isEnterpriseView && selectedBranchForType
+          ? { headers: { "X-Branch-ID": selectedBranchForType } }
+          : {};
+        await API.post("/rooms/types", typeData, config);
+        toast.success("Room type created successfully!");
+      }
+      setShowAddTypeModal(false);
+      setIsEditingType(false);
+      setEditTypeData(null);
+      fetchRoomTypes();
+    } catch (error) {
+      console.error("Error saving room type:", error);
+      toast.error("Error saving room type. Please try again.");
+    }
+  };
+
+  const handleEditType = (type) => {
+    setEditTypeData(type);
+    setIsEditingType(true);
+    setShowAddTypeModal(true);
+  };
+
+  const handleDeleteType = async (typeId) => {
+    if (window.confirm("Are you sure you want to delete this room type? Rooms associated with it will remain but won't have type metadata.")) {
+      try {
+        await API.delete(`/rooms/types/${typeId}`);
+        toast.success("Room type deleted successfully");
+        fetchRoomTypes();
+      } catch (error) {
+        console.error("Error deleting room type:", error);
+        toast.error("Failed to delete room type.");
+      }
     }
   };
 
@@ -486,6 +986,33 @@ const Rooms = ({ noLayout = false }) => {
 
     } else if (type === "checkbox") {
       setForm((prev) => ({ ...prev, [name]: checked }));
+    } else if (name === "room_type_id") {
+      // Auto-fill price, capacity, branch, and features when room type is selected
+      const selectedType = roomTypes.find(t => t.id === parseInt(value));
+      if (selectedType) {
+        // Automatically sync all available amenities defined in COMPREHENSIVE_AMENITIES
+        const amenities = {};
+        COMPREHENSIVE_AMENITIES.forEach(a => {
+          amenities[a.name] = selectedType[a.name] || false;
+        });
+
+        setForm(prev => ({
+          ...prev,
+          room_type_id: value,
+          type: selectedType.name,
+          price: selectedType.base_price,
+          adults: selectedType.capacity || selectedType.adults_capacity || 2,
+          children: selectedType.children_capacity || 0,
+          ...amenities
+        }));
+        
+        // Auto-select the branch if the room type has an associated branch
+        if (selectedType.branch_id && typeof setSelectedBranchForRoom === 'function') {
+           setSelectedBranchForRoom(selectedType.branch_id);
+        }
+      } else {
+        setForm(prev => ({ ...prev, room_type_id: value }));
+      }
     } else {
       setForm((prev) => ({ ...prev, [name]: value }));
     }
@@ -545,19 +1072,10 @@ const Rooms = ({ noLayout = false }) => {
       formData.append("existing_images", JSON.stringify(form.existingImages));
     }
 
-    // Append feature fields
-    formData.append("air_conditioning", form.air_conditioning);
-    formData.append("wifi", form.wifi);
-    formData.append("bathroom", form.bathroom);
-    formData.append("living_area", form.living_area);
-    formData.append("terrace", form.terrace);
-    formData.append("parking", form.parking);
-    formData.append("kitchen", form.kitchen);
-    formData.append("family_room", form.family_room);
-    formData.append("bbq", form.bbq);
-    formData.append("garden", form.garden);
-    formData.append("dining", form.dining);
-    formData.append("breakfast", form.breakfast);
+    // Append feature fields dynamically
+    COMPREHENSIVE_AMENITIES.forEach(feature => {
+      formData.append(feature.name, form[feature.name] || false);
+    });
 
     // Debug logging
     console.log("Submitting Room Form Data:");
@@ -567,11 +1085,22 @@ const Rooms = ({ noLayout = false }) => {
 
     try {
       if (isEditing) {
+        // Prepare data for update - note we use JSON for simple fields if not uploading files, 
+        // but since we have files, we stick to FormData
+        formData.append("room_type_id", form.room_type_id);
+        
         await API.put(`/rooms/${editRoomId}`, formData);
         setIsEditing(false);
         setEditRoomId(null);
         showBannerMessage("success", "Room updated successfully!");
       } else {
+        // New room creation
+        if (!form.room_type_id) {
+          toast.error("Please select a Room Type.");
+          return;
+        }
+        formData.append("room_type_id", form.room_type_id);
+
         // If in enterprise view, need a specific branch selected
         if (isEnterpriseView && !selectedBranchForRoom) {
           toast.error("Please select a branch to assign this room to.");
@@ -591,24 +1120,18 @@ const Rooms = ({ noLayout = false }) => {
       // Then reset the form
       setForm({
         number: "",
+        room_type_id: "",
         type: "",
         price: "",
         status: "Available",
         adults: 2,
         children: 0,
-        image: null,
-        air_conditioning: false,
-        wifi: false,
-        bathroom: false,
-        living_area: false,
-        terrace: false,
-        parking: false,
-        kitchen: false,
-        family_room: false,
-        bbq: false,
-        garden: false,
-        dining: false,
-        breakfast: false,
+        images: [],
+        existingImages: [],
+        ...COMPREHENSIVE_AMENITIES.reduce((acc, curr) => {
+          acc[curr.name] = false;
+          return acc;
+        }, {})
       })
       setPreviewImages([]);
       setShowAddRoomModal(false); // Close modal after successful submission
@@ -624,24 +1147,17 @@ const Rooms = ({ noLayout = false }) => {
     setEditRoomId(room.id);
     setForm({
       number: room.number,
+      room_type_id: room.room_type_id || "",
       type: room.type,
       price: room.price,
       status: room.status,
       adults: room.adults,
       children: room.children,
       images: [],
-      air_conditioning: room.air_conditioning || false,
-      wifi: room.wifi || false,
-      bathroom: room.bathroom || false,
-      living_area: room.living_area || false,
-      terrace: room.terrace || false,
-      parking: room.parking || false,
-      kitchen: room.kitchen || false,
-      family_room: room.family_room || false,
-      bbq: room.bbq || false,
-      garden: room.garden || false,
-      dining: room.dining || false,
-      breakfast: room.breakfast || false,
+      ...COMPREHENSIVE_AMENITIES.reduce((acc, curr) => {
+        acc[curr.name] = room[curr.name] || false;
+        return acc;
+      }, {}),
       existingImages: (() => {
         const imgs = [];
         if (room.image_url) imgs.push(room.image_url);
@@ -705,68 +1221,285 @@ const Rooms = ({ noLayout = false }) => {
         autoDismiss={true}
         duration={5000}
       />
-      <h1 className="text-xl sm:text-2xl md:text-3xl font-bold mb-4 sm:mb-6 text-gray-800">Room Management</h1>
-
-      {/* KPI Section */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4 md:gap-6 mb-6 sm:mb-8">
-        <KpiCard title="Total Rooms" value={totalRooms} color="bg-gradient-to-r from-blue-500 to-blue-700" icon={<i className="fas fa-door-closed"></i>} />
-        <KpiCard title="Available" value={availableRooms} color="bg-gradient-to-r from-green-500 to-green-700" icon={<i className="fas fa-check-circle"></i>} />
-        <KpiCard title="Occupied" value={occupiedRooms} color="bg-gradient-to-r from-red-500 to-red-700" icon={<i className="fas fa-bed"></i>} />
-        <KpiCard title="Maintenance" value={maintenanceRooms} color="bg-gradient-to-r from-yellow-500 to-yellow-600" icon={<i className="fas fa-tools"></i>} />
-        <KpiCard title="Occupancy Rate" value={`${occupancyRate}%`} color="bg-gradient-to-r from-purple-500 to-purple-700" icon={<i className="fas fa-chart-pie"></i>} />
+      
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-800">
+          Room Management
+        </h1>
+        
+        <div className="flex gap-4">
+          {hasPermission("rooms:create") && (
+            <button
+              onClick={() => {
+                setIsEditing(false);
+                setForm({
+                  number: "",
+                  room_type_id: "",
+                  type: "",
+                  price: "",
+                  status: "Available",
+                  adults: 2,
+                  children: 0,
+                  images: [],
+                  air_conditioning: false,
+                  wifi: false,
+                  bathroom: false,
+                  living_area: false,
+                  terrace: false,
+                  parking: false,
+                  kitchen: false,
+                  family_room: false,
+                  bbq: false,
+                  garden: false,
+                  dining: false,
+                  breakfast: false,
+                  existingImages: [],
+                });
+                setPreviewImages([]);
+                setShowAddRoomModal(true);
+              }}
+              className="bg-indigo-600 text-white font-bold py-2.5 px-5 rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-1 transition-all flex items-center gap-2"
+            >
+              <i className="fas fa-plus-circle"></i> Add Room
+            </button>
+          )}
+          {hasPermission("rooms:create") && (
+            <button
+              onClick={() => {
+                setIsEditingType(false);
+                setEditTypeData(null);
+                setShowAddTypeModal(true);
+              }}
+              className="bg-violet-600 text-white font-bold py-2.5 px-5 rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-1 transition-all flex items-center gap-2"
+            >
+              <i className="fas fa-tags"></i> Add Type
+            </button>
+          )}
+        </div>
       </div>
+          {/* KPI Section */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4 md:gap-6 mb-8">
+            <KpiCard title="Total Rooms" value={totalRooms} color="bg-gradient-to-r from-blue-500 to-blue-700" icon={<i className="fas fa-door-closed"></i>} />
+            <KpiCard title="Available" value={availableRooms} color="bg-gradient-to-r from-green-500 to-green-700" icon={<i className="fas fa-check-circle"></i>} />
+            <KpiCard title="Occupied" value={occupiedRooms} color="bg-gradient-to-r from-red-500 to-red-700" icon={<i className="fas fa-bed"></i>} />
+            <KpiCard title="Maintenance" value={maintenanceRooms} color="bg-gradient-to-r from-yellow-500 to-yellow-600" icon={<i className="fas fa-tools"></i>} />
+            <KpiCard title="Occupancy" value={`${occupancyRate}%`} color="bg-gradient-to-r from-purple-500 to-purple-700" icon={<i className="fas fa-chart-pie"></i>} />
+          </div>
 
+          {/* Rooms Grid */}
+          <div className="bg-white p-4 sm:p-6 md:p-8 rounded-2xl shadow-lg border border-gray-100">
+            <div className="flex flex-col sm:flex-row flex-wrap gap-4 justify-between items-start sm:items-center mb-6">
+              <h2 className="text-xl font-bold text-gray-800">Physical Inventory</h2>
+              <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+                <select onChange={(e) => setFilter(prev => ({ ...prev, type: e.target.value }))} className="p-2.5 text-sm border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none w-full sm:w-auto">
+                  <option value="all">All Types</option>
+                  {roomTypes.map(type => <option key={type.id} value={type.name}>{type.name}</option>)}
+                </select>
+                <select onChange={(e) => setFilter(prev => ({ ...prev, status: e.target.value }))} className="p-2.5 text-sm border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none w-full sm:w-auto">
+                  <option value="all">All Statuses</option>
+                  <option value="Available">Available</option>
+                  <option value="Booked">Booked</option>
+                  <option value="Maintenance">Maintenance</option>
+                </select>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {filteredRooms.map((room) => (
+                <motion.div 
+                  key={room.id} 
+                  className="bg-white rounded-2xl shadow-sm hover:shadow-2xl transition-all duration-500 border border-gray-100 flex flex-col group relative overflow-hidden" 
+                  whileHover={{ y: -10 }}
+                >
+                  <div className="relative">
+                    <RoomImageGallery room={room} getImageUrl={getImageUrl} setSelectedImage={setSelectedImage} />
+                    <div className="absolute top-3 right-3 z-10">
+                      <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter shadow-sm backdrop-blur-md border ${
+                        room.status === 'Available' ? 'bg-emerald-500/90 text-white border-emerald-400' :
+                        room.status === 'Booked' ? 'bg-rose-500/90 text-white border-rose-400' :
+                        'bg-amber-500/90 text-white border-amber-400'
+                      }`}>
+                        {room.status}
+                      </span>
+                    </div>
+                  </div>
 
-      {/* Add Room Button */}
-      {hasPermission("rooms:create") && (
-        <div className="mb-6">
-          <button
-            onClick={() => {
-              setIsEditing(false);
-              setForm({
-                number: "",
-                type: "",
-                price: "",
-                status: "Available",
-                adults: 2,
-                children: 0,
-                images: [],
-                air_conditioning: false,
-                wifi: false,
-                bathroom: false,
-                living_area: false,
-                terrace: false,
-                parking: false,
-                kitchen: false,
-                family_room: false,
-                bbq: false,
-                garden: false,
-                dining: false,
-                breakfast: false,
-                existingImages: [],
-              });
-              setPreviewImages([]);
-              setShowAddRoomModal(true);
-            }}
-            className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white font-semibold py-3 px-6 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 flex items-center gap-2"
+                  <div className="p-5 flex flex-col flex-grow">
+                    <div className="flex justify-between items-start mb-3">
+                      <div>
+                        <h4 className="font-black text-lg text-gray-800 leading-tight">Room {room.number}</h4>
+                        <p className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest mt-0.5">{room.type || 'Standard Type'}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-indigo-600 font-black text-xl leading-none">{formatCurrency(room.price)}</p>
+                        <p className="text-[9px] text-gray-400 font-medium uppercase mt-1">per night</p>
+                      </div>
+                    </div>
+                    
+                    {/* Compact Feature Icons */}
+                    <div className="flex flex-wrap gap-2 mb-5 mt-2 opacity-90 group-hover:opacity-100 transition-opacity">
+                       {COMPREHENSIVE_AMENITIES.map(amenity => {
+                         const isIncluded = room[amenity.name] === true || room[amenity.name] === 1;
+                         if (!isIncluded) return null;
+                         
+                         return (
+                            <div 
+                              key={amenity.name} 
+                              title={amenity.label} 
+                              className="w-10 h-10 rounded-xl bg-indigo-50/70 text-indigo-600 flex items-center justify-center border border-indigo-100/50 hover:bg-indigo-600 hover:text-white hover:scale-110 shadow-sm transition-all duration-300"
+                            >
+                              <amenity.icon className="w-5 h-5" />
+                            </div>
+                         );
+                       })}
+                    </div>
+
+                    <div className="mt-auto space-y-2 pt-4 border-t border-gray-50">
+                      <div className="flex gap-2">
+                        {hasPermission("rooms:edit") && (
+                          <button 
+                            onClick={() => handleEdit(room)} 
+                            className="flex-1 bg-gray-50 text-gray-600 text-[10px] font-black uppercase tracking-widest py-2.5 rounded-xl hover:bg-indigo-600 hover:text-white transition-all transform active:scale-95"
+                          >
+                            Modify
+                          </button>
+                        )}
+                        {hasPermission("bookings:view") && (
+                          <button 
+                            onClick={() => fetchBookings(room.number)} 
+                            className="bg-indigo-50 text-indigo-600 text-[10px] font-black uppercase tracking-widest px-4 py-2.5 rounded-xl hover:bg-indigo-100 transition-all transform active:scale-95"
+                          >
+                            <i className="fas fa-history"></i>
+                          </button>
+                        )}
+                      </div>
+                      
+                      {room.status !== "Booked" && hasPermission("rooms:edit") && (
+                        <div className="relative group/select">
+                          <select
+                            value={room.status}
+                            onChange={(e) => handleStatusChange(room.id, e.target.value)}
+                            className="w-full pl-3 pr-8 py-2 bg-gray-50 border-transparent rounded-xl text-[10px] font-black uppercase tracking-widest text-gray-500 outline-none focus:ring-2 focus:ring-indigo-500/20 appearance-none cursor-pointer hover:bg-gray-100 transition-all"
+                          >
+                            <option value="Available">Set Available</option>
+                            <option value="Maintenance">Set Maintenance</option>
+                          </select>
+                          <i className="fas fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-[8px] text-gray-400 pointer-events-none group-hover/select:text-indigo-500 transition-colors"></i>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+            {filteredRooms.length === 0 && (
+              <div className="text-center py-20 bg-gray-50 rounded-2xl border border-dashed border-gray-300">
+                <i className="fas fa-search text-4xl text-gray-300 mb-4"></i>
+                <p className="text-gray-500 font-medium">No rooms found matching your filters.</p>
+              </div>
+            )}
+          </div>
+          <div className="mt-12 mb-6 flex justify-between items-center">
+            <h2 className="text-2xl font-bold text-gray-800">Room Type Configuration</h2>
+          </div>
+
+          {/* --- ROOM TYPES LIST VIEW --- */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          {roomTypes.map(type => (
+            <motion.div 
+              key={type.id} 
+              className="bg-white rounded-[2rem] shadow-sm border border-gray-100 flex flex-col hover:shadow-2xl transition-all duration-500 group overflow-hidden relative" 
+              whileHover={{ y: -12 }}
+            >
+              <div className="relative aspect-video overflow-hidden">
+                <RoomImageGallery room={type} getImageUrl={getImageUrl} setSelectedImage={setSelectedImage} />
+                <div className="absolute top-4 left-4 z-10 flex gap-2">
+                  <span className="bg-white/90 backdrop-blur-md text-indigo-600 text-[10px] font-black px-3 py-1.5 rounded-full shadow-sm border border-indigo-100 flex items-center gap-1.5 uppercase tracking-tighter">
+                    <i className="fas fa-users text-[8px]"></i> Max Adults: {type.capacity || 2}
+                  </span>
+                </div>
+                <div className="absolute top-4 right-4 z-10">
+                  <span className="bg-indigo-600 text-white text-[10px] font-black px-3 py-1.5 rounded-full shadow-lg shadow-indigo-200 border border-indigo-500 flex items-center gap-1.5 uppercase tracking-tighter">
+                    <i className="fas fa-hotel text-[8px]"></i> {type.total_inventory} Units
+                  </span>
+                </div>
+              </div>
+
+              <div className="p-7 flex flex-col flex-grow">
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <h3 className="text-2xl font-black text-gray-800 leading-none mb-1 group-hover:text-indigo-600 transition-colors uppercase tracking-tight">{type.name}</h3>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] mb-4">Orchid Premium Room Type</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-2xl font-black text-indigo-600 leading-none">{formatCurrency(type.base_price)}</p>
+                    <p className="text-[11px] text-gray-400 font-bold uppercase mt-1.5">per night</p>
+                  </div>
+                </div>
+
+                <div className="mb-6 relative">
+                  <p className="text-xs text-gray-500 line-clamp-3 leading-loose italic border-l-2 border-indigo-100 pl-4 bg-indigo-50/20 py-2 rounded-r-xl">
+                    {type.description || 'Experience ultimate comfort and luxury in our meticulously designed Orchid resort rooms.'}
+                  </p>
+                </div>
+                
+                <div className="mb-8">
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                    <i className="fas fa-star text-amber-400"></i> Core Amenities
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {COMPREHENSIVE_AMENITIES.filter(a => type[a.name]).slice(0, 6).map(amenity => (
+                      <span key={amenity.name} className="w-8 h-8 rounded-xl bg-gray-50 text-gray-500 flex items-center justify-center text-xs border border-gray-100 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-100 transition-all cursor-default" title={amenity.label}>
+                        <amenity.icon className="w-4 h-4" />
+                      </span>
+                    ))}
+                    {COMPREHENSIVE_AMENITIES.filter(a => type[a.name]).length > 6 && (
+                      <span className="h-8 px-2.5 rounded-xl bg-indigo-50 text-indigo-600 text-[10px] font-black flex items-center justify-center border border-indigo-100/50">
+                        +{COMPREHENSIVE_AMENITIES.filter(a => type[a.name]).length - 6} More
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-auto grid grid-cols-5 gap-3 pt-6 border-t border-gray-100">
+                  <button 
+                    onClick={() => handleEditType(type)} 
+                    className="col-span-4 bg-gray-50 text-gray-700 text-[11px] font-black uppercase tracking-widest py-3.5 rounded-2xl hover:bg-indigo-600 hover:text-white transition-all transform active:scale-95 shadow-sm"
+                  >
+                    Configure Type
+                  </button>
+                  <button 
+                    onClick={() => handleDeleteType(type.id)} 
+                    className="col-span-1 bg-rose-50 text-rose-500 text-xs rounded-2xl flex items-center justify-center hover:bg-rose-500 hover:text-white transition-all transform active:scale-95"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          ))}
+          <button 
+            onClick={() => { setIsEditingType(false); setEditTypeData(null); setShowAddTypeModal(true); }}
+            className="border-2 border-dashed border-gray-200 rounded-2xl p-8 flex flex-col items-center justify-center text-gray-400 hover:border-indigo-300 hover:text-indigo-400 transition-all group min-h-[220px]"
           >
-            <i className="fas fa-plus-circle"></i>
-            Add New Room
+            <div className="w-12 h-12 rounded-full border-2 border-dashed border-gray-200 flex items-center justify-center mb-4 group-hover:border-indigo-300 transition-all">
+              <i className="fas fa-plus text-xl"></i>
+            </div>
+            <p className="font-bold">Add Another Room Type</p>
           </button>
         </div>
-      )}
-
 
       {/* Add Room Modal */}
       {showAddRoomModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-2 sm:p-4 overflow-y-auto">
-          <div className="bg-white p-4 sm:p-6 md:p-8 rounded-xl sm:rounded-2xl shadow-2xl relative max-w-4xl w-full my-8 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-start z-50 p-2 sm:p-4 overflow-y-auto animate-in fade-in duration-300">
+          <div className="bg-white p-4 sm:p-6 md:p-8 rounded-2xl shadow-2xl relative max-w-4xl w-full my-8 scale-in-center">
             <button
               onClick={() => {
                 setShowAddRoomModal(false);
                 if (!isEditing) {
                   setForm({
                     number: "",
+                    room_type_id: "",
                     type: "",
                     price: "",
                     status: "Available",
@@ -795,84 +1528,84 @@ const Rooms = ({ noLayout = false }) => {
               &times;
             </button>
 
-            {/* Room Form */}
             <form onSubmit={handleSubmit}>
-              <h2 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 text-gray-800 pr-12">
-                {isEditing ? "Edit Room" : "Add New Room"}
+              <h2 className="text-2xl font-black mb-6 text-gray-800 flex items-center gap-3">
+                {isEditing ? "📝 Edit Physical Room" : "✨ Register New Room Instance"}
               </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Room Number</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 bg-white p-6 rounded-2xl border border-gray-100 shadow-sm mb-6">
+                <div className="md:col-span-1">
+                  <label className="block text-sm font-bold text-gray-700 mb-1.5 flex items-center gap-2">
+                    <i className="fas fa-hashtag text-indigo-400 text-xs"></i> Room Number <span className="text-red-500">*</span>
+                  </label>
                   <input
                     type="text"
                     name="number"
-                    placeholder="e.g., 101"
+                    placeholder="e.g. 101"
                     value={form.number}
                     onChange={handleChange}
-                    className="w-full p-3 rounded-lg border border-gray-300 focus:border-indigo-500 focus:ring focus:ring-indigo-200 transition-all"
+                    className="w-full p-3 border-2 border-gray-50 rounded-xl focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all font-bold text-gray-800"
                     required
                     disabled={isEditing}
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Room Type</label>
-                  <input
-                    type="text"
-                    name="type"
-                    placeholder="e.g., Deluxe"
-                    value={form.type}
+                
+                <div className="md:col-span-1">
+                  <label className="block text-sm font-bold text-gray-700 mb-1.5 flex items-center gap-2">
+                    <i className="fas fa-layer-group text-indigo-400 text-xs"></i> Category / Type <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    name="room_type_id"
+                    value={form.room_type_id}
                     onChange={handleChange}
-                    className="w-full p-3 rounded-lg border border-gray-300 focus:border-indigo-500 focus:ring focus:ring-indigo-200 transition-all"
+                    className={`w-full p-3 border-2 rounded-xl focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all font-semibold ${!form.room_type_id ? 'border-amber-200 bg-amber-50 text-amber-700' : 'border-gray-50 text-gray-800'}`}
                     required
-                  />
+                  >
+                    <option value="">-- Choose Category --</option>
+                    {roomTypes.map(t => (
+                      <option key={t.id} value={t.id}>{t.name} (₹{t.base_price})</option>
+                    ))}
+                  </select>
+                  {!form.room_type_id && <p className="text-[10px] text-amber-600 mt-1.5 font-bold italic flex items-center gap-1">
+                    <i className="fas fa-exclamation-triangle"></i> Select a type to auto-fill pricing & capacity.
+                  </p>}
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Price (₹)</label>
-                  <input
-                    type="number"
-                    name="price"
-                    placeholder="e.g., 5000"
-                    value={form.price}
-                    onChange={handleChange}
-                    className="w-full p-3 rounded-lg border border-gray-300 focus:border-indigo-500 focus:ring focus:ring-indigo-200 transition-all"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Adults Capacity</label>
-                  <input
-                    type="number"
-                    name="adults"
-                    placeholder="e.g., 2"
-                    value={form.adults}
-                    onChange={handleChange}
-                    className="w-full p-3 rounded-lg border border-gray-300 focus:border-indigo-500 focus:ring focus:ring-indigo-200 transition-all"
-                    min="1"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Children Capacity</label>
-                  <input
-                    type="number"
-                    name="children"
-                    placeholder="e.g., 1"
-                    value={form.children}
-                    onChange={handleChange}
-                    className="w-full p-3 rounded-lg border border-gray-300 focus:border-indigo-500 focus:ring focus:ring-indigo-200 transition-all"
-                    min="0"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+
+                <div className="md:col-span-1">
+                  <label className="block text-sm font-bold text-gray-700 mb-1.5 flex items-center gap-2">
+                    <i className="fas fa-signal text-indigo-400 text-xs"></i> Live Status
+                  </label>
                   <select
                     name="status"
                     value={form.status}
                     onChange={handleChange}
-                    className="w-full p-3 rounded-lg border border-gray-300 focus:border-indigo-500 focus:ring focus:ring-indigo-200 transition-all"
+                    className="w-full p-3 border-2 border-gray-50 rounded-xl focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all font-semibold"
                   >
                     <option>Available</option>
                     <option>Maintenance</option>
                   </select>
+                </div>
+
+                <div className="grid grid-cols-3 gap-4 md:col-span-3 pt-2">
+                  <div className="bg-indigo-50/50 p-3 rounded-2xl border border-indigo-100/50">
+                    <label className="block text-[10px] font-black text-indigo-400 uppercase tracking-tighter mb-1">Base Price</label>
+                    <p className="text-lg font-black text-indigo-600 flex items-center gap-1">
+                      <span className="text-sm">₹</span>{form.price || '0'}
+                    </p>
+                  </div>
+
+                  <div className="bg-emerald-50/50 p-3 rounded-2xl border border-emerald-100/50">
+                    <label className="block text-[10px] font-black text-emerald-400 uppercase tracking-tighter mb-1">Adults</label>
+                    <p className="text-lg font-black text-emerald-600 flex items-center gap-1">
+                      <i className="fas fa-user-friends text-sm"></i>{form.adults || '0'}
+                    </p>
+                  </div>
+
+                  <div className="bg-sky-50/50 p-3 rounded-2xl border border-sky-100/50">
+                    <label className="block text-[10px] font-black text-sky-400 uppercase tracking-tighter mb-1">Children</label>
+                    <p className="text-lg font-black text-sky-600 flex items-center gap-1">
+                      <i className="fas fa-child text-sm"></i>{form.children || '0'}
+                    </p>
+                  </div>
                 </div>
               </div>
 
@@ -952,130 +1685,44 @@ const Rooms = ({ noLayout = false }) => {
                 )}
               </div>
 
-              {/* Room Features Section */}
+              {/* Room Perks Preview (Read-only, derived from selected Room Type) */}
               <div className="md:col-span-2 lg:col-span-3">
-                <label className="block text-sm font-medium text-gray-700 mb-3">Room Features & Amenities</label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                  <label className="flex items-center space-x-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      name="air_conditioning"
-                      checked={form.air_conditioning}
-                      onChange={handleChange}
-                      className="w-5 h-5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
-                    />
-                    <span className="text-sm text-gray-700">Air Conditioning</span>
-                  </label>
-                  <label className="flex items-center space-x-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      name="wifi"
-                      checked={form.wifi}
-                      onChange={handleChange}
-                      className="w-5 h-5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
-                    />
-                    <span className="text-sm text-gray-700">Free Wifi</span>
-                  </label>
-                  <label className="flex items-center space-x-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      name="bathroom"
-                      checked={form.bathroom}
-                      onChange={handleChange}
-                      className="w-5 h-5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
-                    />
-                    <span className="text-sm text-gray-700">Private Bathroom</span>
-                  </label>
-                  <label className="flex items-center space-x-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      name="living_area"
-                      checked={form.living_area}
-                      onChange={handleChange}
-                      className="w-5 h-5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
-                    />
-                    <span className="text-sm text-gray-700">Living Room</span>
-                  </label>
-                  <label className="flex items-center space-x-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      name="terrace"
-                      checked={form.terrace}
-                      onChange={handleChange}
-                      className="w-5 h-5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
-                    />
-                    <span className="text-sm text-gray-700">Terrace</span>
-                  </label>
-                  <label className="flex items-center space-x-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      name="parking"
-                      checked={form.parking}
-                      onChange={handleChange}
-                      className="w-5 h-5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
-                    />
-                    <span className="text-sm text-gray-700">Free Parking</span>
-                  </label>
-                  <label className="flex items-center space-x-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      name="kitchen"
-                      checked={form.kitchen}
-                      onChange={handleChange}
-                      className="w-5 h-5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
-                    />
-                    <span className="text-sm text-gray-700">Kitchen</span>
-                  </label>
-                  <label className="flex items-center space-x-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      name="family_room"
-                      checked={form.family_room}
-                      onChange={handleChange}
-                      className="w-5 h-5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
-                    />
-                    <span className="text-sm text-gray-700">Family Room</span>
-                  </label>
-                  <label className="flex items-center space-x-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      name="bbq"
-                      checked={form.bbq}
-                      onChange={handleChange}
-                      className="w-5 h-5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
-                    />
-                    <span className="text-sm text-gray-700">BBQ</span>
-                  </label>
-                  <label className="flex items-center space-x-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      name="garden"
-                      checked={form.garden}
-                      onChange={handleChange}
-                      className="w-5 h-5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
-                    />
-                    <span className="text-sm text-gray-700">Garden</span>
-                  </label>
-                  <label className="flex items-center space-x-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      name="dining"
-                      checked={form.dining}
-                      onChange={handleChange}
-                      className="w-5 h-5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
-                    />
-                    <span className="text-sm text-gray-700">Dining Area</span>
-                  </label>
-                  <label className="flex items-center space-x-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      name="breakfast"
-                      checked={form.breakfast}
-                      onChange={handleChange}
-                      className="w-5 h-5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
-                    />
-                    <span className="text-sm text-gray-700">Breakfast</span>
-                  </label>
+                <label className="block text-sm font-black text-gray-800 mb-5 pb-2 border-b border-gray-200 flex items-center gap-2">
+                  <i className="fas fa-sparkles text-indigo-600"></i> Room Type Inclusions
+                </label>
+                <div className="bg-gray-50 p-6 rounded-2xl border border-gray-200">
+                  {!form.room_type_id ? (
+                    <div className="text-center py-6">
+                      <i className="fas fa-info-circle text-gray-300 text-3xl mb-2"></i>
+                      <p className="text-sm text-gray-400 font-bold italic">Select a Room Type above to see included amenities</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                      {COMPREHENSIVE_AMENITIES.map(amenity => {
+                        // Find the selected room type to check its amenities
+                        const selectedType = roomTypes.find(t => t.id === parseInt(form.room_type_id));
+                        const isIncluded = selectedType ? selectedType[amenity.name] : false;
+                        
+                        if (!isIncluded) return null;
+                        
+                        return (
+                          <div key={amenity.name} className="flex items-center gap-2 bg-white px-3 py-2 rounded-xl border border-indigo-100 shadow-sm transition-all hover:scale-105">
+                            <amenity.icon className="w-3.5 h-3.5 text-indigo-500" />
+                            <span className="text-[10px] font-black text-indigo-700 uppercase tracking-tighter">{amenity.label}</span>
+                          </div>
+                        );
+                      })}
+                      {/* If no amenities are found for this type */}
+                      {(() => {
+                        const selectedType = roomTypes.find(t => t.id === parseInt(form.room_type_id));
+                        const hasAny = selectedType && COMPREHENSIVE_AMENITIES.some(a => selectedType[a.name]);
+                        if (!hasAny && selectedType) {
+                          return <p className="col-span-full text-center text-xs text-gray-400 italic py-2">No specific amenities listed for this type.</p>
+                        }
+                        return null;
+                      })()}
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="md:col-span-2 lg:col-span-3 flex items-center gap-4">
@@ -1258,6 +1905,24 @@ const Rooms = ({ noLayout = false }) => {
           />
         )
       }
+
+      {/* --- NEW: ROOM TYPE MODAL --- */}
+      {showAddTypeModal && (
+        <RoomTypeModal
+          onClose={() => {
+            setShowAddTypeModal(false);
+            setIsEditingType(false);
+            setEditTypeData(null);
+          }}
+          type={editTypeData}
+          isEditing={isEditingType}
+          onSubmit={handleRoomTypeSubmit}
+          branches={branches}
+          isEnterpriseView={isEnterpriseView}
+          branchId={selectedBranchForType}
+          setBranchId={setSelectedBranchForType}
+        />
+      )}
     </>
   );
 

@@ -88,6 +88,9 @@ class WorkingLog(Base):
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
     completed_tasks = Column(String, nullable=True) # newly added JSON array string for tracked task completion
+    is_tasks_approved = Column(Integer, default=0) # 0: Pending, 1: Approved, 2: Rejected (using Integer for more states if needed)
+    tasks_approved_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    tasks_approved_at = Column(DateTime, nullable=True)
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False, index=True, server_default="1")
     
     branch = relationship("Branch")

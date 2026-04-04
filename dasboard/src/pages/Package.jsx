@@ -67,7 +67,7 @@ const Packages = ({ noLayout = false }) => {
     try {
       const results = await Promise.allSettled([
         api.get(`/packages/?_t=${Date.now()}`),
-        api.get("/rooms/"),
+        api.get("/rooms/types"),
         api.get("/packages/bookingsall"),
         foodService.getAllFoodItems()
       ]);
@@ -429,7 +429,7 @@ const Packages = ({ noLayout = false }) => {
           <div className="md:col-span-2">
             <label className="block text-sm font-medium text-gray-700 mb-1">Select Room Types *</label>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-2 p-3 bg-gray-50 rounded-lg border">
-              {Array.from(new Set(allRooms.map(r => r.type))).map(type => (
+              {Array.from(new Set(allRooms.filter(r => r.name).map(r => r.name))).map(type => (
                 <label key={type} className="flex items-center space-x-2">
                   <input type="checkbox" checked={formData.selected_room_types.includes(type)} onChange={(e) => {
                     const newTypes = e.target.checked ? [...formData.selected_room_types, type] : formData.selected_room_types.filter(t => t !== type);

@@ -2,7 +2,7 @@ from sqlalchemy import Column, Float, Integer, String, ForeignKey, Date, DateTim
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.database import Base
-from .room import Room
+from .room import Room, RoomType
 from .user import User
 
 class Booking(Base):
@@ -27,8 +27,11 @@ class Booking(Base):
     advance_deposit = Column(Float, default=0.0)  # Advance payment made during booking
     created_at = Column(DateTime, default=datetime.utcnow) # Added
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False, index=True, server_default="1")
+    room_type_id = Column(Integer, ForeignKey("room_types.id"), nullable=True) # Selected Room Type
+    external_id = Column(String, nullable=True) # OTA/CM ID
     
     branch = relationship("Branch")
+    room_type = relationship("RoomType")
 
     
     # New Fields

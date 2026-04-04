@@ -572,6 +572,8 @@ def _list_packages_impl(db: Session, skip: int = 0, limit: int = 20, status: str
         # Eager-load images relationship to include them in the response
         query = db.query(Package).options(joinedload(Package.images))
         
+        # If branch_id is None, it means Enterprise View (all branches)
+        # We only apply branch filtering if a specific branch_id is provided
         if branch_id is not None:
             # Show branch-specific packages PLUS global packages (NULL branch_id)
             query = query.filter(or_(Package.branch_id == branch_id, Package.branch_id == None))
@@ -839,7 +841,8 @@ def check_in_package_booking(
     booking_id: Union[str, int],
     id_card_image: UploadFile = File(...),
     guest_photo: UploadFile = File(...),
-    amenityAllocation: str = Form(None),
+    room_ids: Optional[str] = Form(None),
+    amenityAllocation: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -849,7 +852,7 @@ def check_in_package_booking(
         raise HTTPException(status_code=400, detail=f"Invalid booking ID format: {booking_id}")
     booking_id = numeric_id
     
-    success, result = crud_package.check_in_package(db, booking_id, id_card_image, guest_photo, amenityAllocation)
+    success, result = crud_package.check_in_package(db, booking_id, id_card_image, guest_photo, room_ids, amenityAllocation)
     if not success:
         raise HTTPException(status_code=400, detail=result)
     return result

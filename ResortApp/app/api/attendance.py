@@ -35,6 +35,9 @@ class WorkingLogRecord(BaseModel):
     longitude: Optional[float] = None
     duration_hours: Optional[float] = None
     completed_tasks: Optional[str] = None
+    is_tasks_approved: int = 0
+    tasks_approved_by_id: Optional[int] = None
+    tasks_approved_at: Optional[datetime] = None
     class Config: from_attributes = True
 
 class TasksUpdate(BaseModel):
@@ -108,13 +111,20 @@ def mark_attendance(record: AttendanceCreate, db: Session = Depends(get_db), cur
 
 @router.post("/log-work", response_model=WorkingLogRecord)
 def log_working_hours(log: WorkingLogCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user), branch_id: int = Depends(get_branch_id)):
+    # Restrict to admins/managers
+    if current_user.role.name.lower() not in ['super_admin', 'admin', 'manager']:
+        raise HTTPException(status_code=403, detail="Only admins or managers can log work hours manually.")
+
     data = log.model_dump()
     data['branch_id'] = branch_id
     db_log = WorkingLog(**data)
     db.add(db_log)
     db.commit()
     db.refresh(db_log)
-    return db_log
+    
+    log_data = WorkingLogRecord.model_validate(db_log)
+    log_data.duration_hours = _calculate_duration(db_log.date, db_log.check_in_time, db_log.check_out_time)
+    return log_data
 
 @router.post("/clock-in", response_model=WorkingLogRecord)
 def clock_in(clock_in_data: ClockInCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user), branch_id: int = Depends(get_branch_id)):
@@ -273,6 +283,28 @@ def update_completed_tasks(log_id: int, tasks_update: TasksUpdate, db: Session =
     log_data = WorkingLogRecord.model_validate(log)
     log_data.duration_hours = _calculate_duration(log.date, log.check_in_time, log.check_out_time)
     
+    return log_data
+
+@router.post("/work-logs/{log_id}/approve", response_model=WorkingLogRecord)
+def approve_working_log_tasks(log_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    # Restrict to admins/managers (handle all common role name formats)
+    _role = current_user.role.name.lower().replace(' ', '_').replace('-', '_')
+    if _role not in ['super_admin', 'superadmin', 'admin', 'manager']:
+        raise HTTPException(status_code=403, detail="Only admins or managers can approve tasks.")
+        
+    log = db.query(WorkingLog).filter(WorkingLog.id == log_id).first()
+    if not log:
+        raise HTTPException(status_code=404, detail="Working log not found")
+        
+    log.is_tasks_approved = 1 # Approved
+    log.tasks_approved_by_id = current_user.id
+    log.tasks_approved_at = datetime.now(pytz.timezone('Asia/Kolkata'))
+    
+    db.commit()
+    db.refresh(log)
+    
+    log_data = WorkingLogRecord.model_validate(log)
+    log_data.duration_hours = _calculate_duration(log.date, log.check_in_time, log.check_out_time)
     return log_data
 
 @router.get("/monthly-report/{employee_id}", response_model=MonthlyReport)

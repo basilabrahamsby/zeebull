@@ -1909,6 +1909,20 @@ const Inventory = () => {
       const res = await API.post("/inventory/purchases", purchaseData);
       setPurchases(prev => [res.data, ...prev]);
 
+      // Upload bill if a file was selected (optional)
+      if (purchaseForm.bill_file) {
+        try {
+          const billFormData = new FormData();
+          billFormData.append("file", purchaseForm.bill_file);
+          await API.post(`/inventory/purchases/${res.data.id}/upload-bill`, billFormData, {
+            headers: { "Content-Type": "multipart/form-data" }
+          });
+        } catch (billError) {
+          console.warn("Bill upload failed (PO still created):", billError);
+          addNotification({ title: "Warning", message: "Purchase Order created, but bill upload failed.", type: "warning" });
+        }
+      }
+
       setPurchaseForm({
         purchase_number: "",
         vendor_id: "",
@@ -1921,6 +1935,7 @@ const Inventory = () => {
         payment_status: "pending",
         notes: "",
         status: "draft",
+        bill_file: null,
         details: [
           {
             item_id: "",
@@ -6943,6 +6958,36 @@ function PurchaseFormModal({
                   ))}
               </select>
             </div>
+
+          {/* Invoice Number + Bill Upload row */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50 px-4 pb-4 rounded-xl border border-gray-100 -mt-2">
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-1">
+                Invoice Number <span className="text-gray-400 font-normal">(optional)</span>
+              </label>
+              <input
+                type="text"
+                value={form.invoice_number || ""}
+                onChange={(e) => setForm({ ...form, invoice_number: e.target.value })}
+                placeholder="e.g. INV-2024-001"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-1">
+                Purchase Bill / Invoice <span className="text-gray-400 font-normal">(optional — PDF or image)</span>
+              </label>
+              <input
+                type="file"
+                accept=".pdf,.jpg,.jpeg,.png"
+                onChange={(e) => setForm({ ...form, bill_file: e.target.files[0] || null })}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-white text-sm text-gray-600 file:mr-3 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 cursor-pointer"
+              />
+              {form.bill_file && (
+                <p className="text-xs text-indigo-600 mt-1 font-medium">📎 {form.bill_file.name}</p>
+              )}
+            </div>
+          </div>
           </div>
 
           <div className="border-t pt-4">
@@ -7537,6 +7582,19 @@ function PurchaseDetailsModal({ purchase, onClose, onUpdate }) {
                 </label>
                 <p className="text-sm text-gray-900 mt-1">
                   {purchase.invoice_number}
+                </p>
+              </div>
+            )}
+            {purchase.bill_file_url && (
+              <div>
+                <label className="text-xs font-medium text-gray-500">
+                  Purchase Bill
+                </label>
+                <p className="text-sm text-gray-900 mt-1">
+                  <a href={`http://localhost:8011/${purchase.bill_file_url}`} target="_blank" rel="noreferrer" className="text-indigo-600 hover:text-indigo-800 flex items-center gap-1 font-medium">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
+                    View Bill
+                  </a>
                 </p>
               </div>
             )}

@@ -643,10 +643,13 @@ const LeaveManagement = () => {
 };
 
 const AttendanceTracking = () => {
+  const { role: userRole, isSuperadmin } = usePermissions();
+  const isAdminOrManager = isSuperadmin || ['super_admin', 'superadmin', 'admin', 'manager'].includes(userRole);
   const [employees, setEmployees] = useState([]);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
   const [workLogs, setWorkLogs] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [showManualEntryModal, setShowManualEntryModal] = useState(false);
   const [message, setMessage] = useState({ text: '', type: '' });
   const [bannerMessage, setBannerMessage] = useState({ type: null, text: "" });
 
@@ -772,6 +775,29 @@ const AttendanceTracking = () => {
     }
   };
 
+  const handleApproveTasks = async (logId) => {
+    try {
+      const res = await api.post(`/attendance/work-logs/${logId}/approve`);
+      setWorkLogs(prevLogs => prevLogs.map(log => log.id === logId ? res.data : log));
+      showMessage("Tasks approved successfully.", "success");
+    } catch (err) {
+      console.error("Failed to approve tasks", err);
+      showMessage(err.response?.data?.detail || "Failed to approve tasks.", "error");
+    }
+  };
+
+  const handleManualEntry = async (formData) => {
+    try {
+      const response = await api.post('/attendance/log-work', formData);
+      setWorkLogs([response.data, ...workLogs].sort((a, b) => new Date(b.date) - new Date(a.date)));
+      showMessage("Manual attendance recorded successfully.", "success");
+      setShowManualEntryModal(false);
+    } catch (err) {
+      console.error("Failed to record manual attendance", err);
+      showMessage(err.response?.data?.detail || "Failed to record manual attendance.", "error");
+    }
+  };
+
   const dailyAttendance = useMemo(() => {
     const dailySummary = workLogs.reduce((acc, log) => {
       const date = log.date;
@@ -881,6 +907,15 @@ const AttendanceTracking = () => {
               <button onClick={handleClockIn} className="flex-1 bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700">Clock In</button>
               <button onClick={handleClockOut} className="flex-1 bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700">Clock Out</button>
             </div>
+            
+            {isAdminOrManager && (
+              <button 
+                onClick={() => setShowManualEntryModal(true)} 
+                className="w-full mt-2 bg-indigo-50 text-indigo-700 border border-indigo-200 px-4 py-2 rounded-md hover:bg-indigo-100 flex items-center justify-center gap-2 font-semibold transition-colors"
+              >
+                <Plus size={16} /> Manual Attendance Entry
+              </button>
+            )}
 
             {/* Daily Tasks Checklist for Active Session */}
             {(() => {
@@ -1093,14 +1128,36 @@ const AttendanceTracking = () => {
                                                   if (tasksList.length === 0) return <span className="text-gray-400">-</span>;
                                                   return (
                                                     <div className="flex flex-col gap-1">
-                                                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-800 w-fit">
-                                                        {tasksList.length} task(s)
-                                                      </span>
+                                                      <div className="flex items-center gap-2">
+                                                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-800 w-fit">
+                                                          {tasksList.length} task(s)
+                                                        </span>
+                                                        {log.is_tasks_approved === 1 ? (
+                                                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700">
+                                                            <ShieldCheck size={10} className="mr-1" /> Approved
+                                                          </span>
+                                                        ) : (
+                                                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-yellow-100 text-yellow-700">
+                                                            Pending Approval
+                                                          </span>
+                                                        )}
+                                                      </div>
                                                       <ul className="list-disc pl-4 mt-1 text-[11px] text-gray-600 space-y-0.5">
                                                         {tasksList.map((t, tidx) => (
                                                           <li key={tidx}>{t}</li>
                                                         ))}
                                                       </ul>
+                                                      {log.is_tasks_approved !== 1 && isAdminOrManager && (
+                                                        <button 
+                                                          onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleApproveTasks(log.id);
+                                                          }}
+                                                          className="mt-2 text-[10px] font-bold text-indigo-600 hover:text-indigo-800 underline flex items-center gap-1"
+                                                        >
+                                                          <CheckSquare size={12} /> Approve Tasks
+                                                        </button>
+                                                      )}
                                                     </div>
                                                   );
                                                 })()}
@@ -1142,6 +1199,132 @@ const AttendanceTracking = () => {
           </div>
         </div>
       )}
+      {showManualEntryModal && (
+        <ManualAttendanceModal 
+          employees={employees}
+          onClose={() => setShowManualEntryModal(false)}
+          onSubmit={handleManualEntry}
+        />
+      )}
+    </div>
+  );
+};
+
+const ManualAttendanceModal = ({ employees, onClose, onSubmit }) => {
+  const [formData, setFormData] = useState({
+    employee_id: '',
+    date: new Date().toISOString().split('T')[0],
+    check_in_time: '09:00:00',
+    check_out_time: '18:00:00',
+    location: 'Office'
+  });
+
+  const handleChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden border border-gray-100"
+      >
+        <div className="bg-indigo-600 p-5 text-white flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-black leading-tight">Manual Entry</h3>
+            <p className="text-[10px] text-indigo-100 font-bold uppercase tracking-widest mt-0.5">Admin Override</p>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-white/20 rounded-full transition-colors">
+            <Plus size={20} className="rotate-45" />
+          </button>
+        </div>
+        
+        <form onSubmit={(e) => { e.preventDefault(); onSubmit(formData); }} className="p-5 space-y-4">
+          <div className="space-y-1">
+            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Employee</label>
+            <select 
+              name="employee_id" 
+              value={formData.employee_id} 
+              onChange={handleChange} 
+              className="w-full bg-gray-50 border-gray-200 rounded-xl p-3 text-sm font-bold focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer"
+              required
+            >
+              <option value="">-- Select --</option>
+              {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
+            </select>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Date</label>
+            <input 
+              type="date" 
+              name="date" 
+              value={formData.date} 
+              onChange={handleChange} 
+              className="w-full bg-gray-50 border-gray-200 rounded-xl p-3 text-sm font-bold focus:ring-2 focus:ring-indigo-500 transition-all"
+              required 
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Check-in</label>
+              <input 
+                type="time" 
+                step="1"
+                name="check_in_time" 
+                value={formData.check_in_time} 
+                onChange={handleChange} 
+                className="w-full bg-gray-50 border-gray-200 rounded-xl p-3 text-sm font-bold focus:ring-2 focus:ring-indigo-500 transition-all"
+                required 
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Check-out</label>
+              <input 
+                type="time" 
+                step="1"
+                name="check_out_time" 
+                value={formData.check_out_time} 
+                onChange={handleChange} 
+                className="w-full bg-gray-50 border-gray-200 rounded-xl p-3 text-sm font-bold focus:ring-2 focus:ring-indigo-500 transition-all"
+                required 
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Location</label>
+            <select 
+              name="location" 
+              value={formData.location} 
+              onChange={handleChange} 
+              className="w-full bg-gray-50 border-gray-200 rounded-xl p-3 text-sm font-bold focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer"
+            >
+              <option>Office</option>
+              <option>Remote</option>
+              <option>On-Site</option>
+            </select>
+          </div>
+
+          <div className="pt-2 flex gap-3">
+            <button 
+              type="button" 
+              onClick={onClose}
+              className="flex-1 py-3 bg-gray-100 text-gray-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-200 transition-all"
+            >
+              Cancel
+            </button>
+            <button 
+              type="submit" 
+              className="flex-1 py-3 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95"
+            >
+              Save Record
+            </button>
+          </div>
+        </form>
+      </motion.div>
     </div>
   );
 };

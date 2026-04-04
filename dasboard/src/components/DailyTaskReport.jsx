@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
-import { Calendar as CalendarIcon, CheckSquare, XSquare, Clock } from 'lucide-react';
+import { Calendar as CalendarIcon, CheckSquare, XSquare, Clock, ShieldCheck } from 'lucide-react';
 import { formatDateIST } from '../utils/dateUtils';
-import Calendar from 'react-calendar';
+import { usePermissions } from '../hooks/usePermissions';
 
 const DailyTaskReport = () => {
     const [date, setDate] = useState(new Date());
     const [reports, setReports] = useState([]);
     const [loading, setLoading] = useState(false);
     const [employees, setEmployees] = useState([]);
+    const { role: userRole, isSuperadmin } = usePermissions();
+    const isAdminOrManager = isSuperadmin || ['super_admin', 'superadmin', 'admin', 'manager'].includes(userRole);
 
     useEffect(() => {
         // Fetch employees once
@@ -25,21 +27,17 @@ const DailyTaskReport = () => {
         if (!employees || employees.length === 0) return;
         setLoading(true);
 
-        // Format date string for the API (YYYY-MM-DD local timezone)
         const year = date.getFullYear();
         const month = String(date.getMonth() + 1).padStart(2, '0');
         const day = String(date.getDate()).padStart(2, '0');
         const dateStr = `${year}-${month}-${day}`;
 
         try {
-            // First get all work logs for the date
             const res = await api.get(`/attendance/work-logs/date/${dateStr}`, {
                 headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
             });
             const workLogs = res.data || [];
 
-            // Map logs to employees to generate reports
-            // Create a map from employee_id -> their logs for the day
             const logsByEmployee = {};
             workLogs.forEach(log => {
                 if (!logsByEmployee[log.employee_id]) {
@@ -49,18 +47,11 @@ const DailyTaskReport = () => {
             });
 
             const generatedReports = employees.map(emp => {
-                // Find employee data
                 let assignedTasks = [];
                 try { assignedTasks = emp.daily_tasks ? JSON.parse(emp.daily_tasks) : []; } catch { }
                 if (!Array.isArray(assignedTasks)) assignedTasks = emp.daily_tasks ? [emp.daily_tasks] : [];
 
-                // Find work logs
-                // Find work logs (use actual id from the backend which matches employee_id in WorkingLog)
-                let actualEmployeeId = emp.id;
-                // Wait, if /employees returns employee model, it has id.
-                // If it returns user model with employee_id, we need to adapt.
-                // Employee API returns elements with `id` (which is employee_id).
-                const myLogs = logsByEmployee[actualEmployeeId] || [];
+                const myLogs = logsByEmployee[emp.id] || [];
 
                 let allCompletedTasks = [];
                 myLogs.forEach(log => {
@@ -70,7 +61,6 @@ const DailyTaskReport = () => {
                     } catch { }
                 });
 
-                // Remove duplicates
                 allCompletedTasks = [...new Set(allCompletedTasks)];
 
                 return {
@@ -84,7 +74,6 @@ const DailyTaskReport = () => {
                 };
             });
 
-            // Filter to only show employees that have tasks, or employees who logged in
             const relevantReports = generatedReports.filter(report =>
                 report.assignedTasks.length > 0 || report.myLogs.length > 0
             );
@@ -94,6 +83,20 @@ const DailyTaskReport = () => {
             console.error("Error fetching daily tasks:", err);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleApproveTasks = async (logId) => {
+        try {
+            const res = await api.post(`/attendance/work-logs/${logId}/approve`);
+            // Update the specific log's approval status in reports
+            setReports(prevReports => prevReports.map(report => ({
+                ...report,
+                myLogs: report.myLogs.map(log => log.id === logId ? res.data : log)
+            })));
+        } catch (err) {
+            console.error("Failed to approve tasks:", err);
+            alert(err.response?.data?.detail || "Failed to approve tasks.");
         }
     };
 
@@ -120,7 +123,7 @@ const DailyTaskReport = () => {
                         onChange={(e) => {
                             if (e.target.value) {
                                 const newDate = new Date(e.target.value);
-                                newDate.setHours(0, 0, 0, 0); // avoid timezone shifts
+                                newDate.setHours(0, 0, 0, 0);
                                 setDate(newDate);
                             }
                         }}
@@ -143,108 +146,147 @@ const DailyTaskReport = () => {
                 </div>
             ) : (
                 <div className="space-y-6">
-                    {reports.map((report, idx) => (
-                        <div key={idx} className="border border-gray-200 rounded-xl overflow-hidden hover:shadow-md transition-shadow bg-white">
-                            <div className="bg-gray-50 p-4 border-b border-gray-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                                <div className="flex items-center gap-4">
-                                    <div className="w-12 h-12 rounded-full overflow-hidden bg-white border border-gray-200 shadow-sm flex items-center justify-center text-gray-400 font-bold text-lg">
-                                        {report.employee.image_url && typeof report.employee.image_url === 'string' ? (
-                                            <img src={report.employee.image_url.startsWith('http') ? report.employee.image_url : `http://localhost:8000/${report.employee.image_url.replace(/^\//, '')}`} alt="avatar" className="w-full h-full object-cover" />
-                                        ) : (
-                                            (report.employee.name || 'E').charAt(0).toUpperCase()
-                                        )}
-                                    </div>
-                                    <div>
-                                        <h3 className="text-lg font-bold text-gray-800">{report.employee.name}</h3>
-                                        <p className="text-sm text-gray-500 font-medium capitalize">{report.employee.role || 'Employee'}</p>
-                                    </div>
-                                </div>
+                    {reports.map((report, idx) => {
+                        // Check if any log for this employee has tasks that need approval
+                        const logsWithPendingTasks = report.myLogs.filter(log => {
+                            try {
+                                const tasks = JSON.parse(log.completed_tasks || "[]");
+                                return tasks.length > 0 && log.is_tasks_approved !== 1;
+                            } catch { return false; }
+                        });
+                        const allLogsApproved = report.myLogs.length > 0 && report.myLogs.every(log => {
+                            try {
+                                const tasks = JSON.parse(log.completed_tasks || "[]");
+                                return tasks.length === 0 || log.is_tasks_approved === 1;
+                            } catch { return false; }
+                        });
 
-                                <div className="flex items-center gap-6">
-                                    <div className="text-center">
-                                        <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-1">Status</p>
-                                        {report.myLogs.length > 0 ? (
-                                            <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-green-100 text-green-800 border border-green-200 shadow-sm">
-                                                <Clock size={12} className="mr-1" /> Logged In
-                                            </span>
-                                        ) : (
-                                            <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-gray-100 text-gray-600 border border-gray-200 shadow-sm">
-                                                No Log
-                                            </span>
-                                        )}
-                                    </div>
-                                    <div className="text-center">
-                                        <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-1">Progress</p>
-                                        <div className="flex items-center gap-2">
-                                            <div className="w-24 h-2.5 bg-gray-200 rounded-full overflow-hidden">
-                                                <div
-                                                    className={`h-full rounded-full ${report.taskCompletionPercentage === 100 ? 'bg-green-500' :
-                                                        report.taskCompletionPercentage > 0 ? 'bg-indigo-500' : 'bg-gray-300'
-                                                        }`}
-                                                    style={{ width: `${report.taskCompletionPercentage}%` }}
-                                                ></div>
-                                            </div>
-                                            <span className="text-sm font-bold text-gray-700 w-10 text-right">
-                                                {report.taskCompletionPercentage}%
-                                            </span>
+                        return (
+                            <div key={idx} className="border border-gray-200 rounded-xl overflow-hidden hover:shadow-md transition-shadow bg-white">
+                                <div className="bg-gray-50 p-4 border-b border-gray-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-12 h-12 rounded-full overflow-hidden bg-white border border-gray-200 shadow-sm flex items-center justify-center text-gray-400 font-bold text-lg">
+                                            {report.employee.image_url && typeof report.employee.image_url === 'string' ? (
+                                                <img src={report.employee.image_url.startsWith('http') ? report.employee.image_url : `http://localhost:8000/${report.employee.image_url.replace(/^\//, '')}`} alt="avatar" className="w-full h-full object-cover" />
+                                            ) : (
+                                                (report.employee.name || 'E').charAt(0).toUpperCase()
+                                            )}
+                                        </div>
+                                        <div>
+                                            <h3 className="text-lg font-bold text-gray-800">{report.employee.name}</h3>
+                                            <p className="text-sm text-gray-500 font-medium capitalize">{report.employee.role || 'Employee'}</p>
                                         </div>
                                     </div>
-                                </div>
-                            </div>
 
-                            <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div>
-                                    <h4 className="text-sm font-bold text-gray-700 flex items-center gap-2 border-b border-gray-100 pb-2 mb-3">
-                                        Assigned Daily Tasks ({report.assignedTasks.length})
-                                    </h4>
-                                    {report.assignedTasks.length > 0 ? (
-                                        <ul className="space-y-2">
-                                            {report.assignedTasks.map((task, tIdx) => {
-                                                const isDone = report.completedTasks.includes(task);
-                                                return (
-                                                    <li key={tIdx} className={`flex items-start gap-2.5 text-sm p-2 rounded-lg ${isDone ? 'bg-green-50/50' : 'bg-transparent'}`}>
-                                                        {isDone ? (
-                                                            <CheckSquare className="text-green-500 mt-0.5 shrink-0" size={16} />
-                                                        ) : (
-                                                            <XSquare className="text-gray-300 mt-0.5 shrink-0" size={16} />
-                                                        )}
-                                                        <span className={isDone ? 'text-gray-500 line-through' : 'text-gray-700 font-medium'}>
+                                    <div className="flex items-center gap-4">
+                                        <div className="text-center">
+                                            <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-1">Status</p>
+                                            {report.myLogs.length > 0 ? (
+                                                <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-green-100 text-green-800 border border-green-200 shadow-sm">
+                                                    <Clock size={12} className="mr-1" /> Logged In
+                                                </span>
+                                            ) : (
+                                                <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-gray-100 text-gray-600 border border-gray-200 shadow-sm">
+                                                    No Log
+                                                </span>
+                                            )}
+                                        </div>
+                                        <div className="text-center">
+                                            <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-1">Progress</p>
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-24 h-2.5 bg-gray-200 rounded-full overflow-hidden">
+                                                    <div
+                                                        className={`h-full rounded-full ${report.taskCompletionPercentage === 100 ? 'bg-green-500' :
+                                                            report.taskCompletionPercentage > 0 ? 'bg-indigo-500' : 'bg-gray-300'
+                                                            }`}
+                                                        style={{ width: `${report.taskCompletionPercentage}%` }}
+                                                    ></div>
+                                                </div>
+                                                <span className="text-sm font-bold text-gray-700 w-10 text-right">
+                                                    {report.taskCompletionPercentage}%
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        {/* Approval Status & Button */}
+                                        {report.completedTasks.length > 0 && (
+                                            <div className="text-center">
+                                                <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-1">Approval</p>
+                                                {allLogsApproved ? (
+                                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-green-100 text-green-700 border border-green-200">
+                                                        <ShieldCheck size={12} /> Approved
+                                                    </span>
+                                                ) : isAdminOrManager && logsWithPendingTasks.length > 0 ? (
+                                                    <button
+                                                        onClick={() => logsWithPendingTasks.forEach(log => handleApproveTasks(log.id))}
+                                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 shadow transition-all active:scale-95"
+                                                    >
+                                                        <ShieldCheck size={12} /> Approve Tasks
+                                                    </button>
+                                                ) : (
+                                                    <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-yellow-50 text-yellow-700 border border-yellow-200">
+                                                        Pending
+                                                    </span>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div>
+                                        <h4 className="text-sm font-bold text-gray-700 flex items-center gap-2 border-b border-gray-100 pb-2 mb-3">
+                                            Assigned Daily Tasks ({report.assignedTasks.length})
+                                        </h4>
+                                        {report.assignedTasks.length > 0 ? (
+                                            <ul className="space-y-2">
+                                                {report.assignedTasks.map((task, tIdx) => {
+                                                    const isDone = report.completedTasks.includes(task);
+                                                    return (
+                                                        <li key={tIdx} className={`flex items-start gap-2.5 text-sm p-2 rounded-lg ${isDone ? 'bg-green-50/50' : 'bg-transparent'}`}>
+                                                            {isDone ? (
+                                                                <CheckSquare className="text-green-500 mt-0.5 shrink-0" size={16} />
+                                                            ) : (
+                                                                <XSquare className="text-gray-300 mt-0.5 shrink-0" size={16} />
+                                                            )}
+                                                            <span className={isDone ? 'text-gray-500 line-through' : 'text-gray-700 font-medium'}>
+                                                                {typeof task === 'string' ? task : JSON.stringify(task)}
+                                                            </span>
+                                                        </li>
+                                                    );
+                                                })}
+                                            </ul>
+                                        ) : (
+                                            <p className="text-sm text-gray-400 italic py-2">No tasks assigned in dossier.</p>
+                                        )}
+                                    </div>
+
+                                    <div className="bg-indigo-50/50 rounded-xl p-4 border border-indigo-50/50">
+                                        <h4 className="text-sm font-bold text-indigo-900 border-b border-indigo-100 pb-2 mb-3">
+                                            Completed Today ({report.completedTasks.length})
+                                        </h4>
+                                        {report.completedTasks.length > 0 ? (
+                                            <ul className="space-y-2">
+                                                {report.completedTasks.map((task, tIdx) => (
+                                                    <li key={tIdx} className="flex items-start gap-2.5 text-sm p-2 bg-white rounded-lg border border-indigo-100 shadow-sm">
+                                                        <CheckSquare className="text-indigo-600 mt-0.5 shrink-0" size={16} />
+                                                        <span className={'text-indigo-900 font-medium'}>
                                                             {typeof task === 'string' ? task : JSON.stringify(task)}
                                                         </span>
                                                     </li>
-                                                );
-                                            })}
-                                        </ul>
-                                    ) : (
-                                        <p className="text-sm text-gray-400 italic py-2">No tasks assigned in dossier.</p>
-                                    )}
-                                </div>
-
-                                <div className="bg-indigo-50/50 rounded-xl p-4 border border-indigo-50/50">
-                                    <h4 className="text-sm font-bold text-indigo-900 border-b border-indigo-100 pb-2 mb-3">
-                                        Completed Today ({report.completedTasks.length})
-                                    </h4>
-                                    {report.completedTasks.length > 0 ? (
-                                        <ul className="space-y-2">
-                                            {report.completedTasks.map((task, tIdx) => (
-                                                <li key={tIdx} className="flex items-start gap-2.5 text-sm p-2 bg-white rounded-lg border border-indigo-100 shadow-sm">
-                                                    <CheckSquare className="text-indigo-600 mt-0.5 shrink-0" size={16} />
-                                                    <span className={'text-indigo-900 font-medium'}>
-                                                        {typeof task === 'string' ? task : JSON.stringify(task)}
-                                                    </span>
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    ) : (
-                                        <div className="text-center py-6 opacity-70">
-                                            <CheckSquare className="mx-auto text-indigo-200 mb-2 h-8 w-8" />
-                                            <p className="text-sm text-indigo-400 font-medium">None completed yet.</p>
-                                        </div>
-                                    )}
+                                                ))}
+                                            </ul>
+                                        ) : (
+                                            <div className="text-center py-6 opacity-70">
+                                                <CheckSquare className="mx-auto text-indigo-200 mb-2 h-8 w-8" />
+                                                <p className="text-sm text-indigo-400 font-medium">None completed yet.</p>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
             )}
         </div>

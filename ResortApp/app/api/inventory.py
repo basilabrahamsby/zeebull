@@ -1156,6 +1156,48 @@ def create_purchase_payment(
         raise HTTPException(status_code=500, detail=f"Error recording payment: {str(e)}")
 
 
+@router.post("/purchases/{purchase_id}/upload-bill")
+async def upload_purchase_bill(
+    purchase_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    branch_id: int = Depends(get_branch_id)
+):
+    query = db.query(PurchaseMaster).filter(PurchaseMaster.id == purchase_id)
+    if branch_id is not None:
+        query = query.filter(PurchaseMaster.branch_id == branch_id)
+    
+    purchase = query.first()
+    if not purchase:
+        raise HTTPException(status_code=404, detail="Purchase not found")
+        
+    try:
+        # Create dir if not exist
+        bill_dir = os.path.join(_UPLOAD_ROOT, "purchase_bills")
+        os.makedirs(bill_dir, exist_ok=True)
+        
+        # Determine file extension safely
+        filename_parts = os.path.splitext(file.filename)
+        ext = filename_parts[1] if len(filename_parts) > 1 else ""
+        
+        # Save file
+        filename = f"bill_po_{purchase_id}_{uuid.uuid4().hex}{ext}"
+        file_path = os.path.join(bill_dir, filename)
+        
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+            
+        rel_path = f"uploads/purchase_bills/{filename}".replace("\\", "/")
+        purchase.bill_file_url = rel_path
+        db.commit()
+        
+        return {"message": "Bill uploaded successfully", "bill_file_url": rel_path}
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to upload bill: {str(e)}")
+
 @router.patch("/purchases/{purchase_id}/status")
 def update_purchase_status(
     purchase_id: int,

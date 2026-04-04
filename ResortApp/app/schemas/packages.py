@@ -80,7 +80,7 @@ class PackageBookingBase(BaseModel):
 
 
 class PackageBookingCreate(PackageBookingBase):
-    room_ids: List[int]
+    room_ids: List[int] = []
     class Config:
         from_attributes = True
 

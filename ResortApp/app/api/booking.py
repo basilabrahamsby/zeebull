@@ -10,6 +10,7 @@ from typing import List, Union, Optional
 from app.utils.auth import get_db, get_current_user
 from app.utils.api_optimization import optimize_limit, MAX_LIMIT_LOW_NETWORK
 from app.utils.booking_id import parse_display_id, format_display_id
+from app.utils.pricing import calculate_dynamic_booking_price
 from app.models.booking import Booking, BookingRoom
 from app.utils.branch_scope import get_branch_id
 from app.models.user import User
@@ -186,6 +187,16 @@ def get_bookings(
                     
                     room_total = sum(float(r.price or 0) for r in booking_out.rooms)
                     final_amount = room_total * stay_nights
+
+                    # If room_type_id available, try dynamic pricing first
+                    if getattr(booking, 'room_type_id', None):
+                        room_count = len(booking_out.rooms) or 1
+                        try:
+                            dyn_price = calculate_dynamic_booking_price(db, booking.room_type_id, d_in, d_out, room_count)
+                            if dyn_price > 0:
+                                final_amount = dyn_price
+                        except:
+                            pass
                     
                     if final_amount > 0:
                         booking_out.total_amount = final_amount
@@ -197,6 +208,11 @@ def get_bookings(
                             from sqlalchemy import update
                             stmt = update(Booking).where(Booking.id == booking.id).values(total_amount=final_amount)
                             db.execute(stmt)
+                            db.commit()
+                            print(f"Self-healed Booking {booking.id} total_amount to {final_amount}")
+                        except Exception as db_e:
+                            print(f"Failed to update healed amount to DB: {db_e}")
+                            db.rollback()
                             db.commit()
                             print(f"Self-healed Booking {booking.id} total_amount to {final_amount}")
                         except Exception as db_e:
@@ -464,6 +480,15 @@ def get_booking_details(booking_id: Union[str, int], is_package: bool, db: Sessi
                     
                     room_total = sum(float(br.room.price or 0) for br in booking.booking_rooms if br.room)
                     calc_amt = room_total * stay_nights
+
+                    if getattr(booking, 'room_type_id', None):
+                        room_count = len(booking.booking_rooms) or 1
+                        try:
+                            dyn_price = calculate_dynamic_booking_price(db, booking.room_type_id, d_in, d_out, room_count)
+                            if dyn_price > 0:
+                                calc_amt = dyn_price
+                        except:
+                            pass
                     
                     if calc_amt > 0:
                         total_amt = calc_amt
@@ -612,16 +637,38 @@ def get_or_create_guest_user(db: Session, email: str, mobile: str, name: str, br
         # Re-raise if we can't find existing user
         raise ValueError(f"Failed to create or find guest user: {str(e)}")
 
+from pydantic import BaseModel
+from datetime import date
+from typing import List
+
+class PriceCalculationRequest(BaseModel):
+    room_type_id: int
+    check_in: date
+    check_out: date
+    room_count: int = 1
+
+@router.post("/calculate-price", summary="Calculate dynamic booking price")
+def calculate_price_api(request: PriceCalculationRequest, db: Session = Depends(get_db)):
+    try:
+        total = calculate_dynamic_booking_price(db, request.room_type_id, request.check_in, request.check_out, request.room_count)
+        return {"total_amount": total}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error calculating price: {str(e)}")
+
 # -------------------------------
 # POST a new booking
 # -------------------------------
-@router.post("", response_model=BookingOut) # Changed from "/" to ""
+@router.post("", response_model=BookingOut)
 def create_booking(booking: BookingCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user), branch_id: int = Depends(get_branch_id)):
 
     print(f"DEBUG: create_booking called with: {booking}")
+    
+    # Need at least one of room_ids or room_type_id
+    if not booking.room_ids and not booking.room_type_id:
+        raise HTTPException(status_code=400, detail="You must provide either room_ids or room_type_id.")
+
     # Find or create guest user based on email and mobile
     guest_user_id = None
-    # Normalize email and mobile - convert empty strings to None, handle None safely
     try:
         guest_email = booking.guest_email.strip() if (booking.guest_email and isinstance(booking.guest_email, str) and booking.guest_email.strip()) else None
     except (AttributeError, TypeError):
@@ -641,465 +688,177 @@ def create_booking(booking: BookingCreate, db: Session = Depends(get_db), curren
                 name=booking.guest_name or "Guest User",
                 branch_id=branch_id
             )
-
         except Exception as e:
-            # Log error but don't fail the booking if user creation fails
             print(f"Warning: Could not create/link guest user: {str(e)}")
     
-    # Check for an existing booking to reuse guest details for consistency
-    existing_booking = db.query(Booking).filter(
-        (Booking.guest_email == booking.guest_email) & (Booking.guest_mobile == booking.guest_mobile),
-        Booking.branch_id == branch_id
-    ).order_by(Booking.id.desc()).first()
-
-
-    # Logic Removed: We should NOT overwrite the provided guest name with an old one.
-    # If the user provides a name "jeena", we should save "jeena", even if previous bookings
-    # with this email/mobile were "haryhh". The user might be correcting a typo or it might be different.
-    guest_name_to_use = booking.guest_name
-
-    # Validate room capacity for adults and children separately
-    selected_rooms = db.query(Room).filter(Room.id.in_(booking.room_ids), Room.branch_id == branch_id).all()
-
-    if len(selected_rooms) != len(booking.room_ids):
-        print(f"DEBUG: Invalid rooms. Selected IDs: {booking.room_ids}, Found: {len(selected_rooms)}")
-        raise HTTPException(status_code=400, detail="One or more selected rooms are invalid.")
+    from app.models.room import RoomType
     
-    total_adult_capacity = sum(room.adults or 0 for room in selected_rooms)
-    total_children_capacity = sum(room.children or 0 for room in selected_rooms)
-    
-    if booking.adults > total_adult_capacity:
-        print(f"DEBUG: Adult capacity exceeded. Request: {booking.adults}, Max: {total_adult_capacity}")
-        raise HTTPException(
-            status_code=400,
-            detail=f"The number of adults ({booking.adults}) exceeds the total adult capacity of the selected rooms ({total_adult_capacity} adults max). Please select additional rooms or reduce the number of adults."
-        )
-    
-    if booking.children > total_children_capacity:
-        raise HTTPException(
-            status_code=400,
-            detail=f"The number of children ({booking.children}) exceeds the total children capacity of the selected rooms ({total_children_capacity} children max). Please select additional rooms or reduce the number of children."
-        )
+    # 1. SOFT ALLOCATION LOGIC (Booking by Type)
+    if booking.room_type_id and not booking.room_ids:
+        # Fetch Room Type (support Enterprise View where branch_id might be None)
+        print(f"[DEBUG] Soft Allocation: room_type_id={booking.room_type_id}, initial_branch_id={branch_id}")
+        query = db.query(RoomType).filter(RoomType.id == booking.room_type_id)
+        if branch_id is not None:
+            query = query.filter(RoomType.branch_id == branch_id)
+        room_type = query.first()
 
-    # Check if rooms are available for the requested dates
-    for room_id in booking.room_ids:
-        # Check if room is already booked by regular bookings for overlapping dates (only check active bookings, not cancelled or checked-out)
-        conflicting_regular_booking = db.query(BookingRoom).join(Booking).filter(
-            BookingRoom.room_id == room_id,
+        if not room_type:
+            print(f"[DEBUG] Room Type NOT FOUND for ID {booking.room_type_id} and Branch {branch_id}")
+            raise HTTPException(status_code=404, detail="Room Type not found")
+        
+        # Correct the branch_id if it was None (Superadmin context)
+        if branch_id is None:
+            branch_id = room_type.branch_id
+            print(f"[DEBUG] Enterprise View: adopted branch_id={branch_id} from RoomType")
+        
+        # Validate Capacity
+        if booking.adults > (room_type.adults_capacity or 0):
+            raise HTTPException(status_code=400, detail=f"Adults exceed capacity ({room_type.adults_capacity})")
+        if booking.children > (room_type.children_capacity or 0):
+            raise HTTPException(status_code=400, detail=f"Children exceed capacity ({room_type.children_capacity})")
+            
+        # Check Availability by Counting
+        total_rooms = db.query(Room).filter(Room.room_type_id == room_type.id, Room.branch_id == branch_id, Room.status != "Deleted").count()
+        # Fallback to total_inventory if distinct physical rooms are fewer (e.g. for virtual inventory)
+        capacity = max(total_rooms, room_type.total_inventory or 0)
+        
+        # Count 1: Physical assignments of this room type
+        assigned_overlaps = db.query(BookingRoom).join(Booking).join(Room).filter(
+            Room.room_type_id == room_type.id,
             Booking.branch_id == branch_id,
-            or_(
-                Booking.status.ilike('booked'),
-                Booking.status.ilike('checked-in'),
-                Booking.status.ilike('checked_in')
-            ),
+            Booking.status.in_(["Booked", "Checked-in", "Confirmed"]),
             Booking.check_in < booking.check_out,
             Booking.check_out > booking.check_in
-        ).first()
+        ).count()
         
-        # Check if room is already booked by package bookings for overlapping dates
-        conflicting_package_booking = db.query(PackageBookingRoom).join(PackageBooking).filter(
-            PackageBookingRoom.room_id == room_id,
-            PackageBooking.branch_id == branch_id,
-            PackageBooking.status.in_(['booked', 'checked-in']),  # Only check for active bookings
-            PackageBooking.check_in < booking.check_out,
-            PackageBooking.check_out > booking.check_in
-        ).first()
-
+        # Count 2: Soft allocations (by type) that don't have physical rooms yet
+        # This prevents double counting once a booking is checked-in/assigned
+        soft_overlaps = db.query(Booking).filter(
+            Booking.room_type_id == room_type.id,
+            Booking.branch_id == branch_id,
+            Booking.status.in_(["Booked", "Confirmed"]), # Not 'Checked-in' usually because check-in assigns rooms
+            Booking.check_in < booking.check_out,
+            Booking.check_out > booking.check_in,
+            ~Booking.booking_rooms.any() # No assigned rooms
+        ).count()
         
-        if conflicting_regular_booking or conflicting_package_booking:
-            room = db.query(Room).filter(Room.id == room_id).first()
-            print(f"DEBUG: Room conflict for room_id {room_id}. Regular: {conflicting_regular_booking}, Package: {conflicting_package_booking}")
-            raise HTTPException(
-                status_code=400,
-                detail=f"Room {room.number if room else room_id} is not available for the selected dates."
-            )
+        effective_overlaps = assigned_overlaps + soft_overlaps
 
-    db_booking = Booking(
-        guest_name=guest_name_to_use,
-        guest_mobile=booking.guest_mobile,
-        guest_email=booking.guest_email,
-        check_in=booking.check_in,
-        check_out=booking.check_out,
-        adults=booking.adults,
-        children=booking.children,
-        user_id=guest_user_id,  # Link booking to guest user
-        branch_id=branch_id
-    )
-
-    db.add(db_booking)
-    db.commit()
-    db.refresh(db_booking)
-
-    # Generate and save display_id
-    db_booking.display_id = format_display_id(db_booking.id, branch_id=branch_id)
-    db.commit()
-    db.refresh(db_booking)
-
-    # Create BookingRoom links and update room status
-    for room_id in booking.room_ids:
-        room = db.query(Room).filter(Room.id == room_id).first()
-        if room:
-            room.status = "Booked"
-        db.add(BookingRoom(booking_id=db_booking.id, room_id=room_id, branch_id=branch_id))
-    
-    db.commit()
-
-    db.refresh(db_booking)
-    
-    # Reload with room details for response
-    booking_with_rooms = (
-        db.query(Booking)
-        .options(joinedload(Booking.booking_rooms).joinedload(BookingRoom.room))
-        .filter(Booking.id == db_booking.id)
-        .first()
-    )
-    
-    # Convert to BookingOut format with rooms
-    # Safe user serialization — handle malformed emails (e.g., missing .com)
-    safe_user = None
-    if booking_with_rooms.user:
-        try:
-            from app.schemas.user import UserOut
-            raw_user = booking_with_rooms.user
-            raw_email = getattr(raw_user, 'email', None)
-            if raw_email and "@" in raw_email and "." not in raw_email.split("@")[1]:
-                raw_email = raw_email + ".com"
-            role_obj = None
-            try:
-                if getattr(raw_user, 'role_id', None):
-                    from app.models.role import Role
-                    role_obj = db.query(Role).filter(Role.id == raw_user.role_id).first()
-            except Exception:
-                pass
-            safe_user = UserOut.model_validate({
-                "id": raw_user.id, "name": raw_user.name, "email": raw_email,
-                "phone": getattr(raw_user, "phone", None),
-                "is_active": getattr(raw_user, "is_active", True), "role": role_obj,
-                "branch_id": getattr(raw_user, "branch_id", None),
-                "is_superadmin": getattr(raw_user, "is_superadmin", False)
-            })
-        except Exception as ue:
-            print(f"Warning: Could not serialize user for new booking: {ue}")
-
-    # Calculate total amount
-    try:
-        from datetime import datetime, date
-        ci = booking_with_rooms.check_in
-        co = booking_with_rooms.check_out
-        if isinstance(ci, str): ci = datetime.strptime(ci, '%Y-%m-%d').date()
-        if isinstance(co, str): co = datetime.strptime(co, '%Y-%m-%d').date()
-        nights = max(1, (co - ci).days)
-        total_amt = sum(float(br.room.price or 0) for br in booking_with_rooms.booking_rooms if br.room) * nights
-    except Exception:
-        total_amt = 0.0
-
-    booking_out = BookingOut(
-        id=booking_with_rooms.id,
-        guest_name=booking_with_rooms.guest_name,
-        guest_mobile=booking_with_rooms.guest_mobile,
-        guest_email=booking_with_rooms.guest_email,
-        status=booking_with_rooms.status,
-        check_in=booking_with_rooms.check_in,
-        check_out=booking_with_rooms.check_out,
-        adults=booking_with_rooms.adults,
-        children=booking_with_rooms.children,
-        id_card_image_url=getattr(booking_with_rooms, 'id_card_image_url', None),
-        guest_photo_url=getattr(booking_with_rooms, 'guest_photo_url', None),
-        user=safe_user,
-        is_package=False,
-        total_amount=total_amt,
-        advance_deposit=getattr(booking_with_rooms, 'advance_deposit', 0.0) or 0.0,
-        rooms=[br.room for br in booking_with_rooms.booking_rooms if br.room]
-    )
-    
-    # Calculate booking charges and send confirmation email if email address is provided
-    if booking.guest_email:
-        try:
-            from app.utils.email import send_email, create_booking_confirmation_email
-            from datetime import datetime, date
-            
-            # Calculate stay duration
-            check_in_date = booking.check_in if isinstance(booking.check_in, date) else datetime.strptime(str(booking.check_in), '%Y-%m-%d').date()
-            check_out_date = booking.check_out if isinstance(booking.check_out, date) else datetime.strptime(str(booking.check_out), '%Y-%m-%d').date()
-            stay_nights = max(1, (check_out_date - check_in_date).days)
-            
-            # Calculate room charges
-            room_charges = 0
-            rooms_data = []
-            for br in booking_with_rooms.booking_rooms:
-                if br.room:
-                    room_price = br.room.price or 0
-                    room_charges_per_room = room_price * stay_nights
-                    room_charges += room_charges_per_room
-                    rooms_data.append({
-                        'number': br.room.number,
-                        'type': br.room.type or 'Standard',
-                        'price': room_price
-                    })
-            
-            # Format booking ID (BK-1-000001)
-            formatted_booking_id = format_display_id(booking_with_rooms.id, branch_id=branch_id)
-            
-            email_html = create_booking_confirmation_email(
-                guest_name=guest_name_to_use,
-                booking_id=booking_with_rooms.id,
-                booking_type='room',
-                check_in=str(booking.check_in),
-                check_out=str(booking.check_out),
-                rooms=rooms_data,
-                total_amount=room_charges,
-                guests={'adults': booking.adults, 'children': booking.children},
-                guest_mobile=booking.guest_mobile,
-                room_charges=room_charges,
-                stay_nights=stay_nights
-            )
-            
-            send_email(
-                to_email=booking.guest_email,
-                subject=f"Booking Confirmation {formatted_booking_id} - Elysian Retreat",
-                html_content=email_html,
-                to_name=guest_name_to_use
-            )
-        except Exception as e:
-            # Log error but don't fail the booking
-            print(f"Failed to send confirmation email: {str(e)}")
-    
-    return booking_out
-
-@router.post("/guest", response_model=BookingOut, summary="Create a booking as a guest")
-def create_guest_booking(booking: BookingCreate, db: Session = Depends(get_db), branch_id_query: int = Query(1, alias="branch_id")):
-
-    """
-    Public endpoint for guests to create a booking without authentication.
-    """
-    try:
-        # Prioritize branch_id from the JSON body (BookingCreate schema)
-        branch_id = booking.branch_id if booking.branch_id is not None else branch_id_query
-        
-        # Find or create guest user based on email and mobile
-        guest_user_id = None
-        # Normalize email and mobile - convert empty strings to None, handle None safely
-        try:
-            guest_email = booking.guest_email.strip() if (booking.guest_email and isinstance(booking.guest_email, str) and booking.guest_email.strip()) else None
-        except (AttributeError, TypeError):
-            guest_email = None
-        
-        try:
-            guest_mobile = booking.guest_mobile.strip() if (booking.guest_mobile and isinstance(booking.guest_mobile, str) and booking.guest_mobile.strip()) else None
-        except (AttributeError, TypeError):
-            guest_mobile = None
-        
-        if guest_email or guest_mobile:
-            try:
-                guest_user_id = get_or_create_guest_user(
-                    db=db,
-                    email=guest_email,
-                    mobile=guest_mobile,
-                    name=booking.guest_name or "Guest User",
-                    branch_id=branch_id
-                )
-
-            except Exception as e:
-                # Log error but don't fail the booking if user creation fails
-                print(f"Warning: Could not create/link guest user: {str(e)}")
-        
-        # Check for duplicate booking with same details and dates
-        # Only check for duplicates if we have at least email or mobile
-        duplicate_booking = None
-        if guest_email or guest_mobile:
-            duplicate_query = db.query(Booking).filter(
-                Booking.check_in == booking.check_in,
-                Booking.check_out == booking.check_out,
-                Booking.status.in_(['booked', 'checked-in']),
-                Booking.branch_id == branch_id
-            )
-            
-            # Add email filter if normalized email exists
-            if guest_email:
-                duplicate_query = duplicate_query.filter(Booking.guest_email == guest_email)
-            
-            # Add mobile filter if normalized mobile exists
-            if guest_mobile:
-                duplicate_query = duplicate_query.filter(Booking.guest_mobile == guest_mobile)
-            
-            duplicate_booking = duplicate_query.first()
-        
-        if duplicate_booking:
-            raise HTTPException(
-                status_code=400, 
-                detail="A booking with the same details and dates already exists. Please check your existing bookings."
-            )
-
-        # Check for an existing booking to reuse guest details for consistency
-        # Only check if we have at least email or mobile
-        existing_booking = None
-        if guest_email or guest_mobile:
-            existing_query = db.query(Booking).filter(Booking.branch_id == branch_id)
-            
-            # Add email filter if normalized email exists
-            if guest_email:
-                existing_query = existing_query.filter(Booking.guest_email == guest_email)
-            
-            # Add mobile filter if normalized mobile exists
-            if guest_mobile:
-                existing_query = existing_query.filter(Booking.guest_mobile == guest_mobile)
-            
-            existing_booking = existing_query.order_by(Booking.id.desc()).first()
-
-        # Logic Removed: Do not overwrite guest name with old data.
-        guest_name_to_use = booking.guest_name or "Guest User"
-
-        # Validate room capacity for adults and children separately
-        # Ensure rooms belong to the specified branch
-        selected_rooms = db.query(Room).filter(Room.id.in_(booking.room_ids), Room.branch_id == branch_id).all()
-        if len(selected_rooms) != len(booking.room_ids):
-            print(f"DEBUG: Invalid rooms for branch {branch_id}. Selected: {booking.room_ids}, Found: {[r.id for r in selected_rooms]}")
-            raise HTTPException(status_code=400, detail="One or more selected rooms are invalid or belong to a different branch.")
-        
-        total_adult_capacity = sum(room.adults or 0 for room in selected_rooms)
-        total_children_capacity = sum(room.children or 0 for room in selected_rooms)
-        
-        if booking.adults > total_adult_capacity:
-            raise HTTPException(
-                status_code=400,
-                detail=f"The number of adults ({booking.adults}) exceeds the total adult capacity of the selected rooms ({total_adult_capacity} adults max). Please select additional rooms or reduce the number of adults."
-            )
-        
-        if booking.children > total_children_capacity:
-            raise HTTPException(
-                status_code=400,
-                detail=f"The number of children ({booking.children}) exceeds the total children capacity of the selected rooms ({total_children_capacity} children max). Please select additional rooms or reduce the number of children."
-            )
-
-        # Check if rooms are available for the requested dates
-        for room_id in booking.room_ids:
-            # Check if room is already booked by regular bookings for overlapping dates (only check active bookings, not cancelled or checked-out)
-            conflicting_regular_booking = db.query(BookingRoom).join(Booking).filter(
-                BookingRoom.room_id == room_id,
-                Booking.branch_id == branch_id,
-                or_(
-                    Booking.status.ilike('booked'),
-                    Booking.status.ilike('checked-in')
-                ),
-                Booking.check_in < booking.check_out,
-                Booking.check_out > booking.check_in
-            ).first()
-            
-            # Check if room is already booked by package bookings for overlapping dates
-            conflicting_package_booking = db.query(PackageBookingRoom).join(PackageBooking).filter(
-                PackageBookingRoom.room_id == room_id,
-                PackageBooking.branch_id == branch_id,
-                PackageBooking.status.in_(['booked', 'checked-in']),  # Only check for active bookings
-                PackageBooking.check_in < booking.check_out,
-                PackageBooking.check_out > booking.check_in
-            ).first()
-            
-            if conflicting_regular_booking or conflicting_package_booking:
-                room = db.query(Room).filter(Room.id == room_id).first()
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Room {room.number if room else room_id} is not available for the selected dates."
-                )
-
-        # Calculate stay duration
-        from datetime import datetime, date
-        # Ensure dates are date objects
-        d_check_in = booking.check_in if isinstance(booking.check_in, date) else datetime.strptime(str(booking.check_in), '%Y-%m-%d').date()
-        d_check_out = booking.check_out if isinstance(booking.check_out, date) else datetime.strptime(str(booking.check_out), '%Y-%m-%d').date()
-        days = (d_check_out - d_check_in).days
-        stay_nights = days if days > 0 else 1
-        
-        # Calculate total room price per night
-        total_price_per_night = sum(room.price or 0 for room in selected_rooms)
-        calculated_total_amount = total_price_per_night * stay_nights
+        if effective_overlaps >= capacity:
+            raise HTTPException(status_code=400, detail=f"No rooms of type '{room_type.name}' available for selected dates (Occupancy: {effective_overlaps}/{capacity}).")
 
         db_booking = Booking(
-            guest_name=guest_name_to_use,
-            guest_mobile=guest_mobile or booking.guest_mobile or None,  # Use normalized mobile or original, fallback to None
-            guest_email=guest_email or booking.guest_email or None,  # Use normalized email or original, fallback to None
+            guest_name=booking.guest_name,
+            guest_mobile=booking.guest_mobile,
+            guest_email=booking.guest_email,
             check_in=booking.check_in,
             check_out=booking.check_out,
             adults=booking.adults,
             children=booking.children,
-            user_id=guest_user_id,  # Link booking to guest user
-            total_amount=calculated_total_amount, # Set calculated total amount
-            branch_id=branch_id
+            room_type_id=booking.room_type_id,
+            source=booking.source,
+            external_id=booking.external_id,
+            user_id=guest_user_id,
+            branch_id=branch_id,
+            status="Booked"
         )
+        
+        db.add(db_booking)
+        db.commit()
+        db.refresh(db_booking)
+        
+    # 2. DIRECT ALLOCATION LOGIC (Booking specific rooms)
+    else:
+        selected_rooms = db.query(Room).filter(Room.id.in_(booking.room_ids), Room.branch_id == branch_id).all()
+        if len(selected_rooms) != len(booking.room_ids):
+            raise HTTPException(status_code=400, detail="One or more selected rooms are invalid.")
+        
+        # Capacity check requires fetching RoomType for each room
+        total_adults = 0
+        total_children = 0
+        for r in selected_rooms:
+            rt = db.query(RoomType).filter(RoomType.id == r.room_type_id).first()
+            if rt:
+                total_adults += rt.adults
+                total_children += rt.children
+        
+        if booking.adults > total_adults or booking.children > total_children:
+            raise HTTPException(status_code=400, detail="Total guest count exceeds selected room capacity.")
+
+        # Availability check
+        for room_id in booking.room_ids:
+            conflict = db.query(BookingRoom).join(Booking).filter(
+                BookingRoom.room_id == room_id,
+                Booking.branch_id == branch_id,
+                Booking.status.in_(["Booked", "Checked-in", "Confirmed"]),
+                Booking.check_in < booking.check_out,
+                Booking.check_out > booking.check_in
+            ).first()
+            if conflict:
+                room = next(r for r in selected_rooms if r.id == room_id)
+                raise HTTPException(status_code=400, detail=f"Room {room.number} is unavailable.")
+
+        db_booking = Booking(
+            guest_name=booking.guest_name,
+            guest_mobile=booking.guest_mobile,
+            guest_email=booking.guest_email,
+            check_in=booking.check_in,
+            check_out=booking.check_out,
+            adults=booking.adults,
+            children=booking.children,
+            source=booking.source,
+            external_id=booking.external_id,
+            user_id=guest_user_id,
+            branch_id=branch_id,
+            status="Booked"
+        )
+        # Use first room's type as primary type if none provided
+        if not db_booking.room_type_id and selected_rooms:
+            db_booking.room_type_id = selected_rooms[0].room_type_id
+
         db.add(db_booking)
         db.commit()
         db.refresh(db_booking)
 
-        # Create BookingRoom links and update room status
+        # Create links
         for room_id in booking.room_ids:
-            db.query(Room).filter(Room.id == room_id).update({"status": "Booked"})
             db.add(BookingRoom(booking_id=db_booking.id, room_id=room_id, branch_id=branch_id))
+            room = db.query(Room).filter(Room.id == room_id).first()
+            if room: room.status = "Booked"
+        
         db.commit()
-        db.refresh(db_booking)
-        
-        # Reload with room details for email and response
-        booking_with_rooms = (
-            db.query(Booking)
-            .options(joinedload(Booking.booking_rooms).joinedload(BookingRoom.room))
-            .filter(Booking.id == db_booking.id)
-            .first()
-        )
-        
-        # Calculate booking charges and send confirmation email if email address is provided
-        if guest_email or booking.guest_email:
-            try:
-                from app.utils.email import send_email, create_booking_confirmation_email
-                from datetime import datetime, date
-                
-                # Calculate stay duration
-                check_in_date = booking.check_in if isinstance(booking.check_in, date) else datetime.strptime(str(booking.check_in), '%Y-%m-%d').date()
-                check_out_date = booking.check_out if isinstance(booking.check_out, date) else datetime.strptime(str(booking.check_out), '%Y-%m-%d').date()
-                stay_nights = max(1, (check_out_date - check_in_date).days)
-                
-                # Calculate room charges
-                room_charges = 0
-                rooms_data = []
-                for br in booking_with_rooms.booking_rooms:
-                    if br.room:
-                        room_price = br.room.price or 0
-                        room_charges_per_room = room_price * stay_nights
-                        room_charges += room_charges_per_room
-                        rooms_data.append({
-                            'number': br.room.number,
-                            'type': br.room.type or 'Standard',
-                            'price': room_price
-                        })
-                
-                # Format booking ID
-                formatted_booking_id = format_display_id(db_booking.id, branch_id=branch_id)
-                
-                email_to_use = guest_email or booking.guest_email
-                if email_to_use:
-                    email_html = create_booking_confirmation_email(
-                        guest_name=guest_name_to_use,
-                        booking_id=db_booking.id,
-                        booking_type='room',
-                        check_in=str(booking.check_in),
-                        check_out=str(booking.check_out),
-                        rooms=rooms_data,
-                        total_amount=room_charges,
-                        guests={'adults': booking.adults, 'children': booking.children},
-                        guest_mobile=guest_mobile or booking.guest_mobile,
-                        room_charges=room_charges,
-                        stay_nights=stay_nights
-                    )
-                    
-                    send_email(
-                        to_email=email_to_use,
-                        subject=f"Booking Confirmation {formatted_booking_id} - Elysian Retreat",
-                        html_content=email_html,
-                        to_name=guest_name_to_use
-                    )
-            except Exception as e:
-                # Log error but don't fail the booking
-                print(f"Failed to send confirmation email: {str(e)}")
-        
-        return booking_with_rooms
-        
+    
+    # Generate Display ID
+    db_booking.display_id = format_display_id(db_booking.id, branch_id=branch_id)
+    db.commit()
+    db.refresh(db_booking)
+    
+    # Reload for response
+    booking_full = db.query(Booking).options(
+        joinedload(Booking.booking_rooms).joinedload(BookingRoom.room),
+        joinedload(Booking.user)
+    ).filter(Booking.id == db_booking.id).first()
+
+    # Calculate amount (using prices from RoomType dynamically)
+    total_amt = 0.0
+    try:
+        room_count = len(booking_full.booking_rooms) or 1
+        if booking_full.room_type_id and booking_full.check_in and booking_full.check_out:
+            total_amt = calculate_dynamic_booking_price(db, booking_full.room_type_id, booking_full.check_in, booking_full.check_out, room_count)
+    except Exception as e:
+        print(f"Error calculating dynamic price for booking {booking_full.id}: {e}")
+    
+    booking_full.total_amount = total_amt
+    db.commit()
+
+    return booking_full
+
+@router.post("/guest", response_model=BookingOut, summary="Create a booking as a guest")
+def create_guest_booking(booking: BookingCreate, db: Session = Depends(get_db), branch_id_query: int = Query(1, alias="branch_id")):
+    try:
+        # Similar to create_booking but for public access
+        booking.branch_id = booking.branch_id if booking.branch_id is not None else branch_id_query
+        return create_booking(booking, db, current_user=None, branch_id=booking.branch_id)
     except HTTPException:
         # Re-raise HTTP exceptions (like validation errors) as-is
         raise
@@ -1113,7 +872,7 @@ def create_guest_booking(booking: BookingCreate, db: Session = Depends(get_db), 
         # Return a user-friendly error message
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to create booking: {str(e)}"
+            detail=f"An error occurred while creating booking: {str(e)}"
         )
 
 # -------------------------------
@@ -1124,6 +883,7 @@ def check_in_booking(
     booking_id: Union[str, int],
     id_card_image: Optional[UploadFile] = File(None),
     guest_photo: Optional[UploadFile] = File(None),
+    room_ids: Optional[str] = Form(None), # JSON list of room IDs for assignment
     amenityAllocation: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -1142,12 +902,51 @@ def check_in_booking(
     booking = db.query(Booking).filter(Booking.id == booking_id).first()
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
-    
-    # Normalize status to handle case variations and different separators (underscore vs hyphen)
-    normalized_status = (booking.status or "").strip().lower().replace("_", "-").replace(" ", "-")
-    if normalized_status != "booked":
-        raise HTTPException(status_code=400, detail=f"Booking is not in 'booked' state. Current status: {booking.status}")
 
+    # Handle room assignment for "Soft Allocated" bookings if room_ids are provided
+    if room_ids:
+        try:
+            import json
+            id_list = json.loads(room_ids)
+            if id_list:
+                print(f"[DEBUG] Assigning rooms {id_list} to booking {booking.id}")
+                from app.models.room import Room
+                from app.models.booking import BookingRoom as BR, Booking as B
+                
+                # Check for existing assignments to avoid duplicates
+                existing_room_ids = {br.room_id for br in booking.booking_rooms}
+                
+                for r_id in id_list:
+                    if r_id not in existing_room_ids:
+                        target_room = db.query(Room).filter(Room.id == r_id).first()
+                        if not target_room:
+                             raise HTTPException(status_code=404, detail=f"Room ID {r_id} not found")
+                        
+                        # Availability Guard: Check if room is already booked by someone else for these dates
+                        # (Already imported BR, B above)
+                        conflict = db.query(BR).join(B).filter(
+                            BR.room_id == r_id,
+                            B.status.in_(["Booked", "Checked-in"]),
+                            B.id != booking.id, # Exclude current booking
+                            B.check_in < booking.check_out,
+                            B.check_out > booking.check_in
+                        ).first()
+                        
+                        if conflict:
+                            raise HTTPException(status_code=400, detail=f"Room {target_room.number} is already booked for these dates.")
+
+                        new_br = BookingRoom(booking_id=booking.id, room_id=r_id)
+                        db.add(new_br)
+                
+                db.flush()
+                db.refresh(booking)
+        except Exception as e:
+             print(f"[ERROR] Room assignment failed: {e}")
+             db.rollback()
+             raise HTTPException(status_code=400, detail=f"Failed to assign rooms: {str(e)}")
+
+    # Normalize status cross-platform
+    normalized_status = (booking.status or "").strip().lower().replace("_", "-").replace(" ", "-")
     if normalized_status != "booked":
         raise HTTPException(status_code=400, detail=f"Booking is not in 'booked' state. Current status: {booking.status}")
 

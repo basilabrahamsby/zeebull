@@ -15,6 +15,7 @@ import {
 import { getMediaBaseUrl } from "../utils/env";
 import { getImageUrl } from "../utils/imageUtils";
 import { formatDateIST, formatDateTimeIST } from "../utils/dateUtils";
+import BannerMessage from "../components/BannerMessage";
 
 // Reusable card component for a premium look
 const Card = React.memo(({ title, subtitle, icon, className = "", children, glass = false }) => {
@@ -117,6 +118,9 @@ const Services = () => {
   const [paymentModal, setPaymentModal] = useState(null); // { orderId, amount }
   const [selectedActivity, setSelectedActivity] = useState(null);
   const [returnRequestModal, setReturnRequestModal] = useState(null); // { requestId, items }
+  const [bannerMessage, setBannerMessage] = useState({ type: null, text: "" });
+  const showBannerMessage = (type, text) => setBannerMessage({ type, text });
+  const closeBannerMessage = () => setBannerMessage({ type: null, text: "" });
 
   // Fetch service requests
   const fetchServiceRequests = async () => {
@@ -133,7 +137,7 @@ const Services = () => {
   const fetchAll = async (showLoading = true) => {
     if (showLoading) setLoading(true);
     try {
-      const [sRes, aRes, rRes, eRes, bRes, pbRes, invRes, srRes, locRes] = await Promise.all([
+      const [sRes, aRes, rRes, eRes, bRes, pbRes, invRes, locRes] = await Promise.all([
         api.get("/services?limit=50").catch(() => ({ data: [] })),
         api.get("/services/assigned?skip=0&limit=50").catch(() => ({ data: [] })),
         api.get("/rooms?limit=50").catch(() => ({ data: [] })),
@@ -141,9 +145,17 @@ const Services = () => {
         api.get("/bookings?limit=50").catch(() => ({ data: { bookings: [] } })),
         api.get("/packages/bookingsall?limit=50").catch(() => ({ data: [] })),
         api.get("/inventory/items?limit=50").catch(() => ({ data: [] })),
-        api.get("/service-requests?limit=50").catch(() => ({ data: [] })),
-        api.get("/inventory/locations?limit=100").catch(() => ({ data: [] })), // Fetch locations
+        api.get("/inventory/locations?limit=100").catch(() => ({ data: [] })), 
       ]);
+
+      const [srRes, employeesRes, asRes] = await Promise.all([
+        api.get("/service-requests?limit=50&include_checkout_requests=true").catch(() => ({ data: [] })),
+        api.get("/employees?limit=200").catch(() => ({ data: [] })),
+        api.get("/dashboard/kpis").catch(() => ({ data: [{}] }))
+      ]);
+
+      console.log("[DEBUG-FRONTEND] Service Requests Response:", srRes.data);
+      setServiceRequests(srRes.data || []);
       setServices(sRes?.data || []);
       setAssignedServices((aRes?.data || []).sort((a, b) => new Date(b.assigned_at) - new Date(a.assigned_at)));
       setAllRooms(rRes?.data || []);
@@ -256,7 +268,7 @@ const Services = () => {
       setBookings([]);
       setInventoryItems([]);
       console.error("Error fetching data:", error);
-      alert("Failed to load services data. Please refresh the page.");
+      showBannerMessage("error", "Failed to load services data. Please refresh the page.");
     } finally {
       if (showLoading) setLoading(false);
     }
@@ -451,11 +463,11 @@ const Services = () => {
         resetServiceForm();
       }
       fetchAll();
-      alert("Service has been marked as inactive.");
+      showBannerMessage("success", "Service has been marked as inactive.");
     } catch (err) {
       console.error("Failed to delete service", err);
       const errorMsg = err.response?.data?.detail || err.message || "Unknown error";
-      alert(`Failed to delete service: ${errorMsg}`);
+      showBannerMessage("error", `Failed to delete service: ${errorMsg}`);
     }
   };
 
@@ -505,11 +517,12 @@ const Services = () => {
       resetServiceForm();
       setShowCreateModal(false);
       fetchAll();
+      showBannerMessage("success", `Service ${editingServiceId ? 'updated' : 'created'} successfully!`);
     } catch (err) {
       console.error("Failed to save service", err);
       const errorMsg = err.response?.data?.detail || err.message || "Unknown error";
       console.error("Error details:", err.response?.data);
-      alert(`Failed to save service: ${errorMsg}`);
+      showBannerMessage("error", `Failed to save service: ${errorMsg}`);
     }
   };
 
@@ -648,7 +661,7 @@ const Services = () => {
       }
 
       const response = await api.post("/services/assign", payload);
-      alert("Service assigned successfully!");
+      showBannerMessage("success", "Service assigned successfully!");
 
       if (response.data) {
         setAssignedServices(prev => [response.data, ...prev]);
@@ -691,9 +704,10 @@ const Services = () => {
         is_visible_to_guest: !currentVisibility
       });
       fetchAll(); // Refresh the list
+      showBannerMessage("success", "Visibility updated successfully!");
     } catch (err) {
       console.error("Failed to toggle service visibility", err);
-      alert("Failed to update service visibility. Please try again.");
+      showBannerMessage("error", "Failed to update service visibility. Please try again.");
     }
   };
 
@@ -1127,7 +1141,7 @@ const Services = () => {
       });
 
       if (invalidReturns.length > 0) {
-        alert("Error: Return quantities cannot exceed available balance. Please check your quantities.");
+        showBannerMessage("error", "Error: Return quantities cannot exceed available balance. Please check your quantities.");
         return;
       }
 
@@ -1160,7 +1174,7 @@ const Services = () => {
       setReturnLocationId(null);
       fetchAll(false);
 
-      alert("Service marked as completed and inventory updated successfully!");
+      showBannerMessage("success", "Service marked as completed and inventory updated successfully!");
     } catch (error) {
       console.error("Failed to complete service with returns:", error);
 
@@ -1186,7 +1200,7 @@ const Services = () => {
         errorMsg = error.response.data.message;
       }
 
-      alert(`Failed to complete service:\n${errorMsg}`);
+      showBannerMessage("error", `Failed to complete service:\n${errorMsg}`);
     }
   };
 
@@ -1276,13 +1290,13 @@ const Services = () => {
     } catch (error) {
       console.error("Failed to delete assigned service:", error);
       const msg = error.response?.data?.detail || error.message || "Unknown error";
-      alert(`Failed to delete assigned service: ${msg}`);
+      showBannerMessage("error", `Failed to delete assigned service: ${msg}`);
     }
   };
 
   const handleReassignEmployee = (assignedService) => {
     if (employees.length === 0) {
-      alert("No employees available. Please add employees first.");
+      showBannerMessage("error", "No employees available. Please add employees first.");
       return;
     }
     // Open modal with current employee pre-selected
@@ -1305,18 +1319,18 @@ const Services = () => {
 
     const userInput = window.prompt(confirmMessage);
     if (userInput !== "DELETE ALL") {
-      alert("Deletion cancelled.");
+      showBannerMessage("error", "Deletion cancelled.");
       return;
     }
 
     try {
       const response = await api.delete("/services/clear-all");
-      alert(`✅ Success! Cleared:\n- ${response.data.deleted.assigned_services} assigned services\n- ${response.data.deleted.services} services\n- ${response.data.deleted.service_images} service images\n- ${response.data.deleted.service_inventory_items} inventory item links`);
+      showBannerMessage("success", `✅ Success! Cleared:\n- ${response.data.deleted.assigned_services} assigned services\n- ${response.data.deleted.services} services\n- ${response.data.deleted.service_images} service images\n- ${response.data.deleted.service_inventory_items} inventory item links`);
       fetchAll(); // Refresh the page
     } catch (error) {
       console.error("Failed to clear all services:", error);
       const msg = error.response?.data?.detail || error.message || "Unknown error";
-      alert(`Failed to clear all services: ${msg}`);
+      showBannerMessage("error", `Failed to clear all services: ${msg}`);
     }
   };
 
@@ -1881,7 +1895,7 @@ const Services = () => {
             : s
         ));
 
-        alert("Employee reassigned successfully!");
+        showBannerMessage("success", "Employee reassigned successfully!");
         setQuickAssignModal(null);
         fetchAll(false);
         return;
@@ -1901,7 +1915,7 @@ const Services = () => {
           await handleAssignEmployeeToRequest(quickAssignModal.request.id, parseInt(quickAssignModal.employeeId));
         }
 
-        alert("Employee assigned to checkout verification successfully!");
+        showBannerMessage("success", "Employee assigned to checkout verification successfully!");
         setQuickAssignModal(null);
         // Immediately refresh data to show in activity
         await fetchServiceRequests();
@@ -1916,7 +1930,7 @@ const Services = () => {
         await handleAssignEmployeeToRequest(quickAssignModal.request.id, parseInt(quickAssignModal.employeeId), quickAssignModal.pickupLocationId);
       }
 
-      alert("Employee assigned successfully!");
+      showBannerMessage("success", "Employee assigned successfully!");
       setQuickAssignModal(null);
 
       // Immediately refresh data to show in activity
@@ -1930,7 +1944,7 @@ const Services = () => {
       } else if (err.message) {
         errorMsg += err.message;
       }
-      alert(`Error: ${errorMsg}`);
+      showBannerMessage("error", `Error: ${errorMsg}`);
     }
   };
 
@@ -1947,12 +1961,12 @@ const Services = () => {
 
     try {
       await api.post(`/food-orders/${paymentModal.orderId}/mark-paid?payment_method=${paymentModal.paymentMethod}`);
-      alert("Order marked as paid successfully!");
+      showBannerMessage("success", "Order marked as paid successfully!");
       setPaymentModal(null);
       fetchServiceRequests();
     } catch (err) {
       console.error("Failed to mark order as paid", err);
-      alert(`Error: ${err.response?.data?.detail || err.message}`);
+      showBannerMessage("error", `Error: ${err.response?.data?.detail || err.message}`);
     }
   };
 
@@ -2672,7 +2686,7 @@ const Services = () => {
                                         const linked = assignedServices.find(as => as.room?.id === request.room_id && (as.employee_id === request.employee_id || !as.employee_id));
                                         const targetId = asId || (linked ? linked.id : null);
                                         if (targetId) handleStatusChange(targetId, "completed");
-                                        else alert("No linked mission telemetry found for this unit.");
+                                        else showBannerMessage("error", "No linked mission telemetry found for this unit.");
                                       }}
                                       className="text-[9px] font-black text-indigo-500 hover:text-indigo-700 uppercase tracking-tighter"
                                     >
@@ -2802,7 +2816,7 @@ const Services = () => {
                                           if (targetId) {
                                             handleStatusChange(targetId, 'completed');
                                           } else {
-                                            alert("No linked inventory assignment found for this specific room/agent.");
+                                            showBannerMessage("error", "No linked inventory assignment found for this specific room/agent.");
                                           }
                                         }}
                                         className="px-2 py-1 rounded text-[11px] font-black uppercase tracking-tight bg-indigo-500 hover:bg-indigo-600 text-white flex items-center gap-1 shadow-sm active:scale-95 transition-all"
@@ -4432,7 +4446,7 @@ const Services = () => {
                       setCompletingRequestId(null);
                       fetchAll();
                     } catch (error) {
-                      alert(`Failed: ${error.message}`);
+                      showBannerMessage("error", `Failed: ${error.message}`);
                     }
                   }}
                   className="px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest text-slate-500 hover:text-slate-900 transition-all"
@@ -5296,12 +5310,8 @@ const Services = () => {
                   <button
                     onClick={() => {
                       // Validate that all items have a location selected
-                      const allLocationsSelected = returnRequestModal.items.every((item, idx) =>
-                        returnLocations[`return_item_${idx}`]
-                      );
-
-                      if (!allLocationsSelected) {
-                        alert("Please select a return location for all items.");
+                      if (Object.keys(returnLocations).length !== inventoryAssignments.length) {
+                        showBannerMessage("error", "Please select a return location for all items.");
                         return;
                       }
 
@@ -5399,20 +5409,28 @@ const Services = () => {
                         <div className="flex flex-col">
                           <span className="text-[9px] font-bold text-gray-500 uppercase">Assigned</span>
                           <span className="text-xs font-semibold text-gray-700">
-                            {selectedActivity.date ? new Date(selectedActivity.date).toLocaleTimeString() : '-'}
+                            {selectedActivity.date ? (() => {
+                              const dStr = String(selectedActivity.date);
+                              return new Date(dStr.includes('Z') || dStr.includes('+') ? dStr : dStr + 'Z').toLocaleTimeString();
+                            })() : '-'}
                           </span>
                         </div>
                         <div className="flex flex-col">
                           <span className="text-[9px] font-bold text-gray-500 uppercase">Started</span>
                           <span className="text-xs font-semibold text-gray-700">
-                            {selectedActivity.original?.started_at ? new Date(selectedActivity.original.started_at).toLocaleTimeString() : (selectedActivity.status !== 'pending' ? 'Ongoing' : '-')}
+                            {selectedActivity.original?.started_at ? (() => {
+                              const dStr = String(selectedActivity.original.started_at);
+                              return new Date(dStr.includes('Z') || dStr.includes('+') ? dStr : dStr + 'Z').toLocaleTimeString();
+                            })() : (selectedActivity.status !== 'pending' ? 'Ongoing' : '-')}
                           </span>
                         </div>
                         <div className="flex flex-col">
                           <span className="text-[9px] font-bold text-gray-500 uppercase">Completed</span>
                           <span className="text-xs font-semibold text-gray-700">
-                            {selectedActivity.original?.completed_at ? new Date(selectedActivity.original.completed_at).toLocaleTimeString() :
-                              (selectedActivity.original?.last_used_at ? new Date(selectedActivity.original.last_used_at).toLocaleTimeString() : '-')}
+                            {(selectedActivity.original?.completed_at || selectedActivity.original?.last_used_at) ? (() => {
+                              const dStr = String(selectedActivity.original.completed_at || selectedActivity.original.last_used_at);
+                              return new Date(dStr.includes('Z') || dStr.includes('+') ? dStr : dStr + 'Z').toLocaleTimeString();
+                            })() : '-'}
                           </span>
                         </div>
                       </div>
@@ -5422,8 +5440,12 @@ const Services = () => {
                           <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Total Mission Duration</span>
                           <span className="text-sm font-black text-slate-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">
                             {(() => {
-                              const end = new Date(selectedActivity.original.completed_at || selectedActivity.original.last_used_at);
-                              const start = new Date(selectedActivity.original.started_at || selectedActivity.date);
+                              const endStr = String(selectedActivity.original.completed_at || selectedActivity.original.last_used_at);
+                              const startStr = String(selectedActivity.original.started_at || selectedActivity.date);
+                              
+                              const end = new Date(endStr.includes('Z') || endStr.includes('+') ? endStr : endStr + 'Z');
+                              const start = new Date(startStr.includes('Z') || startStr.includes('+') ? startStr : startStr + 'Z');
+                              
                               const diff = end - start;
                               const mins = Math.max(0, Math.floor(diff / (1000 * 60)));
                               const hours = Math.floor(mins / 60);
@@ -6036,6 +6058,22 @@ const Services = () => {
             </div>
           )
         }
+
+        {completingRequestId && (
+          <InventoryRecoveryModal
+            assignedServiceId={completingServiceId}
+            requestId={completingRequestId}
+            onClose={() => { setCompletingRequestId(null); setCompletingServiceId(null); }}
+            onComplete={() => { setCompletingRequestId(null); setCompletingServiceId(null); fetchAll(); }}
+          />
+        )}
+
+        <BannerMessage
+          message={bannerMessage}
+          onClose={closeBannerMessage}
+          autoDismiss={true}
+          duration={5000}
+        />
       </div >
     </DashboardLayout >
   );

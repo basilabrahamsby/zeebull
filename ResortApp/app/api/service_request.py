@@ -109,7 +109,10 @@ def get_service_requests(
         employee_id=effective_employee_id, branch_id=branch_id
     )
 
-    
+    print(f"[DEBUG-API] Fetched {len(service_requests)} service requests")
+    for s in service_requests:
+        print(f"  [DEBUG-API] SR ID: {s.id}, Room: {s.room_id}, Type: {s.request_type}")
+
     # Convert service requests to dict format
     result = []
     for sr in service_requests:
@@ -426,7 +429,7 @@ def update_service_request(
 ):
     # Authorization logic
     user_role = current_user.role.name.lower() if current_user.role else "guest"
-    is_admin = user_role in ["admin", "manager", "owner", "superadmin"]
+    is_admin = user_role in ["admin", "manager", "owner", "superadmin"] or getattr(current_user, 'is_superadmin', False)
     current_employee_id = current_user.employee.id if current_user.employee else None
     
     print(f"[DEBUG-API] Updating ServiceRequest {request_id}. Status: {update.status}, Billing: {update.billing_status}, Branch: {branch_id}")

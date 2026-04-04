@@ -185,6 +185,7 @@ class PurchaseMaster(Base):
     expected_delivery_date = Column(Date, nullable=True)
     invoice_number = Column(String, nullable=True, index=True)
     invoice_date = Column(Date, nullable=True)
+    bill_file_url = Column(String, nullable=True)
     gst_number = Column(String, nullable=True)  # Vendor GST number (can be from vendor or override)
     payment_terms = Column(String, nullable=True)
     payment_status = Column(String, default="pending", nullable=False)  # pending, partial, paid
