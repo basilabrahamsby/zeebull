@@ -21,6 +21,14 @@ const SectionCard = ({ title, children }) => (
     </div>
 );
 
+const ensureProofPath = (url) => {
+    if (!url) return url;
+    if (url.startsWith('http://') || url.startsWith('https://')) return url;
+    if (url.includes('/')) return url; // Path already included
+    return `uploads/checkin_proofs/${url}`;
+};
+
+
 const GuestProfile = () => {
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
@@ -202,8 +210,8 @@ const GuestProfile = () => {
                                             <td className="p-3">{b.rooms.join(', ')}</td>
                                             <td className="p-3"><span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800">{b.status}</span></td>
                                             <td className="p-3 flex items-center gap-4">
-                                                {b.id_card_image_url && <a href={getImageUrl(b.id_card_image_url)} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline flex items-center"><FileText size={16} className="mr-1" /> ID Card</a>}
-                                                {b.guest_photo_url && <a href={getImageUrl(b.guest_photo_url)} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline flex items-center"><Camera size={16} className="mr-1" /> Photo</a>}
+                                                {b.id_card_image_url && <a href={getImageUrl(ensureProofPath(b.id_card_image_url))} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline flex items-center"><FileText size={16} className="mr-1" /> ID Card</a>}
+                                                {b.guest_photo_url && <a href={getImageUrl(ensureProofPath(b.guest_photo_url))} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline flex items-center"><Camera size={16} className="mr-1" /> Photo</a>}
                                             </td>
                                         </tr>
                                     ))}

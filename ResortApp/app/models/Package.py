@@ -61,6 +61,7 @@ class PackageBooking(Base):
     children = Column(Integer, default=0)
     id_card_image_url = Column(String, nullable=True)
     guest_photo_url = Column(String, nullable=True)
+    num_rooms = Column(Integer, default=1) # Number of rooms requested
 
     status = Column(String)
     total_amount = Column(Float, default=0.0) # Added for tracking package booking value

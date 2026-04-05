@@ -46,8 +46,12 @@ def get_room_types(db: Session = Depends(get_db), branch_id: int = Depends(get_b
 def create_room_type(
     name: str = Form(...),
     base_price: float = Form(0.0),
+    weekend_price: Optional[float] = Form(None),
+    long_weekend_price: Optional[float] = Form(None),
+    holiday_price: Optional[float] = Form(None),
     total_inventory: int = Form(0),
     capacity: int = Form(2),
+    children_capacity: int = Form(0),
     extra_bed_price: float = Form(0.0),
     channel_manager_id: Optional[str] = Form(None),
     description: Optional[str] = Form(None),
@@ -107,8 +111,12 @@ def create_room_type(
     db_room_type = RoomType(
         name=name,
         base_price=base_price,
+        weekend_price=weekend_price,
+        long_weekend_price=long_weekend_price,
+        holiday_price=holiday_price,
         total_inventory=total_inventory,
         adults_capacity=capacity,
+        children_capacity=children_capacity,
         channel_manager_id=channel_manager_id,
         air_conditioning=air_conditioning,
         wifi=wifi,
@@ -152,8 +160,12 @@ def update_room_type(
     type_id: int, 
     name: Optional[str] = Form(None),
     base_price: Optional[float] = Form(None),
+    weekend_price: Optional[float] = Form(None),
+    long_weekend_price: Optional[float] = Form(None),
+    holiday_price: Optional[float] = Form(None),
     total_inventory: Optional[int] = Form(None),
     capacity: Optional[int] = Form(None),
+    children_capacity: Optional[int] = Form(None),
     extra_bed_price: Optional[float] = Form(None),
     channel_manager_id: Optional[str] = Form(None),
     description: Optional[str] = Form(None),
@@ -196,8 +208,12 @@ def update_room_type(
     
     if name is not None: db_room_type.name = name
     if base_price is not None: db_room_type.base_price = base_price
+    if weekend_price is not None: db_room_type.weekend_price = weekend_price
+    if long_weekend_price is not None: db_room_type.long_weekend_price = long_weekend_price
+    if holiday_price is not None: db_room_type.holiday_price = holiday_price
     if total_inventory is not None: db_room_type.total_inventory = total_inventory
     if capacity is not None: db_room_type.adults_capacity = capacity
+    if children_capacity is not None: db_room_type.children_capacity = children_capacity
     if channel_manager_id is not None: db_room_type.channel_manager_id = channel_manager_id
     if air_conditioning is not None: db_room_type.air_conditioning = air_conditioning
     if wifi is not None: db_room_type.wifi = wifi

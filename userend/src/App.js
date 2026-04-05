@@ -1349,6 +1349,7 @@ export default function App() {
         check_out: "",
         adults: 1,
         children: 0,
+        num_rooms: 1
     });
     const [packageBookingData, setPackageBookingData] = useState({
         package_id: null,
@@ -1358,8 +1359,9 @@ export default function App() {
         guest_email: "",
         check_in: "",
         check_out: "",
-        adults: 1,
+        adults: 2,
         children: 0,
+        num_rooms: 1,
         food_preferences: "",
         special_requests: ""
     });
@@ -1984,15 +1986,25 @@ export default function App() {
     // Derived Filtered States for Multi-Property view
     useEffect(() => {
         // Rooms filtering
-        const branchFilteredRooms = selectedBranch?.id
+        let filteredRooms = selectedBranch?.id
             ? allRooms.filter(r => r.branch_id == selectedBranch.id)
             : allRooms;
 
         if (bookingData.check_in && bookingData.check_out && Object.keys(roomAvailability).length > 0) {
-            setRooms(branchFilteredRooms.filter(room => roomAvailability[room.id] === true));
-        } else {
-            setRooms(branchFilteredRooms);
+            filteredRooms = filteredRooms.filter(room => roomAvailability[room.id] === true);
         }
+
+        // Group by type/category: only keep the first occurrence of each type for display
+        const uniqueTypes = new Set();
+        const onePerType = filteredRooms.filter(room => {
+            if (!uniqueTypes.has(room.type)) {
+                uniqueTypes.add(room.type);
+                return true;
+            }
+            return false;
+        });
+
+        setRooms(onePerType);
 
         // Packages filtering
         setPackages(selectedBranch?.id
@@ -2188,10 +2200,11 @@ export default function App() {
         }
 
         // --- CAPACITY VALIDATION ---
-        const selectedRoomDetails = bookingData.room_ids.map(roomId => rooms.find(r => r.id === roomId)).filter(Boolean);
+        const selectedRoomDetails = bookingData.room_ids.map(roomId => allRooms.find(r => r.id === roomId)).filter(Boolean);
+        const numRoomsBooked = parseInt(bookingData.num_rooms) || selectedRoomDetails.length || 1;
         const roomCapacity = {
-            adults: selectedRoomDetails.reduce((sum, room) => sum + (room.adults || 0), 0),
-            children: selectedRoomDetails.reduce((sum, room) => sum + (room.children || 0), 0)
+            adults: selectedRoomDetails.reduce((sum, room) => sum + (room.adults_capacity || 2), 0) * (selectedRoomDetails.length > 1 ? 1 : numRoomsBooked),
+            children: selectedRoomDetails.reduce((sum, room) => sum + (room.children_capacity || 0), 0) * (selectedRoomDetails.length > 1 ? 1 : numRoomsBooked)
         };
 
         const adultsRequested = parseInt(bookingData.adults);
@@ -2204,8 +2217,8 @@ export default function App() {
             return;
         }
 
-        // Validate children capacity
-        if (childrenRequested > roomCapacity.children) {
+        // Validate children capacity (skip check if children_capacity is 0 = not configured / no restriction)
+        if (roomCapacity.children > 0 && childrenRequested > roomCapacity.children) {
             showBannerMessage("error", `The number of children (${childrenRequested}) exceeds the total children capacity of the selected rooms (${roomCapacity.children} children max). Please select additional rooms or reduce the number of children.`);
             setIsBookingLoading(false);
             return;
@@ -2218,22 +2231,36 @@ export default function App() {
             // Determine branch_id from selected rooms if not explicitly set by branch selection
             // This ensures if we select a room from a different branch in an "all rooms" view, the booking goes to the right place.
             let finalBranchId = selectedBranch?.id;
+            let roomTypeId = null;
             if (bookingData.room_ids.length > 0) {
                 const firstRoom = allRooms.find(r => r.id === bookingData.room_ids[0]);
                 if (firstRoom?.branch_id) {
                     finalBranchId = firstRoom.branch_id;
                 }
+                if (firstRoom?.room_type_id) {
+                    roomTypeId = firstRoom.room_type_id;
+                }
+            }
+
+            const payloadData = { ...bookingData, branch_id: finalBranchId };
+            
+            // Critical Fix: For userend guest bookings, we want to SOFT-ALLOCATE. 
+            // So we send the room_type_id instead of hardcoding specific physical room_ids.
+            // This forces employees to assign the specific physical room during the check-in process.
+            if (roomTypeId) {
+                payloadData.room_type_id = roomTypeId;
+                payloadData.room_ids = []; 
             }
 
             const response = await fetch(`${API_BASE_URL}/bookings/guest`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ...bookingData, branch_id: finalBranchId })
+                body: JSON.stringify(payloadData)
             });
 
             if (response.ok) {
                 showBannerMessage("success", "Room booking successful! We look forward to your stay.");
-                setBookingData({ room_ids: [], guest_name: "", guest_mobile: "", guest_email: "", check_in: "", check_out: "", adults: 1, children: 0 });
+                setBookingData({ room_ids: [], guest_name: "", guest_mobile: "", guest_email: "", check_in: "", check_out: "", adults: 1, children: 0, num_rooms: 1 });
                 // Close the booking form after successful booking
                 setTimeout(() => {
                     setIsRoomBookingFormOpen(false);
@@ -2361,10 +2388,11 @@ export default function App() {
         // --- CAPACITY VALIDATION ---
         // Skip capacity validation for whole_property packages (they book entire property regardless of guest count)
         if (!isWholeProperty) {
-            const selectedRoomDetails = finalRoomIds.map(roomId => rooms.find(r => r.id === roomId)).filter(Boolean);
+            const selectedRoomDetails = finalRoomIds.map(roomId => allRooms.find(r => r.id === roomId)).filter(Boolean);
+            const numRoomsBooked = parseInt(packageBookingData.num_rooms) || selectedRoomDetails.length || 1;
             const packageCapacity = {
-                adults: selectedRoomDetails.reduce((sum, room) => sum + (room.adults || 0), 0),
-                children: selectedRoomDetails.reduce((sum, room) => sum + (room.children || 0), 0)
+                adults: selectedRoomDetails.reduce((sum, room) => sum + (room.adults_capacity || 2), 0) * (selectedRoomDetails.length > 1 ? 1 : numRoomsBooked),
+                children: selectedRoomDetails.reduce((sum, room) => sum + (room.children_capacity || 0), 0) * (selectedRoomDetails.length > 1 ? 1 : numRoomsBooked)
             };
 
             const adultsRequested = parseInt(packageBookingData.adults);
@@ -2377,8 +2405,8 @@ export default function App() {
                 return;
             }
 
-            // Validate children capacity
-            if (childrenRequested > packageCapacity.children) {
+            // Validate children capacity (skip check if children_capacity is 0 = not configured / no restriction)
+            if (packageCapacity.children > 0 && childrenRequested > packageCapacity.children) {
                 showBannerMessage("error", `The number of children (${childrenRequested}) exceeds the total children capacity of the selected rooms (${packageCapacity.children} children max). Please select additional rooms or reduce the number of children.`);
                 setIsBookingLoading(false);
                 return;
@@ -2443,7 +2471,7 @@ export default function App() {
 
             if (response.ok) {
                 showBannerMessage("success", "Package booking successful! We look forward to your stay.");
-                setPackageBookingData({ package_id: null, room_ids: [], guest_name: "", guest_mobile: "", guest_email: "", check_in: "", check_out: "", adults: 1, children: 0 });
+                setPackageBookingData({ package_id: null, room_ids: [], guest_name: "", guest_mobile: "", guest_email: "", check_in: "", check_out: "", adults: 1, children: 0, num_rooms: 1, food_preferences: "", special_requests: "" });
                 // Close the booking form after successful booking
                 setTimeout(() => {
                     setIsPackageBookingFormOpen(false);
@@ -3374,8 +3402,8 @@ export default function App() {
                             {/* Room Cards Grid */}
                             {rooms.length > 0 ? (
                                 <>
-                                    <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.68rem', letterSpacing: '0.18em', color: '#9a9a9a', textTransform: 'uppercase', marginBottom: '1.75rem' }}>
-                                        Showing all {rooms.length} rooms
+                                    <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.6rem', letterSpacing: '0.24em', color: '#c99c4e', textTransform: 'uppercase', marginBottom: '1.75rem', fontWeight: '600' }}>
+                                        Showing all {rooms.length} types
                                     </p>
                                     <div style={{
                                         display: 'grid',
@@ -3485,14 +3513,11 @@ export default function App() {
                                                         <h3 style={{ fontFamily: 'var(--font-body)', fontSize: '0.65rem', fontWeight: '600', letterSpacing: '0.24em', textTransform: 'uppercase', color: 'var(--obsidian)', marginBottom: '0.5rem', lineHeight: '1.5' }}>
                                                             {room.type}
                                                         </h3>
-                                                        <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.6rem', letterSpacing: '0.1em', color: '#9a9a9a', marginBottom: '0.45rem' }}>
-                                                            Room #{room.number}
-                                                            {!selectedBranch && branches.length > 1 && room.branch_id && (
-                                                                <span className="ml-2 font-medium text-[var(--gold)]">
-                                                                    — {branches.find(b => b.id === room.branch_id)?.name || "Main Resort"}
-                                                                </span>
-                                                            )}
-                                                        </p>
+                                                        {!selectedBranch && branches.length > 1 && room.branch_id && (
+                                                            <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.55rem', letterSpacing: '0.15em', color: 'var(--gold)', textTransform: 'uppercase', marginBottom: '0.45rem', fontWeight: '600' }}>
+                                                                {branches.find(b => b.id === room.branch_id)?.name || "Main Resort"}
+                                                            </p>
+                                                        )}
                                                         {/* Gold hairline */}
                                                         <div style={{ height: '1px', width: '1.75rem', background: 'linear-gradient(90deg,var(--gold-warm),var(--gold-light))', marginBottom: '0.85rem' }} />
                                                         {/* Price */}
@@ -4719,7 +4744,7 @@ export default function App() {
                                                                     onError={(e) => { e.target.src = ITEM_PLACEHOLDER; }}
                                                                 />
                                                                 <div className="p-2 text-center">
-                                                                    <p className="font-semibold text-xs">Room {room.number}</p>
+                                                                    <p className="font-bold text-[10px] text-amber-600 uppercase tracking-widest mb-1">{room.type}</p>
                                                                     {!selectedBranch && branches.length > 1 && room.branch_id && (
                                                                         <p className="text-[10px] text-[var(--gold)] font-medium uppercase tracking-wider mb-1">
                                                                             {branches.find(b => b.id === room.branch_id)?.name}
@@ -4762,6 +4787,10 @@ export default function App() {
                                         <div className="space-y-2">
                                             <label className={`block text-sm font-medium ${theme.textSecondary}`}>Children</label>
                                             <input type="number" name="children" value={bookingData.children} onChange={handleRoomBookingChange} min="0" required className={`w-full p-3 rounded-xl ${theme.bgSecondary} ${theme.textPrimary} border ${theme.border} focus:outline-none focus:ring-2 focus:ring-amber-500 transition-colors`} />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className={`block text-sm font-medium ${theme.textSecondary}`}>No. of Rooms</label>
+                                            <input type="number" name="num_rooms" value={bookingData.num_rooms} onChange={handleRoomBookingChange} min="1" required className={`w-full p-3 rounded-xl ${theme.bgSecondary} ${theme.textPrimary} border ${theme.border} focus:outline-none focus:ring-2 focus:ring-amber-500 transition-colors`} />
                                         </div>
                                     </div>
                                     <button type="submit" className={`w-full py-3 rounded-full ${theme.buttonBg} ${theme.buttonText} font-bold shadow-lg ${theme.buttonHover} transition-colors disabled:opacity-50`} disabled={isBookingLoading}>
@@ -4955,11 +4984,14 @@ export default function App() {
                                                                     );
                                                                 }
 
-                                                                // Filter to only show available rooms (check availability)
+                                                                // Group by type for display
+                                                                const seenTypes = new Set();
                                                                 roomsToShow = roomsToShow.filter(room => {
-                                                                    // Check if room is available based on packageRoomAvailability
-                                                                    const isAvailable = packageRoomAvailability[room.id] === true;
-                                                                    return isAvailable;
+                                                                    if (!seenTypes.has(room.type)) {
+                                                                        seenTypes.add(room.type);
+                                                                        return true;
+                                                                    }
+                                                                    return false;
                                                                 });
 
                                                                 return roomsToShow.length > 0 ? (
@@ -4995,7 +5027,7 @@ export default function App() {
                                                                                 </div>
                                                                                 <div className="p-4">
                                                                                     <div className="flex justify-between items-center mb-1.5">
-                                                                                        <h4 className="font-display text-neutral-900 group-hover:text-amber-800 transition-colors uppercase tracking-widest text-[11px] font-bold">Room {room.number}</h4>
+                                                                                        <h4 className="font-display text-neutral-900 group-hover:text-amber-800 transition-colors uppercase tracking-widest text-[11px] font-bold">{room.type}</h4>
                                                                                         <span className="text-amber-700 font-bold text-xs tabular-nums">{formatCurrency(room.price)}</span>
                                                                                     </div>
                                                                                     <div className="flex items-center gap-4 text-neutral-500 text-[10px] uppercase tracking-widest font-semibold opacity-70">
@@ -5040,7 +5072,7 @@ export default function App() {
                                         <input type="email" name="guest_email" value={packageBookingData.guest_email || ''} onChange={handlePackageBookingChange} placeholder="user@example.com" className="w-full p-4 rounded-2xl bg-neutral-50 text-neutral-900 border-2 border-neutral-100 focus:border-amber-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-amber-500/5 transition-all duration-300 font-medium" />
                                     </div>
 
-                                    <div className="flex flex-col sm:grid sm:grid-cols-2 gap-4">
+                                    <div className="flex flex-col sm:grid sm:grid-cols-3 gap-4">
                                         <div className="space-y-2">
                                             <label className="block text-[10px] font-bold uppercase tracking-widest text-neutral-400 ml-1">Adults</label>
                                             <input type="number" name="adults" value={packageBookingData.adults} onChange={handlePackageBookingChange} min="1" required className="w-full p-4 rounded-2xl bg-neutral-50 text-neutral-900 border-2 border-neutral-100 focus:border-amber-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-amber-500/5 transition-all duration-300 font-medium" />
@@ -5048,6 +5080,10 @@ export default function App() {
                                         <div className="space-y-2">
                                             <label className="block text-[10px] font-bold uppercase tracking-widest text-neutral-400 ml-1">Children</label>
                                             <input type="number" name="children" value={packageBookingData.children} onChange={handlePackageBookingChange} min="0" required className="w-full p-4 rounded-2xl bg-neutral-50 text-neutral-900 border-2 border-neutral-100 focus:border-amber-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-amber-500/5 transition-all duration-300 font-medium" />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="block text-[10px] font-bold uppercase tracking-widest text-neutral-400 ml-1">No. of Rooms</label>
+                                            <input type="number" name="num_rooms" value={packageBookingData.num_rooms} onChange={handlePackageBookingChange} min="1" required className="w-full p-4 rounded-2xl bg-neutral-50 text-neutral-900 border-2 border-neutral-100 focus:border-amber-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-amber-500/5 transition-all duration-300 font-medium" />
                                         </div>
                                     </div>
 

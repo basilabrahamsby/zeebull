@@ -24,6 +24,8 @@ class RoomOut(RoomBase):
     # Linked Type Data
     type: Optional[str] = None
     price: Optional[float] = 0.0
+    adults_capacity: Optional[int] = 2
+    children_capacity: Optional[int] = 0
     
     # Amenities (from RoomType)
     air_conditioning: bool = False

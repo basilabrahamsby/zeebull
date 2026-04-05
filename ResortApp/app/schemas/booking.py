@@ -9,6 +9,7 @@ class RoomOut(BaseModel):
     id: int
     number: str
     room_type_id: Optional[int] = None
+    type: Optional[str] = None     # resolved from RoomType.name via @property
     status: str
     image_url: Optional[str] = None
 
@@ -38,6 +39,7 @@ class BookingCreate(BaseModel):
     check_out: date
     adults: int
     children: int
+    num_rooms: int = 1
     branch_id: Optional[int] = None
 
     @validator('check_out')
@@ -62,6 +64,7 @@ class BookingOut(BaseModel):
     check_out: date
     adults: int
     children: int
+    num_rooms: int = 1
     checked_in_at: Optional[datetime] = None
     checked_out_at: Optional[datetime] = None
     checkout: Optional[CheckoutFull] = None
@@ -74,6 +77,8 @@ class BookingOut(BaseModel):
     advance_deposit: float = 0.0
     source: Optional[str] = "Direct"
     package_name: Optional[str] = None
+    room_type_id: Optional[int] = None       # For soft-allocation bookings
+    room_type_name: Optional[str] = None     # Resolved room type name
     
     is_id_verified: bool = False
     digital_signature_url: Optional[str] = None

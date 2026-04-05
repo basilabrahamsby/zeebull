@@ -103,8 +103,10 @@ const modules = [
             { id: "inventory_waste", label: "Waste", defaultActions: ["view", "create", "delete"] },
             { id: "inventory_locations", label: "Locations", defaultActions: ["view", "create", "edit", "delete"] },
             { id: "inventory_assets", label: "Assets", defaultActions: ["view", "create", "edit", "delete"] },
-            { id: "inventory_stock", label: "Location Stock", defaultActions: ["view"] },
+            { id: "inventory_location_stock", label: "Location Stock", defaultActions: ["view"] },
             { id: "inventory_recipe", label: "Recipes", defaultActions: ["view", "create", "edit", "delete"] },
+            { id: "inventory_laundry", label: "Laundry", defaultActions: ["view", "create", "edit", "delete"] },
+            { id: "inventory_transfer", label: "Branch Transfers", defaultActions: ["view", "create", "edit", "delete"] },
         ]
     },
     {

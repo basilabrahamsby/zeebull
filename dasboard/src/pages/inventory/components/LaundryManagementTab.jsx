@@ -45,7 +45,8 @@ const LaundryManagementTab = ({ logs, onRefresh, locations, addNotification }) =
             onRefresh();
         } catch (error) {
             console.error('Error returning items:', error);
-            addNotification({ title: 'Error', message: 'Failed to return items', type: 'error' });
+            const errorMessage = error.response?.data?.detail || 'Failed to return items';
+            addNotification({ title: 'Error', message: errorMessage, type: 'error' });
         } finally {
             setLoading(false);
         }

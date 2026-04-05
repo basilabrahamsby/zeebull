@@ -538,6 +538,8 @@ const Billing = () => {
   // New State for Inventory Verification Modal
   const [checkoutInventoryModal, setCheckoutInventoryModal] = useState(null); // Request ID
   const [checkoutInventoryDetails, setCheckoutInventoryDetails] = useState(null);
+  const [activeRoomTab, setActiveRoomTab] = useState(0);
+  const [verifiedRoomIndices, setVerifiedRoomIndices] = useState(new Set());
   const [returnLocations, setReturnLocations] = useState([]); // Valid return locations
 
   // Filter and search states
@@ -899,52 +901,45 @@ const Billing = () => {
         console.error("Failed to fetch return locations", e);
       }
 
-      // 1. Fetch current inventory details (consumables)
+      // 1. Fetch current inventory details (consumables & assets for all rooms)
       const res = await api.get(`/bill/checkout-request/${checkoutRequest.request_id}/inventory-details`);
       const details = res.data;
 
-      // 2. Fetch inventory verification data
-      if (details.room_number) {
-        try {
-          const verificationRes = await api.get(`/bill/pre-checkout/${details.room_number}/verification-data`);
-          if (verificationRes.data) {
-            if (verificationRes.data.consumables) {
-              details.items = verificationRes.data.consumables.map(item => ({
-                ...item,
-                total_assigned: item.current_stock,
-                current_stock: item.current_stock,
-                available_stock: item.current_stock, // Default assumption: all present
-                used_qty: 0,
-                missing_qty: 0,
-                // Auto-assign laundry location if it's a laundry item
-                return_location_id: item.track_laundry_cycle ? laundryLocId : null
-              }));
-            }
-            if (verificationRes.data.assets) {
-              // MERGE: Take existing assets from details but augment with verification flags
-              const existingAssets = details.assets || [];
-              details.fixed_assets = verificationRes.data.assets.map(vAsset => {
-                const existing = existingAssets.find(a => a.id === vAsset.id || a.asset_registry_id === vAsset.asset_registry_id);
-                return {
-                  ...vAsset,
-                  ...existing,
-                  is_present: true,
-                  is_damaged: false,
-                  damage_notes: "",
-                  current_stock: 1,
-                  available_stock: 1,
-                  request_replacement: false,
-                  return_location_id: vAsset.track_laundry_cycle ? laundryLocId : null
-                };
-              });
-            }
-          }
-        } catch (e) {
-          console.error("Failed to fetch inventory verification data:", e);
-        }
+      if (details.room_details) {
+        details.room_details = details.room_details.map(room => {
+          const processedItems = (room.items || []).map(item => ({
+            ...item,
+            total_assigned: item.current_stock,
+            available_stock: item.current_stock,
+            used_qty: 0,
+            missing_qty: 0,
+            return_location_id: item.track_laundry_cycle ? laundryLocId : null
+          }));
+          
+          const processedAssets = (room.fixed_assets || []).map(vAsset => ({
+            ...vAsset,
+            is_present: true,
+            is_damaged: false,
+            damage_notes: "",
+            current_stock: 1,
+            available_stock: 1,
+            request_replacement: false,
+            return_location_id: vAsset.track_laundry_cycle ? laundryLocId : null
+          }));
+
+          return {
+            ...room,
+            items: processedItems,
+            fixed_assets: processedAssets,
+            inventory_notes: ''
+          };
+        });
       }
+      details.laundryLocId = laundryLocId;
 
       setCheckoutInventoryDetails(details);
+      setActiveRoomTab(0);
+      setVerifiedRoomIndices(new Set([0])); // Start with the first room as visited
       setCheckoutInventoryModal(checkoutRequest.request_id);
 
     } catch (error) {
@@ -958,8 +953,11 @@ const Billing = () => {
   };
 
   const handleUpdateInventoryVerification = (index, field, value) => {
-    const newItems = [...checkoutInventoryDetails.items];
+    const updatedDetails = { ...checkoutInventoryDetails };
+    const room = updatedDetails.room_details[activeRoomTab];
+    const newItems = [...room.items];
     const item = newItems[index];
+
     const unit = (item.unit || 'pcs').toLowerCase();
     const isDiscreteUnit = ['pcs', 'pc', 'can', 'bottle', 'unit', 'nos', 'number', 'pkt', 'pack', 'box', 'tray', 'piece', 'pieces'].includes(unit);
 
@@ -967,9 +965,9 @@ const Billing = () => {
     if (field === 'available_stock' && isDiscreteUnit) {
       val = Math.floor(val);
     }
-    newItems[index][field] = val;
+    
+    newItems[index] = { ...newItems[index], [field]: val };
 
-    // Auto-calculate used/missing based on Available Stock
     if (field === 'available_stock' || field === 'damage_qty') {
       const current = newItems[index].current_stock || 0;
       const good = field === 'available_stock' ? val : (newItems[index].available_stock || 0);
@@ -978,42 +976,38 @@ const Billing = () => {
       const isRental = newItems[index].is_rentable || (newItems[index].category_name && newItems[index].category_name.toLowerCase().includes('rental'));
 
       if (isRental) {
-        // For rentals: Stock = Good + Damaged + Missing. Used is 0 (or handled separately)
         newItems[index].missing_qty = Math.max(0, current - good - damaged);
         newItems[index].used_qty = 0;
       } else {
-        // For consumables: Stock = Available + Used + Missing. Damaged is a type of loss.
         let used = current - good - damaged;
         if (isDiscreteUnit) used = Math.round(used);
         else used = parseFloat(used.toFixed(2));
 
         newItems[index].used_qty = Math.max(0, used);
-        newItems[index].missing_qty = 0; // Or split with missing if needed?
+        newItems[index].missing_qty = 0;
       }
     }
 
-    setCheckoutInventoryDetails({
-      ...checkoutInventoryDetails,
-      items: newItems
-    });
+    room.items = newItems;
+    setCheckoutInventoryDetails(updatedDetails);
   };
 
   const handleUpdateReturnLocation = (index, locationId) => {
-    const newItems = [...checkoutInventoryDetails.items];
-    newItems[index].return_location_id = locationId ? parseInt(locationId) : null;
-    setCheckoutInventoryDetails({
-      ...checkoutInventoryDetails,
-      items: newItems
-    });
+    const updatedDetails = { ...checkoutInventoryDetails };
+    const room = updatedDetails.room_details[activeRoomTab];
+    const newItems = [...room.items];
+    newItems[index] = { ...newItems[index], return_location_id: locationId ? parseInt(locationId) : null };
+    room.items = newItems;
+    setCheckoutInventoryDetails(updatedDetails);
   };
 
   const handleUpdateAssetDamage = (index, field, value) => {
-    const newAssets = [...(checkoutInventoryDetails.fixed_assets || [])];
-    newAssets[index][field] = value;
-    setCheckoutInventoryDetails({
-      ...checkoutInventoryDetails,
-      fixed_assets: newAssets
-    });
+    const updatedDetails = { ...checkoutInventoryDetails };
+    const room = updatedDetails.room_details[activeRoomTab];
+    const newAssets = [...(room.fixed_assets || [])];
+    newAssets[index] = { ...newAssets[index], [field]: value };
+    room.fixed_assets = newAssets;
+    setCheckoutInventoryDetails(updatedDetails);
   };
 
   const handleSubmitInventoryCheck = async (notes) => {
@@ -1021,39 +1015,47 @@ const Billing = () => {
 
     setCheckingInventory(true);
     try {
-      const items = checkoutInventoryDetails.items.map(item => ({
-        item_id: item.id,
-        used_qty: item.used_qty || 0,
-        missing_qty: item.missing_qty || 0,
-        damage_qty: item.damage_qty || 0,
-        return_location_id: item.return_location_id // Send user selection
-      }));
+      let allItems = [];
+      let allAssetDamages = [];
 
-      // Collect asset damages/movements
-      const assetDamages = (checkoutInventoryDetails.fixed_assets || [])
-        .map(asset => ({
+      checkoutInventoryDetails.room_details.forEach(room => {
+        const roomItems = room.items.map(item => ({
+          item_id: item.id,
+          used_qty: item.used_qty || 0,
+          missing_qty: item.missing_qty || 0,
+          damage_qty: item.damage_qty || 0,
+          return_location_id: item.return_location_id,
+          room_number: room.room_number
+        }));
+        allItems = allItems.concat(roomItems);
+
+        const roomAssets = (room.fixed_assets || []).map(asset => ({
           asset_registry_id: asset.asset_registry_id || asset.id,
           item_id: asset.item_id,
           item_name: asset.item_name || asset.name,
           replacement_cost: asset.replacement_cost,
           is_present: asset.is_present !== false,
           is_damaged: asset.is_damaged || false,
-          is_laundry: asset.return_location_id === laundryLocId,
-          laundry_location_id: asset.return_location_id === laundryLocId ? laundryLocId : null,
+          is_laundry: asset.return_location_id === checkoutInventoryDetails.laundryLocId,
+          laundry_location_id: asset.return_location_id === checkoutInventoryDetails.laundryLocId ? checkoutInventoryDetails.laundryLocId : null,
           return_location_id: asset.return_location_id,
           request_replacement: asset.request_replacement || false,
-          notes: asset.damage_notes || (asset.is_present === false ? "Missing at checkout" : asset.is_damaged ? "Damaged" : "")
+          notes: asset.damage_notes || (asset.is_present === false ? "Missing at checkout" : asset.is_damaged ? "Damaged" : ""),
+          room_number: room.room_number
         }));
+        allAssetDamages = allAssetDamages.concat(roomAssets);
+      });
 
       const res = await api.post(`/bill/checkout-request/${checkoutInventoryModal}/check-inventory`, {
         inventory_notes: notes || "",
-        items: items,
-        asset_damages: assetDamages
+        items: allItems,
+        asset_damages: allAssetDamages
       });
 
       showBannerMessage("success", res.data.message || "Inventory checked successfully.");
       setCheckoutInventoryModal(null);
       setCheckoutInventoryDetails(null);
+      setActiveRoomTab(0);
 
       // Refresh checkout request status
       const actualRoomNumber = roomNumber.includes('-') ? roomNumber.split('-')[1] : roomNumber;
@@ -2141,431 +2143,254 @@ const Billing = () => {
         {/* Inventory Verification Modal */}
         {checkoutInventoryModal && checkoutInventoryDetails && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-y-auto">
               <div className="p-6">
-                <div className="flex justify-between items-center mb-6">
+                <div className="flex justify-between items-center border-b pb-4 mb-4">
                   <h2 className="text-2xl font-bold text-gray-800">Verify Room Inventory</h2>
                   <button
                     onClick={() => {
                       setCheckoutInventoryModal(null);
                       setCheckoutInventoryDetails(null);
+                      setActiveRoomTab(0);
                     }}
                     className="text-gray-400 hover:text-gray-600 transition-colors"
                   >
                     <X size={24} />
                   </button>
                 </div>
+                
+                {/* Room Tabs */}
+                {checkoutInventoryDetails.room_details && checkoutInventoryDetails.room_details.length > 1 && (
+                  <div className="mb-6 border-b border-gray-200">
+                    <ul className="flex flex-wrap -mb-px text-sm font-medium text-center" role="tablist">
+                      {checkoutInventoryDetails.room_details.map((room, idx) => (
+                        <li className="mr-2" role="presentation" key={room.room_number || idx}>
+                          <button
+                            className={`inline-block p-4 border-b-2 rounded-t-lg transition hover:bg-gray-50 focus:outline-none ${activeRoomTab === idx ? "border-indigo-600 text-indigo-600 font-bold" : "border-transparent text-gray-500 hover:text-gray-600 hover:border-gray-300"}`}
+                            onClick={() => {
+                              setActiveRoomTab(idx);
+                              setVerifiedRoomIndices(prev => new Set([...prev, idx]));
+                            }}
+                            type="button"
+                          >
+                            Room {room.room_number} {verifiedRoomIndices.has(idx) && <span className="ml-1 text-green-500">✓</span>}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
 
                 <div className="mb-4 bg-orange-50 border border-orange-200 p-4 rounded-lg">
-                  <p className="text-sm text-orange-800">
-                    Please check both consumables and fixed assets. Mark any damaged assets below.
+                  <p className="text-sm text-orange-800 font-medium">
+                    Verified {verifiedRoomIndices.size} of {checkoutInventoryDetails.room_details?.length || 1} rooms. 
+                    {verifiedRoomIndices.size < (checkoutInventoryDetails.room_details?.length || 1) ? 
+                      " Please review all rooms tabs before confirming." : 
+                      " All rooms reviewed. You can now confirm the verification."}
                   </p>
                 </div>
 
-                {/* Fixed Assets Section */}
-                {checkoutInventoryDetails.fixed_assets && checkoutInventoryDetails.fixed_assets.length > 0 && (
-                  <div className="mb-6">
-                    <h3 className="text-lg font-semibold mb-3 text-red-700">Fixed Assets Check</h3>
-                    <div className="bg-red-50 p-4 rounded-lg border border-red-100">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b border-red-200">
-                            <th className="text-left py-2 font-medium text-red-800">Asset Name</th>
-                            <th className="text-left py-2 font-medium text-red-800">Serial No.</th>
-                            <th className="text-center py-2 font-medium text-red-800">Current</th>
-                            <th className="text-center py-2 font-medium text-red-800">Available</th>
-                            <th className="text-right py-2 font-medium text-red-800">Cost</th>
-                            <th className="text-center py-2 font-medium text-red-800">Damaged?</th>
-                            <th className="text-left py-2 font-medium text-red-800">Notes</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {checkoutInventoryDetails.fixed_assets.map((asset, idx) => (
-                            <tr key={idx} className="border-b border-red-100 last:border-0 hover:bg-red-50 transition-colors">
-                              <td className="py-2 text-gray-800 font-medium">
-                                {asset.item_name}
-                                <div className="text-xs text-gray-500">{asset.asset_tag}</div>
-                              </td>
-                              <td className="py-2 text-gray-600 border-l border-r border-red-100 px-2 font-mono text-xs">
-                                {asset.serial_number || '-'}
-                              </td>
-                              <td className="py-2 text-center text-gray-600">{asset.current_stock}</td>
-                              <td className="py-2 text-center">
-                                <input
-                                  type="number"
-                                  min="0"
-                                  max="1"
-                                  className={`w-12 border rounded p-1 text-center font-bold ${asset.available_stock < asset.current_stock ? 'text-red-600 bg-red-50 border-red-300' : 'text-green-600 border-gray-300'}`}
-                                  value={asset.available_stock}
-                                  onChange={(e) => handleUpdateAssetDamage(idx, 'available_stock', e.target.value)}
-                                />
-                              </td>
-                              <td className="py-2 text-gray-600 text-right">₹{asset.replacement_cost}</td>
-                              <td className="py-2 text-center">
-                                <input
-                                  type="checkbox"
-                                  checked={asset.is_damaged || false}
-                                  onChange={(e) => handleUpdateAssetDamage(idx, 'is_damaged', e.target.checked)}
-                                  className="w-5 h-5 text-red-600 rounded focus:ring-red-500 border-gray-300"
-                                />
-                              </td>
-                              <td className="py-2 px-2">
-                                {(asset.is_damaged || asset.available_stock < asset.current_stock) && (
-                                  <input
-                                    type="text"
-                                    placeholder="Describe damage..."
-                                    value={asset.damage_notes || ""}
-                                    onChange={(e) => handleUpdateAssetDamage(idx, 'damage_notes', e.target.value)}
-                                    className="w-full border p-1 rounded text-sm focus:ring-1 focus:ring-red-500 outline-none"
-                                  />
-                                )}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-
-                <div className="mb-6">
-                  <h3 className="text-lg font-semibold mb-3 text-gray-800">Consumables Inventory Check</h3>
-                  <div className="mb-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                    <p className="text-sm text-blue-800">
-                      📦 <strong>Consumables Usage Tracking:</strong> Track how many items were consumed (e.g., beverages, snacks).
-                      No damage reporting needed for consumables - only usage quantity matters.
-                    </p>
-                  </div>
-                  {/* Separate items into consumables, rent/laundry */}
-                  {(() => {
-                    const items = checkoutInventoryDetails.items || [];
-                    const consumableItems = items.filter(item => {
-                      const isFixedItem = item.is_fixed_asset;
-                      const isKnownConsumable = ["coca", "cola", "water", "chips", "juice", "biscuit"].some(k => (item.item_name || "").toLowerCase().includes(k));
-                      const isRentable = !isKnownConsumable && (item.is_rentable || item.track_laundry_cycle);
-                      return !isFixedItem && !isRentable;
-                    });
-
-                    const rentalItems = items.filter(item => {
-                      const isFixedItem = item.is_fixed_asset;
-                      const isKnownConsumable = ["coca", "cola", "water", "chips", "juice", "biscuit"].some(k => (item.item_name || "").toLowerCase().includes(k));
-                      const isRentable = !isKnownConsumable && (item.is_rentable || item.track_laundry_cycle);
-                      return isRentable && !isFixedItem;
-                    });
-
-                    return (
-                      <>
-                        {consumableItems.length > 0 && (
-                          <div className="mb-8">
-                            <h3 className="text-lg font-semibold mb-3 text-gray-800">Consumables Inventory Check</h3>
-                            <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                              <p className="text-sm text-blue-800">
-                                📦 <strong>Consumables Usage Tracking:</strong> Track how many items were consumed.
-                              </p>
-                            </div>
-                            <div className="overflow-x-auto border rounded-lg">
-                              <table className="min-w-full text-sm">
-                                <thead className="bg-gray-100 uppercase tracking-wider text-gray-700">
-                                  <tr>
-                                    <th className="py-3 px-4 text-left">Item Name</th>
-                                    <th className="py-3 px-4 text-center">Room Stock</th>
-                                    <th className="py-3 px-4 text-center">Available Stock</th>
-                                    <th className="py-3 px-4 text-left">Return Unused To</th>
-                                    <th className="py-3 px-4 text-center">Consumed</th>
-                                    <th className="py-3 px-4 text-right">Potential Charge</th>
-                                  </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-200">
-                                  {consumableItems.map((item, idx) => {
-                                    const originalIdx = items.indexOf(item);
-                                    const unit = (item.unit || 'pcs').toLowerCase();
-                                    const isDiscreteUnit = ['pcs', 'pc', 'can', 'bottle', 'unit', 'nos', 'number', 'pkt', 'pack', 'box', 'tray', 'piece', 'pieces'].includes(unit);
-                                    const chargeAmount = ((item.used_qty || 0) > (item.complimentary_qty || 0))
-                                      ? ((item.used_qty - (item.complimentary_qty || 0)) * (item.charge_per_unit || item.unit_price || 0))
-                                      : 0;
-
-                                    return (
-                                      <tr key={idx} className="hover:bg-gray-50">
-                                        <td className="py-3 px-4 font-medium">{item.item_name}</td>
-                                        <td className="py-3 px-4 text-center text-gray-600 font-semibold">{isDiscreteUnit ? Math.floor(item.current_stock || 0) : (item.current_stock || 0)}</td>
-                                        <td className="py-3 px-4 text-center">
-                                          <input
-                                            type="number"
-                                            min="0"
-                                            max={item.current_stock}
-                                            step={isDiscreteUnit ? "1" : "0.01"}
-                                            onKeyDown={(e) => isDiscreteUnit && (e.key === '.' || e.key === 'e') && e.preventDefault()}
-                                            className={`w-20 border rounded p-1 text-center font-bold ${(item.available_stock < item.current_stock) ? 'text-orange-600 border-orange-300 bg-orange-50' : 'text-green-600 border-gray-300'}`}
-                                            value={item.available_stock}
-                                            onChange={(e) => handleUpdateInventoryVerification(originalIdx, 'available_stock', e.target.value)}
-                                          />
-                                        </td>
-                                        <td className="py-3 px-4">
-                                          {item.available_stock > 0 ? (
-                                            <select
-                                              className="w-full text-sm border-gray-300 rounded-md"
-                                              value={item.return_location_id || ""}
-                                              onChange={(e) => handleUpdateReturnLocation(originalIdx, e.target.value)}
-                                            >
-                                              <option value="">Auto-detect (Default)</option>
-                                              {returnLocations.map(loc => (
-                                                <option key={loc.id} value={loc.id}>{loc.name}</option>
-                                              ))}
-                                            </select>
-                                          ) : (
-                                            <span className="text-gray-400 text-xs">-</span>
-                                          )}
-                                        </td>
-                                        <td className="py-3 px-4 text-center text-gray-700 font-medium">
-                                          {item.used_qty || 0}
-                                          {item.complimentary_qty > 0 && <span className="text-xs text-green-600 block">(Free: {item.complimentary_qty})</span>}
-                                        </td>
-                                        <td className="py-3 px-4 text-right font-medium text-red-600">
-                                          {chargeAmount > 0 ? `+${formatCurrency(chargeAmount)}` : '-'}
-                                        </td>
-                                      </tr>
-                                    );
-                                  })}
-                                </tbody>
-                              </table>
-                            </div>
-                          </div>
-                        )}
-
-                        {rentalItems.length > 0 && (
-                          <div className="mb-8">
-                            <h3 className="text-lg font-semibold mb-3 text-purple-700">Rent / Laundry Items Check</h3>
-                            <div className="mb-3 p-3 bg-purple-50 border border-purple-200 rounded-lg">
-                              <p className="text-sm text-purple-800">
-                                🧺 <strong>For Rent/Laundry Items:</strong> Track good, damaged, and missing items.
-                              </p>
-                            </div>
-                            <div className="overflow-x-auto border rounded-lg">
-                              <table className="min-w-full text-sm">
-                                <thead className="bg-purple-50 uppercase tracking-wider text-purple-800">
-                                  <tr>
-                                    <th className="py-3 px-4 text-left">Item Name</th>
-                                    <th className="py-3 px-4 text-center">Room Stock</th>
-                                    <th className="py-3 px-4 text-center">Good</th>
-                                    <th className="py-3 px-4 text-center">Damaged</th>
-                                    <th className="py-3 px-4 text-center">Missing</th>
-                                    <th className="py-3 px-4 text-left">Return To</th>
-                                    <th className="py-3 px-4 text-right">Potential Charge</th>
-                                  </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-200">
-                                  {rentalItems.map((item, idx) => {
-                                    const originalIdx = items.indexOf(item);
-                                    const price = item.charge_per_unit || item.unit_price || 0;
-                                    const damagePrice = item.cost_per_unit || price;
-                                    const unit = (item.unit || 'pcs').toLowerCase();
-                                    const isDiscreteUnit = ['pcs', 'pc', 'can', 'bottle', 'unit', 'nos', 'number', 'pkt', 'pack', 'box', 'tray', 'piece', 'pieces'].includes(unit);
-
-                                    const totalQty = Math.floor(item.current_stock || 0);
-                                    const good = Math.floor(item.available_stock || 0);
-                                    const damaged = Math.floor(item.damage_qty || 0);
-                                    let missing = Math.max(0, totalQty - good - damaged);
-
-                                    let chargeAmount = (damaged + missing) * damagePrice;
-
-                                    return (
-                                      <tr key={idx} className="hover:bg-purple-50">
-                                        <td className="py-3 px-4 font-medium">
-                                          {item.item_name}
-                                          {item.is_rentable && <span className="ml-2 text-[10px] bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded">RENT</span>}
-                                        </td>
-                                        <td className="py-3 px-4 text-center text-gray-600 font-semibold">{totalQty}</td>
-                                        <td className="py-3 px-4 text-center">
-                                          <input
-                                            type="number"
-                                            min="0"
-                                            max={totalQty}
-                                            step={isDiscreteUnit ? "1" : "0.01"}
-                                            className="w-16 border rounded p-1 text-center font-bold text-green-600"
-                                            value={good}
-                                            onKeyDown={(e) => isDiscreteUnit && (e.key === '.' || e.key === 'e') && e.preventDefault()}
-                                            onChange={(e) => handleUpdateInventoryVerification(originalIdx, 'available_stock', e.target.value)}
-                                          />
-                                        </td>
-                                        <td className="py-3 px-4 text-center">
-                                          <input
-                                            type="number"
-                                            min="0"
-                                            max={totalQty}
-                                            step={isDiscreteUnit ? "1" : "0.01"}
-                                            className="w-16 border rounded p-1 text-center font-bold text-red-600"
-                                            value={damaged}
-                                            onKeyDown={(e) => isDiscreteUnit && (e.key === '.' || e.key === 'e') && e.preventDefault()}
-                                            onChange={(e) => handleUpdateInventoryVerification(originalIdx, 'damage_qty', e.target.value)}
-                                          />
-                                        </td>
-                                        <td className="py-3 px-4 text-center font-bold text-orange-600">{missing || '-'}</td>
-                                        <td className="py-3 px-4">
-                                          {good > 0 ? (
-                                            <div className="flex flex-col gap-1">
-                                              <select
-                                                className="w-full text-xs border-gray-300 rounded-md"
-                                                value={item.return_location_id || ""}
-                                                onChange={(e) => handleUpdateReturnLocation(originalIdx, e.target.value)}
-                                              >
-                                                <option value="">Auto-detect</option>
-                                                {returnLocations.map(loc => (
-                                                  <option key={loc.id} value={loc.id}>{loc.name}</option>
-                                                ))}
-                                              </select>
-                                              <label className="flex items-center gap-1 text-[10px] text-gray-500 cursor-pointer">
-                                                <input
-                                                  type="checkbox"
-                                                  checked={item.request_replacement || false}
-                                                  onChange={(e) => handleUpdateInventoryVerification(originalIdx, 'request_replacement', e.target.checked)}
-                                                  className="w-3 h-3"
-                                                />
-                                                Replace?
-                                              </label>
-                                            </div>
-                                          ) : (
-                                            <span className="text-gray-400 text-xs">-</span>
-                                          )}
-                                        </td>
-                                        <td className="py-3 px-4 text-right font-medium text-red-600">
-                                          {chargeAmount > 0 ? `+${formatCurrency(chargeAmount)}` : '-'}
-                                        </td>
-                                      </tr>
-                                    );
-                                  })}
-                                </tbody>
-                              </table>
-                            </div>
-                          </div>
-                        )}
-                        {(!items || items.length === 0) && (
-                          <div className="py-8 text-center text-gray-500 bg-gray-50 border rounded-lg">
-                            No consumable or rental items found for this room.
-                          </div>
-                        )}
-                      </>
-                    );
-                  })()}
-                </div>
-
-                {/* Fixed Assets Verification Section */}
-                {checkoutInventoryDetails.assets && checkoutInventoryDetails.assets.length > 0 && (
-                  <div className="mb-6">
-                    <h3 className="text-lg font-semibold mb-3 text-gray-800">Fixed Assets / Room Inventory</h3>
-                    <div className="overflow-x-auto border rounded-lg">
-                      <table className="min-w-full text-sm">
-                        <thead className="bg-blue-50 uppercase tracking-wider text-blue-800">
-                          <tr>
-                            <th className="py-3 px-4 text-left">Asset Name</th>
-                            <th className="py-3 px-4 text-center">Serial / Tag</th>
-                            <th className="py-3 px-4 text-center">Quantity</th>
-                            <th className="py-3 px-4 text-center">Present</th>
-                            <th className="py-3 px-4 text-center">Damaged</th>
-                            <th className="py-3 px-4 text-left">Return To</th>
-                            <th className="py-3 px-4 text-left">Condition / Notes</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200">
-                          {(checkoutInventoryDetails.fixed_assets || []).map((asset, idx) => (
-                            <tr key={idx} className={`hover:bg-blue-50 ${asset.is_damaged ? 'bg-red-50' : ''}`}>
-                              <td className="py-3 px-4 font-medium">{asset.item_name || asset.name}</td>
-                              <td className="py-3 px-4 text-center text-gray-600 font-mono text-xs">
-                                {asset.serial_number || asset.asset_tag || '-'}
-                              </td>
-                              <td className="py-3 px-4 text-center font-semibold">{asset.quantity || 1}</td>
-                              <td className="py-3 px-4 text-center">
-                                <input
-                                  type="checkbox"
-                                  checked={asset.is_present !== false}
-                                  onChange={(e) => handleUpdateAssetDamage(idx, 'is_present', e.target.checked)}
-                                  className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
-                                />
-                              </td>
-                              <td className="py-3 px-4 text-center">
-                                <input
-                                  type="checkbox"
-                                  checked={asset.is_damaged || false}
-                                  onChange={(e) => handleUpdateAssetDamage(idx, 'is_damaged', e.target.checked)}
-                                  className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500"
-                                />
-                              </td>
-                              <td className="py-3 px-4">
-                                <div className="flex flex-col gap-1">
-                                  <select
-                                    className="w-full text-xs border-gray-300 rounded-md"
-                                    value={asset.return_location_id || ""}
-                                    onChange={(e) => handleUpdateAssetDamage(idx, 'return_location_id', e.target.value)}
-                                  >
-                                    <option value="">Staying in Room</option>
-                                    {returnLocations.map(loc => (
-                                      <option key={loc.id} value={loc.id}>{loc.name}</option>
-                                    ))}
-                                  </select>
-                                  <label className="flex items-center gap-1 text-[10px] text-gray-500 cursor-pointer">
+                {checkoutInventoryDetails.room_details && checkoutInventoryDetails.room_details[activeRoomTab] && (
+                  <>
+                    {/* Fixed Assets Section */}
+                    {checkoutInventoryDetails.room_details[activeRoomTab].fixed_assets && checkoutInventoryDetails.room_details[activeRoomTab].fixed_assets.length > 0 && (
+                      <div className="mb-6">
+                        <h3 className="text-lg font-semibold mb-3 text-red-700">Fixed Assets Check</h3>
+                        <div className="bg-red-50 p-4 rounded-lg border border-red-100 overflow-x-auto">
+                          <table className="w-full text-sm min-w-[700px]">
+                            <thead>
+                              <tr className="border-b border-red-200">
+                                <th className="text-left py-2 font-medium text-red-800">Asset Name</th>
+                                <th className="text-left py-2 font-medium text-red-800">Serial No.</th>
+                                <th className="text-center py-2 font-medium text-red-800">Current</th>
+                                <th className="text-center py-2 font-medium text-red-800">Available</th>
+                                <th className="text-right py-2 font-medium text-red-800">Cost</th>
+                                <th className="text-center py-2 font-medium text-red-800">Damaged?</th>
+                                <th className="text-left py-2 font-medium text-red-800">Notes</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {checkoutInventoryDetails.room_details[activeRoomTab].fixed_assets.map((asset, idx) => (
+                                <tr key={idx} className="border-b border-red-100 last:border-0 hover:bg-red-50 transition-colors">
+                                  <td className="py-2 text-gray-800 font-medium whitespace-nowrap">
+                                    {asset.item_name}
+                                    <div className="text-xs text-gray-500">{asset.asset_tag}</div>
+                                  </td>
+                                  <td className="py-2 text-gray-600 border-l border-r border-red-100 px-2 font-mono text-xs whitespace-nowrap">
+                                    {asset.serial_number || '-'}
+                                  </td>
+                                  <td className="py-2 text-center text-gray-600">{asset.current_stock}</td>
+                                  <td className="py-2 text-center px-1">
                                     <input
-                                      type="checkbox"
-                                      checked={asset.request_replacement || false}
-                                      onChange={(e) => handleUpdateAssetDamage(idx, 'request_replacement', e.target.checked)}
-                                      className="w-3 h-3"
+                                      type="number"
+                                      min="0"
+                                      max={asset.current_stock}
+                                      className={`w-14 border rounded p-1 text-center font-bold ${asset.available_stock < asset.current_stock ? 'text-red-600 bg-red-50 border-red-300' : 'text-green-600 border-gray-300'}`}
+                                      value={asset.available_stock}
+                                      onChange={(e) => handleUpdateAssetDamage(idx, 'available_stock', parseInt(e.target.value) || 0)}
                                     />
-                                    Replace?
-                                  </label>
-                                </div>
-                              </td>
-                              <td className="py-3 px-4">
-                                {asset.is_damaged ? (
-                                  <input
-                                    type="text"
-                                    placeholder="Describe damage..."
-                                    value={asset.damage_notes || ''}
-                                    onChange={(e) => handleUpdateAssetDamage(idx, 'damage_notes', e.target.value)}
-                                    className="w-full px-2 py-1 text-xs border border-red-300 rounded bg-red-50 focus:ring-2 focus:ring-red-500 outline-none"
-                                  />
-                                ) : (
-                                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${(asset.status || 'active').toLowerCase() === 'active'
-                                    ? 'bg-green-100 text-green-800'
-                                    : 'bg-yellow-100 text-yellow-800'
-                                    }`}>
-                                    {asset.status || 'Active'}
-                                  </span>
-                                )}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
+                                  </td>
+                                  <td className="py-2 text-right text-gray-600 font-medium whitespace-nowrap">
+                                    {formatCurrency(asset.replacement_cost)}
+                                  </td>
+                                  <td className="py-2 text-center px-2">
+                                    <div className="flex items-center justify-center space-x-2">
+                                      <input
+                                        type="checkbox"
+                                        className="w-4 h-4 text-red-600 rounded focus:ring-red-500"
+                                        checked={asset.is_damaged === true}
+                                        onChange={(e) => handleUpdateAssetDamage(idx, 'is_damaged', e.target.checked)}
+                                      />
+                                    </div>
+                                  </td>
+                                  <td className="py-2 pl-2">
+                                    <input
+                                      type="text"
+                                      className="w-full border border-gray-300 rounded p-1 text-sm bg-white"
+                                      placeholder="Notes..."
+                                      value={asset.damage_notes || ''}
+                                      onChange={(e) => handleUpdateAssetDamage(idx, 'damage_notes', e.target.value)}
+                                    />
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Consumables Section */}
+                    {checkoutInventoryDetails.room_details[activeRoomTab].items && checkoutInventoryDetails.room_details[activeRoomTab].items.length > 0 && (
+                      <div className="mb-6">
+                        <h3 className="text-lg font-semibold mb-3 text-indigo-700">Consumables Check</h3>
+                        <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-100 overflow-x-auto">
+                          <table className="w-full text-sm min-w-[700px]">
+                            <thead>
+                              <tr className="border-b border-indigo-200">
+                                <th className="text-left py-2 font-medium text-indigo-800">Item</th>
+                                <th className="text-center py-2 font-medium text-indigo-800">Current</th>
+                                <th className="text-center py-2 font-medium text-indigo-800">Available</th>
+                                <th className="text-center py-2 font-medium text-indigo-800">Damaged</th>
+                                <th className="text-center py-2 font-medium text-indigo-800">Used/Miss</th>
+                                <th className="text-left py-2 font-medium text-indigo-800">Return Loc.</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {checkoutInventoryDetails.room_details[activeRoomTab].items.map((item, idx) => {
+                                const isDiscreteUnit = ['pcs', 'pc', 'can', 'bottle', 'unit', 'nos', 'number', 'pkt', 'pack', 'box', 'tray', 'piece', 'pieces'].includes((item.unit || 'pcs').toLowerCase());
+                                return (
+                                  <tr key={idx} className="border-b border-indigo-100 last:border-0 hover:bg-indigo-50 transition-colors">
+                                    <td className="py-3 text-gray-800 font-medium whitespace-nowrap">
+                                      {item.item_name}
+                                      <div className="text-xs text-gray-500">{item.unit || 'pcs'} | {formatCurrency(item.rental_price || item.unit_price)}</div>
+                                      {item.is_rentable && <span className="inline-block mt-1 px-1.5 py-0.5 bg-blue-100 text-blue-700 text-[10px] rounded border border-blue-200 shrink-0 whitespace-nowrap">Rental</span>}
+                                    </td>
+                                    <td className="py-3 text-center font-medium text-gray-700">{item.current_stock}</td>
+                                    <td className="py-3 text-center px-1">
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        max={item.current_stock}
+                                        step={isDiscreteUnit ? "1" : "0.01"}
+                                        className={`w-16 border rounded p-1 text-center font-bold shadow-sm focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 ${item.available_stock < item.current_stock ? 'text-orange-600 bg-orange-50 border-orange-300' : 'text-green-600 border-gray-300'}`}
+                                        value={item.available_stock}
+                                        onChange={(e) => handleUpdateInventoryVerification(idx, 'available_stock', e.target.value)}
+                                      />
+                                    </td>
+                                    <td className="py-3 text-center px-1">
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        max={Math.max(0, item.current_stock - (item.available_stock || 0))}
+                                        step={isDiscreteUnit ? "1" : "0.01"}
+                                        className="w-16 border border-gray-300 rounded p-1 text-center font-medium shadow-sm focus:ring-1 focus:ring-red-500 text-red-600 bg-red-50"
+                                        value={item.damage_qty || 0}
+                                        onChange={(e) => handleUpdateInventoryVerification(idx, 'damage_qty', e.target.value)}
+                                      />
+                                    </td>
+                                    <td className="py-3 text-center whitespace-nowrap">
+                                      {item.is_rentable ? (
+                                        <div className="font-bold text-red-600">Miss: {item.missing_qty || 0}</div>
+                                      ) : (
+                                        <div className="font-bold text-orange-600">Used: {item.used_qty || 0}</div>
+                                      )}
+                                    </td>
+                                    <td className="py-3 pl-2 min-w-[140px]">
+                                      <select
+                                        className="w-full border border-gray-300 rounded p-1.5 text-sm bg-white focus:ring-indigo-500 focus:border-indigo-500 shadow-sm"
+                                        value={item.return_location_id || ""}
+                                        onChange={(e) => handleUpdateReturnLocation(idx, e.target.value)}
+                                      >
+                                        <option value="">Move to (Optional)</option>
+                                        {returnLocations.map(loc => (
+                                          <option key={loc.id} value={loc.id}>{loc.name}</option>
+                                        ))}
+                                      </select>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
 
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Additional Notes</label>
+                <div className="mt-8 pt-4 border-t border-gray-200">
+                  <p className="text-sm text-gray-500 mb-4 bg-gray-50 p-2 rounded">
+                    <strong>Note:</strong> Items marked as missing or damaged will add charges to the final bill. Stock marked manually as used (for extra issue consumables) adds charges dynamically based on your issue price settings.
+                  </p>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Audit Notes (Optional)
+                  </label>
                   <textarea
-                    id="inventory-notes"
-                    className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                    rows="3"
-                    placeholder="Any additional observations..."
+                    className="w-full border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 p-2 text-sm"
+                    rows="2"
+                    placeholder="Enter any remarks for the checkout..."
+                    id="inventoryVerifyNotes"
                   ></textarea>
                 </div>
-
-                <div className="flex justify-end gap-3 mt-6">
+              </div>
+              <div className="bg-gray-50 px-6 py-4 border-t border-gray-200 flex flex-col sm:flex-row justify-between items-center space-y-3 sm:space-y-0">
+                <div className="text-sm text-gray-600 font-medium">
+                  {checkoutInventoryDetails.room_details && checkoutInventoryDetails.room_details.length > 1 && (
+                    <span>
+                      {activeRoomTab < checkoutInventoryDetails.room_details.length - 1 ? (
+                        <button
+                          type="button"
+                          onClick={() => setActiveRoomTab(prev => prev + 1)}
+                          className="text-indigo-600 hover:text-indigo-800 font-bold underline"
+                        >
+                          Next: Room {checkoutInventoryDetails.room_details[activeRoomTab + 1].room_number} &rarr;
+                        </button>
+                      ) : (
+                        <span className="text-green-600 font-bold">✓ All rooms reviewed</span>
+                      )}
+                    </span>
+                  )}
+                </div>
+                <div className="flex space-x-3">
                   <button
+                    type="button"
                     onClick={() => {
                       setCheckoutInventoryModal(null);
                       setCheckoutInventoryDetails(null);
+                      setActiveRoomTab(0);
                     }}
-                    className="px-6 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 font-medium"
+                    className="bg-white py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                   >
                     Cancel
                   </button>
                   <button
-                    onClick={() => {
-                      const notes = document.getElementById('inventory-notes')?.value;
-                      handleSubmitInventoryCheck(notes);
-                    }}
-                    className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium shadow-md transition-all"
+                    type="button"
+                    onClick={() => handleSubmitInventoryCheck(document.getElementById('inventoryVerifyNotes')?.value)}
+                    disabled={checkingInventory || (checkoutInventoryDetails?.room_details?.length > 1 && verifiedRoomIndices.size < checkoutInventoryDetails.room_details.length)}
+                    className={`inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white ${checkingInventory || (checkoutInventoryDetails?.room_details?.length > 1 && verifiedRoomIndices.size < checkoutInventoryDetails.room_details.length) ? 'bg-indigo-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500'}`}
                   >
-                    Confirm Verification
+                    {checkingInventory ? 'Verifying...' : 'Confirm Verification'}
                   </button>
                 </div>
               </div>

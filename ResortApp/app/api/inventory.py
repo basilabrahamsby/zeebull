@@ -3828,7 +3828,10 @@ def return_laundry_items(
     laundry_loc = db.query(Location).filter(Location.location_type == "LAUNDRY", (Location.branch_id == branch_id if branch_id is not None else True)).first()
 
     if not laundry_loc:
-         raise HTTPException(status_code=400, detail="Laundry location not found")
+        raise HTTPException(
+            status_code=400, 
+            detail="A Laundry Location is missing for this branch. Please go to Inventory -> Locations, and create a new Location with the type set to 'Laundry' before returning items."
+        )
 
     # 2. Update stock: Move from Laundry to target
     # Decrease Laundry stock

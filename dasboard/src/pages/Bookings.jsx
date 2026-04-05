@@ -450,6 +450,7 @@ const AddExtraAllocationModal = ({
   const [currentRoomItems, setCurrentRoomItems] = useState([]);
   const [loadingCurrentItems, setLoadingCurrentItems] = useState(false);
   const [activeTab, setActiveTab] = useState("current"); // "current" or "add"
+  const [selectedRoomIndex, setSelectedRoomIndex] = useState(0); // Track which room is being managed
   const [paidStatusMap, setPaidStatusMap] = useState({}); // Track paid status by item_id
   const [sourceLocationItems, setSourceLocationItems] = useState({});
   const [loadingSourceStock, setLoadingSourceStock] = useState(false);
@@ -554,8 +555,8 @@ const AddExtraAllocationModal = ({
   // Fetch current room items
   useEffect(() => {
     const fetchCurrentItems = async () => {
-      // Get first room from booking
-      const roomForFetch = (booking.rooms && booking.rooms[0]) || null;
+      // Get selected room from booking
+      const roomForFetch = (booking.rooms && booking.rooms[selectedRoomIndex]) || null;
       const roomNumber =
         roomForFetch?.number || roomForFetch?.room?.number || null;
 
@@ -582,7 +583,7 @@ const AddExtraAllocationModal = ({
       );
 
       if (!roomNumber) {
-        console.warn("No room number found for booking");
+        console.warn("No room number found for selected room index", selectedRoomIndex);
         setCurrentRoomItems([]);
         return;
       }
@@ -675,7 +676,7 @@ const AddExtraAllocationModal = ({
       }
       setCurrentRoomItems([]);
     }
-  }, [booking, inventoryLocations]);
+  }, [booking, inventoryLocations, selectedRoomIndex]);
 
   const addAllocationRow = () => {
     setAllocationItems([
@@ -747,9 +748,9 @@ const AddExtraAllocationModal = ({
         return;
       }
 
-      // Get first room from booking
-      const firstRoom = (booking.rooms && booking.rooms[0]) || null;
-      const roomNumber = firstRoom?.number || firstRoom?.room?.number || null;
+      // Get selected room from booking
+      const selectedRoom = (booking.rooms && booking.rooms[selectedRoomIndex]) || null;
+      const roomNumber = selectedRoom?.number || selectedRoom?.room?.number || null;
 
       let destinationLocation = null;
       if (roomNumber) {
@@ -903,7 +904,7 @@ const AddExtraAllocationModal = ({
       );
 
       // Refresh current items
-      const roomForRefreshPayable = (booking.rooms && booking.rooms[0]) || null;
+      const roomForRefreshPayable = (booking.rooms && booking.rooms[selectedRoomIndex]) || null;
       const roomNumForRefreshPayable =
         roomForRefreshPayable?.number ||
         roomForRefreshPayable?.room?.number ||
@@ -962,7 +963,7 @@ const AddExtraAllocationModal = ({
       setPaidStatusMap({ ...paidStatusMap, [item.item_id]: isPaid });
 
       // Refresh current items
-      const roomForRefreshPaid = (booking.rooms && booking.rooms[0]) || null;
+      const roomForRefreshPaid = (booking.rooms && booking.rooms[selectedRoomIndex]) || null;
       const roomNumForRefreshPaid =
         roomForRefreshPaid?.number || roomForRefreshPaid?.room?.number || null;
       if (roomNumForRefreshPaid) {
@@ -1032,6 +1033,26 @@ const AddExtraAllocationModal = ({
             <X className="w-5 h-5 group-hover:rotate-90 transition-transform" />
           </button>
         </div>
+        {/* Room Selection Tabs (only if multi-room) */}
+        {booking.rooms && booking.rooms.length > 1 && (
+          <div className="px-8 py-4 bg-indigo-50/20 border-b border-indigo-100 flex items-center gap-3 overflow-x-auto relative z-10">
+            <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest whitespace-nowrap">Select Room:</span>
+            {booking.rooms.map((room, idx) => (
+              <button
+                key={idx}
+                onClick={() => setSelectedRoomIndex(idx)}
+                className={`px-5 py-2.5 rounded-2xl text-[10px] uppercase tracking-wider font-bold transition-all shadow-sm whitespace-nowrap ${
+                  selectedRoomIndex === idx
+                    ? "bg-indigo-600 text-white shadow-indigo-200 border border-indigo-700"
+                    : "bg-white text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 border border-slate-200"
+                }`}
+              >
+                Room {room.number || room.room?.number || `Room ${idx + 1}`}
+              </button>
+            ))}
+          </div>
+        )}
+
 
         {/* Tabs Navigation */}
         <div className="px-8 pt-4 bg-slate-50/30 border-b border-slate-100 flex items-center gap-1 overflow-x-auto no-scrollbar relative z-10">
@@ -1084,7 +1105,7 @@ const AddExtraAllocationModal = ({
                 <button
                   type="button"
                   onClick={async () => {
-                    const roomForFetch = (booking.rooms && booking.rooms[0]) || null;
+                    const roomForFetch = (booking.rooms && booking.rooms[selectedRoomIndex]) || null;
                     const roomNumber = roomForFetch?.number || roomForFetch?.room?.number || null;
                     if (!roomNumber) { showBannerMessage("error", "Room ID mapping failed"); return; }
                     const searchStr = String(roomNumber).toLowerCase().replace(/^0+/, "") || "0";
@@ -1119,6 +1140,42 @@ const AddExtraAllocationModal = ({
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${loadingCurrentItems ? "animate-spin" : ""}`} />
                   {loadingCurrentItems ? "Syncing..." : "Force Sync"}
+                </button>
+              </div>
+
+              {/* Tabs */}
+              <div className="flex border-b border-slate-100">
+                <button
+                  onClick={() => setActiveTab("current")}
+                  className={`flex-1 py-4 text-[10px] font-bold uppercase tracking-[0.2em] transition-all relative ${
+                    activeTab === "current"
+                      ? "text-indigo-600"
+                      : "text-slate-400 hover:text-slate-600 bg-slate-50/50"
+                  }`}
+                >
+                  Current Items
+                  {activeTab === "current" && (
+                    <motion.div
+                      layoutId="activeTab"
+                      className="absolute bottom-0 left-0 right-0 h-1 bg-indigo-500"
+                    />
+                  )}
+                </button>
+                <button
+                  onClick={() => setActiveTab("add")}
+                  className={`flex-1 py-4 text-[10px] font-bold uppercase tracking-[0.2em] transition-all relative ${
+                    activeTab === "add"
+                      ? "text-indigo-600"
+                      : "text-slate-400 hover:text-slate-600 bg-slate-50/50"
+                  }`}
+                >
+                  Add Items
+                  {activeTab === "add" && (
+                    <motion.div
+                      layoutId="activeTab"
+                      className="absolute bottom-0 left-0 right-0 h-1 bg-indigo-500"
+                    />
+                  )}
                 </button>
               </div>
 
@@ -1393,7 +1450,7 @@ const AddExtraAllocationModal = ({
                           whileActive={{ scale: 0.98 }}
                           onClick={async () => {
                             try {
-                              const roomForFetch = (booking.rooms && booking.rooms[0]) || null;
+                              const roomForFetch = (booking.rooms && booking.rooms[selectedRoomIndex]) || null;
                               const roomNumber = roomForFetch?.number || roomForFetch?.room?.number || null;
                               if (!roomNumber) { showBannerMessage("error", "Room mapping failed"); return; }
                               const searchStr = String(roomNumber).toLowerCase().replace(/^0+/, "") || "0";
@@ -1449,6 +1506,7 @@ const AddExtraAllocationModal = ({
               authHeader={authHeader}
               API={API}
               formatCurrency={formatCurrency}
+              selectedRoomIndex={selectedRoomIndex}
             />
           )}
 
@@ -1459,6 +1517,7 @@ const AddExtraAllocationModal = ({
               authHeader={authHeader}
               API={API}
               formatCurrency={formatCurrency}
+              selectedRoomIndex={selectedRoomIndex}
             />
           )}
 
@@ -1966,6 +2025,7 @@ const CheckInModal = ({
   isSubmitting,
   inventoryItems = [],
   showBannerMessage,
+  roomTypeObjects = [],
 }) => {
   const [idCardImage, setIdCardImage] = useState(null);
   const [guestPhoto, setGuestPhoto] = useState(null);
@@ -2124,6 +2184,14 @@ const CheckInModal = ({
       return;
     }
 
+    // Only enforce room selection if booking has no pre-assigned rooms
+    const hasAssignedRooms = booking.rooms && booking.rooms.length > 0;
+    const requiredRooms = booking.num_rooms || 1;
+    if (!hasAssignedRooms && selectedRoomIds.length !== requiredRooms) {
+      showBannerMessage("error", `Please select exactly ${requiredRooms} room(s). Currently selected: ${selectedRoomIds.length}`);
+      return;
+    }
+
     let amenityAllocation = null;
     if (booking.is_package && booking.package && booking.package.food_included) {
       const features = [];
@@ -2176,11 +2244,16 @@ const CheckInModal = ({
 
   const roomInfo = booking.rooms && booking.rooms.length > 0
     ? booking.rooms.map((room) => {
+      const resolveType = (r) => {
+        if (r?.type && r.type !== 'undefined') return r.type;
+        const rtId = r?.room_type_id || r?.room?.room_type_id;
+        return roomTypeObjects?.find(rt => rt.id === rtId)?.name || '';
+      };
       if (booking.is_package) {
-        if (room?.room?.number) return `${room.room.number} (${room.room.type})`;
-        return room?.number ? `${room.number} (${room.type})` : "-";
+        const r = room?.room || room;
+        return r?.number ? `${r.number}${resolveType(r) ? ` (${resolveType(r)})` : ''}` : '-';
       } else {
-        return room?.number ? `${room.number} (${room.type})` : "-";
+        return room?.number ? `${room.number}${resolveType(room) ? ` (${resolveType(room)})` : ''}` : '-';
       }
     }).join(", ")
     : "-";
@@ -2203,8 +2276,11 @@ const CheckInModal = ({
             </div>
             <div>
               <h2 className="text-xl sm:text-2xl font-bold text-slate-800 tracking-tight leading-none mb-1">Check-in Terminal</h2>
-              <div className="flex items-center gap-2">
-                <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider leading-none">Activating Stay Details: {booking.display_id || `#${booking.id}`}</span>
+              <div className="flex items-center gap-2 mt-1.5">
+                <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider leading-none pb-0.5">Activating Stay Details: {booking.display_id || `#${booking.id}`}</span>
+                <span className={`text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-md border ${booking.is_package ? 'bg-indigo-50 text-indigo-600 border-indigo-200' : 'bg-blue-50 text-blue-600 border-blue-200'}`}>
+                  {booking.is_package ? 'Package Stay' : 'Standard Stay'}
+                </span>
               </div>
             </div>
           </div>
@@ -2273,51 +2349,94 @@ const CheckInModal = ({
                       <h4 className="font-bold text-slate-800 text-3xl tracking-tight leading-none">{booking.guest_name}</h4>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-3 gap-2">
                       <div className="bg-white/60 p-4 rounded-2xl border border-white/50 shadow-sm">
                         <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-1">Temporal Span</p>
-                        <p className="font-bold text-slate-700 text-sm">{getNights()} Night Cycle(s)</p>
+                        <p className="font-bold text-slate-700 text-sm">{getNights()} Night(s)</p>
+                      </div>
+                      <div className="bg-white/60 p-4 rounded-2xl border border-white/50 shadow-sm text-center">
+                        <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-1">Rooms Booked</p>
+                        <p className="font-bold text-emerald-600 text-sm">{booking.num_rooms || 1} Room(s)</p>
                       </div>
                       <div className="bg-white/60 p-4 rounded-2xl border border-white/50 shadow-sm text-right">
-                        <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-1">Network ID</p>
-                        <p className="font-bold text-indigo-600 text-sm truncate">{booking.display_id || booking.id}</p>
+                        <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-1">Room Category</p>
+                        <p className="font-bold text-indigo-600 text-sm truncate">
+                          {(() => {
+                            // 1. Direct room_type_name from API (if backend resolves it)
+                            if (booking.room_type_name) return booking.room_type_name;
+                            // 2. Lookup by room_type_id using roomTypeObjects list
+                            const byTypeId = booking.room_type_id
+                              ? roomTypeObjects?.find(rt => rt.id === booking.room_type_id)?.name
+                              : null;
+                            if (byTypeId) return byTypeId;
+                            // 3. From assigned rooms
+                            const firstRoom = booking.rooms?.[0];
+                            const byRoomType = firstRoom?.room_type_id
+                              ? roomTypeObjects?.find(rt => rt.id === firstRoom.room_type_id)?.name
+                              : null;
+                            if (byRoomType) return byRoomType;
+                            // 4. Fallback to room.type string if valid
+                            if (firstRoom?.type && firstRoom.type !== 'undefined') return firstRoom.type;
+                            return 'Any Category';
+                          })()}
+                        </p>
                       </div>
                     </div>
 
                       <div className="bg-slate-900 rounded-3xl p-5 shadow-xl">
-                        <div className="flex items-center gap-2 mb-2">
-                          <Home className="w-3 h-3 text-indigo-400" />
-                          <p className="text-[8px] font-bold text-indigo-300 uppercase tracking-wide">Allotted Sector(s)</p>
-                        </div>
-                        {(!booking.rooms || booking.rooms.length === 0) ? (
-                          <div className="space-y-4">
-                            <p className="font-bold text-orange-400 text-[10px] uppercase tracking-widest">Action Required: Assign Rooms</p>
-                            <div className="grid grid-cols-3 gap-2">
-                              {availableRooms.map(room => (
-                                <button
-                                  key={room.id}
-                                  onClick={() => {
-                                    setSelectedRoomIds(prev => 
-                                      prev.includes(room.id) 
-                                      ? prev.filter(id => id !== room.id)
-                                      : [...prev, room.id]
-                                    );
-                                  }}
-                                  className={`p-2 rounded-xl text-[10px] font-bold transition-all border ${
-                                    selectedRoomIds.includes(room.id)
-                                    ? "bg-indigo-600 text-white border-indigo-400"
-                                    : "bg-slate-800 text-slate-400 border-slate-700 hover:border-indigo-500"
-                                  }`}
-                                >
-                                  {room.number}
-                                </button>
-                              ))}
-                            </div>
-                            {availableRooms.length === 0 && <p className="text-[9px] text-rose-400 font-bold">No available rooms of this type!</p>}
+                          <div className="flex items-center gap-2 mb-3">
+                            <Home className="w-3 h-3 text-indigo-400" />
+                            {(booking.rooms && booking.rooms.length > 0) ? (
+                              <p className="text-[8px] font-bold text-emerald-400 uppercase tracking-wide">Allotted Sector(s) — Confirmed</p>
+                            ) : (
+                              <p className="text-[8px] font-bold text-orange-300 uppercase tracking-wide">Allotted Sector(s) — Assign {booking.num_rooms || 1} Room(s)</p>
+                            )}
                           </div>
-                        ) : (
-                          <p className="font-bold text-white text-sm leading-tight tracking-tight">{roomInfo}</p>
-                        )}
+                          {(booking.rooms && booking.rooms.length > 0) ? (
+                            <div className="space-y-1">
+                              {booking.rooms.map((room, idx) => {
+                                const resolveType = (r) => {
+                                  if (r?.type && r.type !== 'undefined') return r.type;
+                                  const rtId = r?.room_type_id;
+                                  return roomTypeObjects?.find(rt => rt.id === rtId)?.name || '';
+                                };
+                                const typeName = resolveType(room);
+                                return (
+                                  <div key={idx} className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-3 py-2">
+                                    <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                                    <span className="font-bold text-white text-sm">Room {room.number}</span>
+                                    {typeName && <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-widest">· {typeName}</span>}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <div className="space-y-3">
+                              <p className="font-bold text-orange-400 text-[10px] uppercase tracking-widest">Action Required: Assign {booking.num_rooms || 1} Room(s)</p>
+                              <div className="grid grid-cols-3 gap-2">
+                                {availableRooms.map(room => (
+                                  <button
+                                    key={room.id}
+                                    onClick={() => {
+                                      setSelectedRoomIds(prev =>
+                                        prev.includes(room.id)
+                                        ? prev.filter(id => id !== room.id)
+                                        : [...prev, room.id]
+                                      );
+                                    }}
+                                    className={`p-2 rounded-xl text-[10px] font-bold transition-all border ${
+                                      selectedRoomIds.includes(room.id)
+                                      ? "bg-indigo-600 text-white border-indigo-400"
+                                      : "bg-slate-800 text-slate-400 border-slate-700 hover:border-indigo-500"
+                                    }`}
+                                  >
+                                    {room.number}
+                                  </button>
+                                ))}
+                              </div>
+                              {availableRooms.length === 0 && <p className="text-[9px] text-rose-400 font-bold">No available rooms of this type!</p>}
+                            </div>
+                          )}
                       </div>
                   </div>
                 </div>
@@ -2869,7 +2988,18 @@ const BookingFormModal = ({
                           </select>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-3 gap-4">
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide ml-1">No. of Rooms</label>
+                            <input
+                              type="number"
+                              name="num_rooms"
+                              value={formData.num_rooms || 1}
+                              onChange={handleChange}
+                              min="1"
+                              className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all outline-none font-bold text-slate-700 shadow-sm text-sm"
+                            />
+                          </div>
                           <div className="space-y-1">
                             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide ml-1">Adults</label>
                             <input
@@ -3122,6 +3252,7 @@ const Bookings = () => {
     checkOut: "",
     adults: 1,
     children: 0,
+    num_rooms: 1, // Added for Soft Allocation multiplier
     source: "Admin", // Added for source tracking
   });
   const today = getCurrentDateIST();
@@ -4334,6 +4465,7 @@ const Bookings = () => {
           check_out: formData.checkOut,
           adults: parseInt(formData.adults),
           children: parseInt(formData.children),
+          num_rooms: parseInt(formData.num_rooms) || 1,
         },
         authHeader(),
       );
@@ -4349,6 +4481,7 @@ const Bookings = () => {
         checkOut: "",
         adults: 1,
         children: 0,
+        num_rooms: 1,
         source: "Admin",
       });
       // Add the new booking to the state - use response data as-is from backend
@@ -5533,7 +5666,10 @@ const Bookings = () => {
                         Type
                       </th>
                       <th className="px-4 py-3 text-left font-semibold text-gray-700">
-                        Rooms
+                        Qty
+                      </th>
+                      <th className="px-4 py-3 text-left font-semibold text-gray-700">
+                        Assigned
                       </th>
                       <th className="px-4 py-3 text-left font-semibold text-gray-700">
                         Check-in
@@ -5610,6 +5746,9 @@ const Bookings = () => {
                               {booking.is_package ? "Package" : "Room"}
                             </span>
                           </td>
+                          <td className="px-4 py-3 text-gray-700 font-bold">
+                            {booking.num_rooms || 1}
+                          </td>
                           <td className="px-4 py-3 text-gray-700">
                             {roomInfo}
                           </td>
@@ -5635,7 +5774,7 @@ const Bookings = () => {
                     {bookings.length === 0 && (
                       <tr>
                         <td
-                          colSpan="8"
+                          colSpan="9"
                           className="px-4 py-8 text-center text-gray-500"
                         >
                           No bookings found
@@ -5995,6 +6134,7 @@ const Bookings = () => {
             isSubmitting={isSubmitting}
             inventoryItems={inventoryItems}
             showBannerMessage={showBannerMessage}
+            roomTypeObjects={roomTypeObjects}
           />
         )}
         {selectedImage && (
@@ -6047,21 +6187,21 @@ const Bookings = () => {
 
 
 // Helper Components for Room Allocation Modal
-const RoomFoodOrders = React.memo(({ booking, authHeader, API, formatCurrency }) => {
+const RoomFoodOrders = React.memo(({ booking, authHeader, API, formatCurrency, selectedRoomIndex = 0 }) => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { hasPermission } = usePermissions();
-
   useEffect(() => {
     fetchOrders();
-  }, [booking]);
+  }, [booking, selectedRoomIndex]);
 
   const fetchOrders = async () => {
     setLoading(true);
     try {
       const config = authHeader();
-      const roomIds = booking.rooms?.map(r => r.id || r.room_id) || [];
+      const currentRoomData = booking.rooms && booking.rooms[selectedRoomIndex];
+      const roomIds = currentRoomData ? [currentRoomData.id || currentRoomData.room_id] : (booking.rooms?.map(r => r.id || r.room_id) || []);
       const roomParam = roomIds.length === 1 ? `&room_id=${roomIds[0]}` : "";
       const bookingParam = booking.is_package ? `&package_booking_id=${booking.id}` : `&booking_id=${booking.id}`;
       const res = await API.get(`/food-orders/?limit=1000${roomParam}${bookingParam}`, config);
@@ -6103,7 +6243,7 @@ const RoomFoodOrders = React.memo(({ booking, authHeader, API, formatCurrency })
     }
   };
 
-  const currentRoom = booking.rooms && booking.rooms[0];
+  const currentRoom = booking.rooms && booking.rooms[selectedRoomIndex];
   const roomNumber = currentRoom?.number || currentRoom?.room?.number;
 
   return (
@@ -6238,20 +6378,20 @@ const RoomFoodOrders = React.memo(({ booking, authHeader, API, formatCurrency })
 });
 RoomFoodOrders.displayName = "RoomFoodOrders";
 
-const RoomServiceAssignments = React.memo(({ booking, authHeader, API, formatCurrency }) => {
+const RoomServiceAssignments = React.memo(({ booking, authHeader, API, formatCurrency, selectedRoomIndex = 0 }) => {
   const navigate = useNavigate();
   const [assignments, setAssignments] = useState([]);
   const [loading, setLoading] = useState(false);
   const { hasPermission } = usePermissions();
-
   useEffect(() => {
     fetchData();
-  }, [booking]);
+  }, [booking, selectedRoomIndex]);
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const roomIds = booking.rooms?.map(r => r.id || r.room_id) || [];
+      const currentRoomData = booking.rooms && booking.rooms[selectedRoomIndex];
+      const roomIds = currentRoomData ? [currentRoomData.id || currentRoomData.room_id] : (booking.rooms?.map(r => r.id || r.room_id) || []);
       const config = authHeader ? authHeader() : {};
       const roomParam = roomIds.length === 1 ? `&room_id=${roomIds[0]}` : "";
       const bookingParam = booking.is_package ? `&package_booking_id=${booking.id}` : `&booking_id=${booking.id}`;

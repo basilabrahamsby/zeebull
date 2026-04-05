@@ -70,6 +70,7 @@ class PackageBookingBase(BaseModel):
     check_out: date
     adults: int = 2
     children: int = 0
+    num_rooms: int = 1
     food_preferences: Optional[str] = None
     special_requests: Optional[str] = None
     branch_id: Optional[int] = None
@@ -100,6 +101,7 @@ class PackageBookingOut(PackageBookingBase):
     status: str
     branch_id: Optional[int] = None
     total_amount: Optional[float] = 0.0
+    num_rooms: int = 1
     rooms: List[PackageBookingRoomOut] = Field(default_factory=list)
     package: Optional[PackageOut]
     checkout: Optional[CheckoutFull] = None # Support detailed checkout info

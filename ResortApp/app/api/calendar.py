@@ -6,7 +6,7 @@ from app.schemas.calendar import PricingCalendarCreate, PricingCalendarUpdate, P
 from typing import List
 from datetime import date
 
-router = APIRouter(prefix="/calendar", tags=["Pricing Calendar"])
+router = APIRouter(tags=["Pricing Calendar"])
 
 @router.post("/", response_model=PricingCalendarOut)
 def create_calendar_entry(entry: PricingCalendarCreate, db: Session = Depends(get_db)):

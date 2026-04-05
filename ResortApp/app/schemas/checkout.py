@@ -144,6 +144,7 @@ class AssetDamageItem(BaseModel):
     is_damaged: Optional[bool] = False
     is_returned: Optional[bool] = False
     return_location_id: Optional[int] = None # Ensure it exists or is clear
+    room_number: Optional[str] = None
 
 class RoomVerificationData(BaseModel):
     room_number: str
@@ -195,6 +196,7 @@ class InventoryCheckItem(BaseModel):
     laundry_location_id: Optional[int] = None
     is_waste: Optional[bool] = False
     waste_location_id: Optional[int] = None
+    room_number: Optional[str] = None
 
 class InventoryCheckRequest(BaseModel):
     inventory_notes: Optional[str] = None

@@ -335,6 +335,7 @@ const RoomTypeModal = ({ onClose, type, isEditing, onSubmit, branches, isEnterpr
     holiday_price: type?.holiday_price || "",
     total_inventory: type?.total_inventory || 0,
     capacity: type?.adults_capacity || 2,
+    children_capacity: type?.children_capacity || 0,
     description: type?.description || "",
     
     // Amenities dynamically generated
@@ -433,6 +434,7 @@ const RoomTypeModal = ({ onClose, type, isEditing, onSubmit, branches, isEnterpr
     if (formData.holiday_price) data.append("holiday_price", formData.holiday_price);
     data.append("total_inventory", formData.total_inventory || 0);
     data.append("capacity", formData.capacity || 2);
+    data.append("children_capacity", formData.children_capacity ?? 0);
     if (formData.description) data.append("description", formData.description);
 
     // Boolean features
@@ -540,7 +542,23 @@ const RoomTypeModal = ({ onClose, type, isEditing, onSubmit, branches, isEnterpr
                           value={formData.capacity} 
                           onChange={handleChange} 
                           required 
+                          min="1"
                           className="w-full pl-10 pr-4 py-3 border-2 border-gray-100 rounded-2xl focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all font-bold text-gray-800 bg-white/50 focus:bg-white" 
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-black text-indigo-400 uppercase tracking-tighter mb-1.5 ml-1">Children Capacity</label>
+                      <div className="relative group">
+                        <i className="fas fa-child absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-indigo-500 transition-colors"></i>
+                        <input 
+                          type="number" 
+                          name="children_capacity" 
+                          value={formData.children_capacity} 
+                          onChange={handleChange} 
+                          min="0"
+                          className="w-full pl-10 pr-4 py-3 border-2 border-gray-100 rounded-2xl focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all font-bold text-gray-800 bg-white/50 focus:bg-white" 
+                          placeholder="0"
                         />
                       </div>
                     </div>

@@ -166,5 +166,11 @@ class Room(Base):
     @property
     def mini_bar(self): return self.room_type.mini_bar if self.room_type else False
 
+    @property
+    def adults_capacity(self): return self.room_type.adults_capacity if self.room_type else 2
+
+    @property
+    def children_capacity(self): return self.room_type.children_capacity if self.room_type else 0
+
     def __repr__(self):
         return f"<Room id={self.id} number={self.number} status={self.status}>"

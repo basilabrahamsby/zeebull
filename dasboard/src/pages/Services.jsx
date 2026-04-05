@@ -10,7 +10,8 @@ import {
   LayoutDashboard, Plus, ClipboardList, Package, Clock,
   ArrowRight, Search, Filter, RefreshCw, ChevronRight,
   TrendingUp, Star, Archive, Layers, AlertCircle, CheckCircle,
-  Radio, AlertTriangle, Map, PieChart as PieIcon, BarChart3 as BarIcon
+  Radio, AlertTriangle, Map, PieChart as PieIcon, BarChart3 as BarIcon,
+  Trash2, Play
 } from "lucide-react";
 import { getMediaBaseUrl } from "../utils/env";
 import { getImageUrl } from "../utils/imageUtils";
@@ -125,7 +126,7 @@ const Services = () => {
   // Fetch service requests
   const fetchServiceRequests = async () => {
     try {
-      const res = await api.get("/service-requests?limit=50");
+      const res = await api.get("/service-requests?limit=100");
       setServiceRequests(res.data || []);
     } catch (error) {
       console.error("Failed to fetch service requests:", error);
@@ -138,18 +139,18 @@ const Services = () => {
     if (showLoading) setLoading(true);
     try {
       const [sRes, aRes, rRes, eRes, bRes, pbRes, invRes, locRes] = await Promise.all([
-        api.get("/services?limit=50").catch(() => ({ data: [] })),
-        api.get("/services/assigned?skip=0&limit=50").catch(() => ({ data: [] })),
-        api.get("/rooms?limit=50").catch(() => ({ data: [] })),
-        api.get("/employees?limit=50").catch(() => ({ data: [] })),
-        api.get("/bookings?limit=50").catch(() => ({ data: { bookings: [] } })),
-        api.get("/packages/bookingsall?limit=50").catch(() => ({ data: [] })),
-        api.get("/inventory/items?limit=50").catch(() => ({ data: [] })),
+        api.get("/services?limit=100").catch(() => ({ data: [] })),
+        api.get("/services/assigned?skip=0&limit=100").catch(() => ({ data: [] })),
+        api.get("/rooms?limit=100").catch(() => ({ data: [] })),
+        api.get("/employees?limit=100").catch(() => ({ data: [] })),
+        api.get("/bookings?limit=100").catch(() => ({ data: { bookings: [] } })),
+        api.get("/packages/bookingsall?limit=100").catch(() => ({ data: [] })),
+        api.get("/inventory/items?limit=100").catch(() => ({ data: [] })),
         api.get("/inventory/locations?limit=100").catch(() => ({ data: [] })), 
       ]);
 
       const [srRes, employeesRes, asRes] = await Promise.all([
-        api.get("/service-requests?limit=50&include_checkout_requests=true").catch(() => ({ data: [] })),
+        api.get("/service-requests?limit=100&include_checkout_requests=true").catch(() => ({ data: [] })),
         api.get("/employees?limit=200").catch(() => ({ data: [] })),
         api.get("/dashboard/kpis").catch(() => ({ data: [{}] }))
       ]);
@@ -3776,16 +3777,41 @@ const Services = () => {
                               </td>
                               <td className="py-5 px-6 text-center">
                                 <div className="flex justify-center">
-                                  <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${request.status === 'completed' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
-                                    request.status === 'in_progress' ? 'bg-indigo-50 text-indigo-600 border-indigo-100' :
-                                      request.status === 'cancelled' ? 'bg-red-50 text-red-600 border-red-100' : 'bg-amber-50 text-amber-600 border-amber-100'
-                                    }`}>
-                                    {request.status || 'pending'}
-                                  </span>
+                                  <select
+                                    value={request.status || 'pending'}
+                                    onChange={(e) => handleUpdateRequestStatus(request.id, e.target.value)}
+                                    className={`appearance-none text-center cursor-pointer px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border outline-none ${request.status === 'completed' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
+                                      request.status === 'in_progress' ? 'bg-indigo-50 text-indigo-600 border-indigo-100' :
+                                        request.status === 'cancelled' ? 'bg-red-50 text-red-600 border-red-100' : 'bg-amber-50 text-amber-600 border-amber-100'
+                                      }`}
+                                  >
+                                    <option value="pending">PENDING</option>
+                                    <option value="in_progress">IN PROGRESS</option>
+                                    <option value="completed">COMPLETED</option>
+                                    <option value="cancelled">CANCELLED</option>
+                                  </select>
                                 </div>
                               </td>
                               <td className="py-5 px-6 text-right">
-                                <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                                <div className="flex justify-end gap-2 transition-all">
+                                  {!request.employee_id && (
+                                    <button
+                                      onClick={() => setQuickAssignModal({ request: request, isReassignment: false, employeeId: '', pickupLocationId: '' })}
+                                      className="p-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white rounded-xl shadow-sm border border-indigo-100 transition-all"
+                                      title="Dispatch Agent"
+                                    >
+                                      <Zap size={14} />
+                                    </button>
+                                  )}
+                                  {isCheckoutRequest && request.employee_id && request.status !== 'completed' && request.status !== 'cancelled' && (
+                                    <button
+                                      onClick={() => handleViewCheckoutInventory(checkoutRequestId)}
+                                      className="p-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white rounded-xl shadow-sm border border-emerald-100 transition-all"
+                                      title="Verify Inventory"
+                                    >
+                                      <ClipboardList size={14} />
+                                    </button>
+                                  )}
                                   <button
                                     onClick={() => setSelectedActivity({
                                       type: 'Request',
@@ -3935,7 +3961,7 @@ const Services = () => {
                         className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-indigo-400"
                       >
                         <option value="">-- Select Pickup Location --</option>
-                        {locations.filter(l => l.location_type === 'STORE' || l.location_type === 'LAUNDRY' || l.location_type === 'WAREHOUSE').map((loc) => (
+                        {locations.filter(l => l.location_type === 'STORE' || l.location_type === 'LAUNDRY' || l.location_type === 'WAREHOUSE' || l.location_type === 'CENTRAL_WAREHOUSE' || l.location_type?.includes('WAREHOUSE')).map((loc) => (
                           <option key={loc.id} value={loc.id}>{loc.name} ({loc.location_type})</option>
                         ))}
                       </select>

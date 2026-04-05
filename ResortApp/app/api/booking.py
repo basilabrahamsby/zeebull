@@ -100,6 +100,11 @@ def get_bookings(
                 if br.room_id and br.room_id in rooms_map:
                     booking_rooms_map[br.booking_id].append(rooms_map[br.room_id])
         
+        # Pre-load all room types for name resolution (avoids N+1)
+        from app.models.room import RoomType
+        all_room_types = db.query(RoomType.id, RoomType.name).all()
+        room_type_name_map = {rt.id: rt.name for rt in all_room_types}
+
         # Convert to BookingOut format
         booking_results = []
         for booking in regular_bookings:
@@ -146,6 +151,15 @@ def get_bookings(
                     print(f"Warning: Could not create UserOut for booking {booking.id}: {str(e)}")
                     user_obj = None
 
+            # Resolve room type name
+            rt_id = getattr(booking, 'room_type_id', None)
+            if not rt_id:
+                # Fall back to first assigned room's type
+                assigned = booking_rooms_map.get(booking.id, [])
+                if assigned:
+                    rt_id = getattr(assigned[0], 'room_type_id', None)
+            rt_name = room_type_name_map.get(rt_id) if rt_id else None
+
             booking_out = BookingOut(
                 id=booking.id,
                 guest_name=booking.guest_name,
@@ -164,7 +178,13 @@ def get_bookings(
                 advance_deposit=booking.advance_deposit or 0.0,
                 checked_in_at=booking.checked_in_at,
                 checked_out_at=booking.checked_out_at,
-                rooms=booking_rooms_map.get(booking.id, [])
+                rooms=booking_rooms_map.get(booking.id, []),
+                room_type_id=rt_id,
+                room_type_name=rt_name,
+                num_rooms=getattr(booking, 'num_rooms', 1) or 1,
+                source=getattr(booking, 'source', 'Direct'),
+                branch_id=getattr(booking, 'branch_id', None),
+                display_id=getattr(booking, 'display_id', None),
             )
             
             # Fallback: Calculate total amount if 0 (for legacy data)
@@ -430,6 +450,9 @@ def get_booking_details(booking_id: Union[str, int], is_package: bool, db: Sessi
                 user=booking.user,
                 is_package=True,
                 total_amount=total_amt,
+                num_rooms=getattr(booking, 'num_rooms', 1) or 1,
+                room_type_id=None,
+                room_type_name="Package Details Implied",
                 checked_in_at=booking.checked_in_at,
                 checked_out_at=booking.checked_out_at,
                 checkout=booking.checkout,
@@ -442,7 +465,8 @@ def get_booking_details(booking_id: Union[str, int], is_package: bool, db: Sessi
             query = db.query(Booking).options(
                 joinedload(Booking.booking_rooms).joinedload(BookingRoom.room),
                 joinedload(Booking.user).joinedload(User.role),
-                joinedload(Booking.checkout)
+                joinedload(Booking.checkout),
+                joinedload(Booking.room_type)
             ).filter(Booking.id == booking_id)
             
             if branch_id is not None:
@@ -518,6 +542,9 @@ def get_booking_details(booking_id: Union[str, int], is_package: bool, db: Sessi
                 user=booking.user,
                 is_package=False,
                 total_amount=total_amt,
+                num_rooms=getattr(booking, 'num_rooms', 1) or 1,
+                room_type_id=getattr(booking, 'room_type_id', None),
+                room_type_name=booking.room_type.name if getattr(booking, 'room_type', None) else None,
                 advance_deposit=booking.advance_deposit or 0.0,
                 checked_in_at=booking.checked_in_at,
                 checked_out_at=booking.checked_out_at,
@@ -711,16 +738,25 @@ def create_booking(booking: BookingCreate, db: Session = Depends(get_db), curren
             branch_id = room_type.branch_id
             print(f"[DEBUG] Enterprise View: adopted branch_id={branch_id} from RoomType")
         
-        # Validate Capacity
-        if booking.adults > (room_type.adults_capacity or 0):
-            raise HTTPException(status_code=400, detail=f"Adults exceed capacity ({room_type.adults_capacity})")
-        if booking.children > (room_type.children_capacity or 0):
-            raise HTTPException(status_code=400, detail=f"Children exceed capacity ({room_type.children_capacity})")
+        # Validate Capacity based on number of rooms requested
+        num_rooms_requested = booking.num_rooms or 1
+        max_adults = (room_type.adults_capacity or 0) * num_rooms_requested
+        max_children = (room_type.children_capacity or 0) * num_rooms_requested
+        
+        if booking.adults > max_adults:
+            raise HTTPException(status_code=400, detail=f"Adults exceed capacity ({max_adults})")
+        if room_type.children_capacity is not None and room_type.children_capacity > 0:
+            if booking.children > max_children:
+                raise HTTPException(status_code=400, detail=f"Children exceed capacity ({max_children})")
             
         # Check Availability by Counting
         total_rooms = db.query(Room).filter(Room.room_type_id == room_type.id, Room.branch_id == branch_id, Room.status != "Deleted").count()
-        # Fallback to total_inventory if distinct physical rooms are fewer (e.g. for virtual inventory)
-        capacity = max(total_rooms, room_type.total_inventory or 0)
+        # For online (guest) bookings, strictly use the "Online Inventory" (total_inventory) limit if it is explicitly set > 0.
+        # Otherwise, fallback to the total physical rooms.
+        if room_type.total_inventory and room_type.total_inventory > 0:
+            capacity = room_type.total_inventory
+        else:
+            capacity = max(total_rooms, room_type.total_inventory or 0)
         
         # Count 1: Physical assignments of this room type
         assigned_overlaps = db.query(BookingRoom).join(Booking).join(Room).filter(
@@ -732,20 +768,22 @@ def create_booking(booking: BookingCreate, db: Session = Depends(get_db), curren
         ).count()
         
         # Count 2: Soft allocations (by type) that don't have physical rooms yet
-        # This prevents double counting once a booking is checked-in/assigned
-        soft_overlaps = db.query(Booking).filter(
+        from sqlalchemy import func
+        soft_overlaps_sum = db.query(func.sum(Booking.num_rooms)).filter(
             Booking.room_type_id == room_type.id,
             Booking.branch_id == branch_id,
             Booking.status.in_(["Booked", "Confirmed"]), # Not 'Checked-in' usually because check-in assigns rooms
             Booking.check_in < booking.check_out,
             Booking.check_out > booking.check_in,
             ~Booking.booking_rooms.any() # No assigned rooms
-        ).count()
+        ).scalar()
+        soft_overlaps = int(soft_overlaps_sum) if soft_overlaps_sum else 0
         
         effective_overlaps = assigned_overlaps + soft_overlaps
+        rooms_requested = booking.num_rooms or 1
 
-        if effective_overlaps >= capacity:
-            raise HTTPException(status_code=400, detail=f"No rooms of type '{room_type.name}' available for selected dates (Occupancy: {effective_overlaps}/{capacity}).")
+        if (effective_overlaps + rooms_requested) > capacity:
+            raise HTTPException(status_code=400, detail=f"No rooms of type '{room_type.name}' available for selected dates (Available: {max(0, capacity - effective_overlaps)}, Requested: {rooms_requested}).")
 
         db_booking = Booking(
             guest_name=booking.guest_name,
@@ -760,7 +798,8 @@ def create_booking(booking: BookingCreate, db: Session = Depends(get_db), curren
             external_id=booking.external_id,
             user_id=guest_user_id,
             branch_id=branch_id,
-            status="Booked"
+            status="Booked",
+            num_rooms=booking.num_rooms or 1
         )
         
         db.add(db_booking)
@@ -776,14 +815,21 @@ def create_booking(booking: BookingCreate, db: Session = Depends(get_db), curren
         # Capacity check requires fetching RoomType for each room
         total_adults = 0
         total_children = 0
+        num_rooms = booking.num_rooms or len(selected_rooms)
         for r in selected_rooms:
             rt = db.query(RoomType).filter(RoomType.id == r.room_type_id).first()
             if rt:
-                total_adults += rt.adults
-                total_children += rt.children
-        
+                total_adults += (rt.adults_capacity or 2)
+                total_children += (rt.children_capacity or 0)
+        # If num_rooms > number of distinct selected rooms (same type booked multiple times),
+        # scale capacity proportionally
+        if num_rooms > len(selected_rooms) and len(selected_rooms) > 0:
+            scale = num_rooms / len(selected_rooms)
+            total_adults = int(total_adults * scale)
+            total_children = int(total_children * scale)
+
         if booking.adults > total_adults or booking.children > total_children:
-            raise HTTPException(status_code=400, detail="Total guest count exceeds selected room capacity.")
+            raise HTTPException(status_code=400, detail=f"Total guest count exceeds selected room capacity (max {total_adults} adults, {total_children} children).")
 
         # Availability check
         for room_id in booking.room_ids:
@@ -810,7 +856,8 @@ def create_booking(booking: BookingCreate, db: Session = Depends(get_db), curren
             external_id=booking.external_id,
             user_id=guest_user_id,
             branch_id=branch_id,
-            status="Booked"
+            status="Booked",
+            num_rooms=num_rooms
         )
         # Use first room's type as primary type if none provided
         if not db_booking.room_type_id and selected_rooms:

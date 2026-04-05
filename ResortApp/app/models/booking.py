@@ -28,6 +28,7 @@ class Booking(Base):
     created_at = Column(DateTime, default=datetime.utcnow) # Added
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False, index=True, server_default="1")
     room_type_id = Column(Integer, ForeignKey("room_types.id"), nullable=True) # Selected Room Type
+    num_rooms = Column(Integer, default=1) # Number of rooms requested
     external_id = Column(String, nullable=True) # OTA/CM ID
     
     branch = relationship("Branch")

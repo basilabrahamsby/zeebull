@@ -224,9 +224,14 @@ def get_service_requests(
              # If status doesn't match assigned service enums, don't return any assigned services
              assigned_query = assigned_query.filter(AssignedServiceModel.id == -1)
     else:
-        # Default for task list: pending and in_progress
+        # Include all pending, in_progress, and recently completed (last 7 days)
         from app.models.service import ServiceStatus
-        assigned_query = assigned_query.filter(AssignedServiceModel.status.notin_([ServiceStatus.completed, ServiceStatus.cancelled]))
+        seven_days_ago = datetime.utcnow() - timedelta(days=7)
+        assigned_query = assigned_query.filter(
+            (AssignedServiceModel.status.notin_([ServiceStatus.completed, ServiceStatus.cancelled])) |
+            ((AssignedServiceModel.status.in_([ServiceStatus.completed, ServiceStatus.cancelled])) & 
+             (AssignedServiceModel.assigned_at >= seven_days_ago))
+        )
     
     if room_id:
         assigned_query = assigned_query.filter(AssignedServiceModel.room_id == room_id)

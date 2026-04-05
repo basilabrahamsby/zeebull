@@ -1281,10 +1281,10 @@ const Inventory = () => {
           purchasesRes,
           wasteRes
         ] = await Promise.all([
-          API.get("/inventory/categories?limit=1000", { headers: { "X-Branch-ID": "all" } }),
+          API.get("/inventory/categories?limit=1000"),
           API.get("/inventory/vendors?limit=1000"),
           API.get("/inventory/locations?limit=10000"),
-          API.get("/inventory/items?limit=1000", { headers: { "X-Branch-ID": "all" } }),
+          API.get("/inventory/items?limit=1000"),
           API.get("/inventory/purchases?limit=1000"),
           API.get("/inventory/waste-logs?limit=1000"),
         ]);
@@ -1314,11 +1314,11 @@ const Inventory = () => {
       const limit = (activeTab === "locations" || activeTab === "transactions") ? 5000 : 1000; // Increased limit for transactions to show full history
 
       if (activeTab === "items") {
-        const res = await API.get(`/inventory/items?limit=${limit}`, { headers: { "X-Branch-ID": "all" } });
+        const res = await API.get(`/inventory/items?limit=${limit}`);
         setItems(res.data || []);
       } else if (activeTab === "categories") {
         // Always fetch categories to ensure fresh data after add/edit
-        const res = await API.get(`/inventory/categories?limit=${limit}`, { headers: { "X-Branch-ID": "all" } });
+        const res = await API.get(`/inventory/categories?limit=${limit}`);
         setCategories(res.data || []);
       } else if (activeTab === "vendors") {
         // Always fetch vendors to ensure fresh data after add/edit
