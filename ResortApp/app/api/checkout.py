@@ -2384,16 +2384,20 @@ def _calculate_bill_for_single_room(db: Session, room_number: str, branch_id: in
                                     )
                                 )
     else:
-         food_query = food_query.filter(
-             or_(
-                 FoodOrder.booking_id == booking.id,
-                 and_(
-                     FoodOrder.booking_id == None,
-                     FoodOrder.package_booking_id == None,
-                     FoodOrder.created_at >= check_in_datetime
-                 )
-             )
-         )
+         food_query = db.query(FoodOrderItem)\
+                                .join(FoodOrder)\
+                                .options(joinedload(FoodOrderItem.food_item), joinedload(FoodOrderItem.order))\
+                                .filter(
+                                    FoodOrder.room_id == room.id,
+                                    or_(
+                                        FoodOrder.booking_id == booking.id,
+                                        and_(
+                                            FoodOrder.booking_id == None,
+                                            FoodOrder.package_booking_id == None,
+                                            FoodOrder.created_at >= check_in_datetime
+                                        )
+                                    )
+                                )
 
     all_food_order_items = food_query.all()
     

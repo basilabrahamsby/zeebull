@@ -6,7 +6,7 @@ load_dotenv()
 db_url = os.getenv("DATABASE_URL")
 print(f"Testing connection to: {db_url}")
 try:
-    engine = create_engine(db_url, connect_timeout=5)
+    engine = create_engine(db_url, connect_args={"connect_timeout": 5})
     with engine.connect() as conn:
         print("Successfully connected to the database!")
 except Exception as e:
