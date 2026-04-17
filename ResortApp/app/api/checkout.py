@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, func, and_
 from typing import List, Optional
@@ -3858,7 +3858,15 @@ def get_bill_for_booking(room_number: str, checkout_mode: str = "multiple", db: 
 
 
 @router.post("/checkout/{room_number}", response_model=CheckoutSuccess)
-def process_booking_checkout(room_number: str, request: CheckoutRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user), branch_id: int = Depends(get_branch_id)):
+def process_booking_checkout(
+    room_number: str, 
+    request: CheckoutRequest, 
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user), 
+    branch_id: int = Depends(get_branch_id),
+    *,
+    background_tasks: BackgroundTasks
+):
     """
     Finalizes the checkout for a room or entire booking.
     If checkout_mode is 'single', only the specified room is checked out.
@@ -4540,6 +4548,14 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, db: Ses
                 import traceback
                 traceback.print_exc()
             
+            # Trigger Aiosell sync for checked-out room
+            if background_tasks and room.room_type_id:
+                try:
+                    from app.core.aiosell_triggers import trigger_inventory_push
+                    background_tasks.add_task(trigger_inventory_push, room.room_type_id)
+                except Exception as e:
+                    print(f"Failed to queue Aiosell inventory push on checkout: {e}")
+            
             # 15. Automatically create journal entry for checkout (Scenario 2: Guest Checkout)
             # Debit: Bank Account / Cash | Credit: Room Revenue, Output CGST, Output SGST
             try:
@@ -4707,6 +4723,17 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, db: Ses
                     )
             raise HTTPException(status_code=500, detail=f"Checkout failed due to an internal error: {error_detail}")
         
+        # Trigger Aiosell sync for all checked-out rooms
+        if background_tasks and all_rooms:
+            try:
+                from app.core.aiosell_triggers import trigger_inventory_push
+                # Push for each unique room type in the booking
+                unique_room_type_ids = set(r.room_type_id for r in all_rooms if r.room_type_id)
+                for rt_id in unique_room_type_ids:
+                    background_tasks.add_task(trigger_inventory_push, rt_id)
+            except Exception as e:
+                print(f"Failed to queue Aiosell inventory push on multiple checkout: {e}")
+
         return CheckoutSuccess(
             checkout_id=new_checkout.id,
             grand_total=new_checkout.grand_total,
