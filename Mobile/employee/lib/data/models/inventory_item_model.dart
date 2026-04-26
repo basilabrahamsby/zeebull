@@ -15,6 +15,7 @@ class InventoryItem {
   final double? gstRate;
   final bool isPerishable;
   final bool trackSerialNumber;
+  final String? imagePath;
   int consumedQty = 0; // Local state for audit
 
   InventoryItem({
@@ -35,6 +36,7 @@ class InventoryItem {
     this.gstRate,
     this.isPerishable = false,
     this.trackSerialNumber = false,
+    this.imagePath,
   });
 
   factory InventoryItem.fromJson(Map<String, dynamic> json) {
@@ -56,6 +58,7 @@ class InventoryItem {
       gstRate: json['gst_rate'] != null ? (json['gst_rate'] as num).toDouble() : null,
       isPerishable: json['is_perishable'] ?? false,
       trackSerialNumber: json['track_serial_number'] ?? false,
+      imagePath: json['image'],
     );
   }
 }

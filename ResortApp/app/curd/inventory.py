@@ -15,17 +15,19 @@ from app.schemas.inventory import (
 
 
 # Category CRUD
-def create_category(db: Session, data: InventoryCategoryCreate):
-    category = InventoryCategory(**data.model_dump())
+def create_category(db: Session, data: InventoryCategoryCreate, branch_id: int):
+    category = InventoryCategory(**data.model_dump(), branch_id=branch_id)
     db.add(category)
     db.commit()
     db.refresh(category)
     return category
 
 
-def get_all_categories(db: Session, skip: int = 0, limit: int = 100, active_only: bool = True):
+def get_all_categories(db: Session, skip: int = 0, limit: int = 100, active_only: bool = True, branch_id: Optional[int] = None):
     from sqlalchemy.orm import joinedload
     query = db.query(InventoryCategory)
+    if branch_id:
+        query = query.filter(InventoryCategory.branch_id == branch_id)
     if active_only:
         query = query.filter(InventoryCategory.is_active == True)
     return query.offset(skip).limit(limit).all()
@@ -50,8 +52,8 @@ def update_category(db: Session, category_id: int, data: InventoryCategoryUpdate
 
 
 # Item CRUD
-def create_item(db: Session, data: InventoryItemCreate):
-    item = InventoryItem(**data.model_dump())
+def create_item(db: Session, data: InventoryItemCreate, branch_id: int):
+    item = InventoryItem(**data.model_dump(), branch_id=branch_id)
     db.add(item)
     db.commit()
     db.refresh(item)
@@ -522,6 +524,9 @@ def update_purchase_status(db: Session, purchase_id: int, status: str, current_u
     purchase = get_purchase_by_id(db, purchase_id)
     if not purchase:
         return None
+    
+    # Ensure we have the latest state from the DB before making decisions
+    db.refresh(purchase)
     
     old_status = purchase.status.lower() if purchase.status else ""
     new_status = status.lower()

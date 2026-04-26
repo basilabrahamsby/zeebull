@@ -44,14 +44,23 @@ class FoodManagementProvider with ChangeNotifier {
 
       if (results[1].statusCode == 200) {
         final data = results[1].data;
-        print("Items API Data: $data (Type: ${data.runtimeType})");
+        print("[DEBUG-FOOD] Raw items response: $data");
         List<dynamic> list = [];
         if (data is List) {
           list = data;
         } else if (data is Map) {
           list = data['data'] ?? data['items'] ?? data['food_items'] ?? [];
         }
-        _items = list.map((json) => FoodItem.fromJson(json)).toList();
+        print("[DEBUG-FOOD] Found ${list.length} raw items in response");
+        _items = list.map((json) {
+          try {
+            return FoodItem.fromJson(json);
+          } catch (e) {
+            print("[DEBUG-FOOD] Error parsing food item: $e. JSON: $json");
+            rethrow;
+          }
+        }).toList();
+        print("[DEBUG-FOOD] Successfully parsed ${_items.length} items");
       }
     } catch (e, stack) {
       _error = e.toString();
@@ -97,13 +106,23 @@ class FoodManagementProvider with ChangeNotifier {
       final response = await _apiService.getFoodItems();
       if (response.statusCode == 200) {
         final data = response.data;
+        print("[DEBUG-FOOD] Raw items response: $data");
         List<dynamic> list = [];
         if (data is List) {
           list = data;
         } else if (data is Map) {
           list = data['data'] ?? data['items'] ?? data['food_items'] ?? [];
         }
-        _items = list.map((json) => FoodItem.fromJson(json)).toList();
+        print("[DEBUG-FOOD] Found ${list.length} raw items in response");
+        _items = list.map((json) {
+          try {
+            return FoodItem.fromJson(json);
+          } catch (e) {
+            print("[DEBUG-FOOD] Error parsing food item: $e. JSON: $json");
+            rethrow;
+          }
+        }).toList();
+        print("[DEBUG-FOOD] Successfully parsed ${_items.length} items");
       }
     } catch (e) {
       _error = e.toString();

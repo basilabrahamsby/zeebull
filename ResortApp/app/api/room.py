@@ -92,6 +92,7 @@ def create_room_type(
     spa_access: bool = Form(False),
     housekeeping: bool = Form(False),
     mini_bar: bool = Form(False),
+    rate_plans_json: Optional[str] = Form(None),
     branch_id: int = Form(1),
     images: List[UploadFile] = File(None),
     db: Session = Depends(get_db), 
@@ -165,6 +166,26 @@ def create_room_type(
     db.commit()
     db.refresh(db_room_type)
 
+    if rate_plans_json:
+        try:
+            plans = json.loads(rate_plans_json)
+            from app.models.room import RatePlan
+            for plan in plans:
+                db_plan = RatePlan(
+                    name=plan.get("name", "Unnamed Plan"),
+                    room_type_id=db_room_type.id,
+                    occupancy=int(plan.get("occupancy", 2)),
+                    meal_plan=plan.get("meal_plan", "CP"),
+                    channel_manager_id=plan.get("channel_manager_id"),
+                    base_price=float(plan.get("base_price", 0.0)),
+                    price_offset=float(plan.get("price_offset", 0.0)),
+                    branch_id=effective_branch_id
+                )
+                db.add(db_plan)
+            db.commit()
+        except Exception as e:
+            print(f"Error saving rate plans: {e}")
+
     if background_tasks:
         try:
             from app.core.aiosell_triggers import trigger_inventory_push, trigger_rates_push
@@ -217,6 +238,7 @@ def update_room_type(
     spa_access: Optional[bool] = Form(None),
     housekeeping: Optional[bool] = Form(None),
     mini_bar: Optional[bool] = Form(None),
+    rate_plans_json: Optional[str] = Form(None),
     existing_images: Optional[str] = Form(None),
     images: List[UploadFile] = File(None),
     *,
@@ -313,6 +335,28 @@ def update_room_type(
 
     db.commit()
     db.refresh(db_room_type)
+
+    if rate_plans_json:
+        try:
+            plans = json.loads(rate_plans_json)
+            from app.models.room import RatePlan
+            # Delete old ones or update? For simplicity, we'll replace them
+            db.query(RatePlan).filter(RatePlan.room_type_id == type_id).delete()
+            for plan in plans:
+                db_plan = RatePlan(
+                    name=plan.get("name", "Unnamed Plan"),
+                    room_type_id=db_room_type.id,
+                    occupancy=int(plan.get("occupancy", 2)),
+                    meal_plan=plan.get("meal_plan", "CP"),
+                    channel_manager_id=plan.get("channel_manager_id"),
+                    base_price=float(plan.get("base_price", 0.0)),
+                    price_offset=float(plan.get("price_offset", 0.0)),
+                    branch_id=db_room_type.branch_id
+                )
+                db.add(db_plan)
+            db.commit()
+        except Exception as e:
+            print(f"Error updating rate plans: {e}")
     
     if background_tasks:
         try:

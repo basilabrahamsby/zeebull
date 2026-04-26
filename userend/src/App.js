@@ -2005,38 +2005,43 @@ export default function App() {
             filteredRooms = filteredRooms.filter(room => roomAvailability[room.id] === true);
         }
 
-        // Group by type/category: Aggregate images from all rooms of the same type and the type itself
+        // Group by type/category: Use ONLY room type images for the card.
+        // Individual room images are only used as fallback if no room type image exists.
         const groupedByType = {};
         filteredRooms.forEach(room => {
             if (!groupedByType[room.type]) {
-                const aggregatedImages = new Set();
-                // Add Room Type images first
-                if (room.room_type_image_url) aggregatedImages.add(room.room_type_image_url);
+                const typeImages = new Set();
+                // Add Room Type images ONLY (type-level images)
+                if (room.room_type_image_url) typeImages.add(room.room_type_image_url);
                 if (room.room_type_extra_images) {
                     try {
                         const extras = JSON.parse(room.room_type_extra_images);
-                        if (Array.isArray(extras)) extras.forEach(img => img && aggregatedImages.add(img));
+                        if (Array.isArray(extras)) extras.forEach(img => img && typeImages.add(img));
                     } catch (e) { }
                 }
 
                 groupedByType[room.type] = {
                     ...room,
-                    aggregated_images_set: aggregatedImages
+                    type_images_set: typeImages,
+                    fallback_images_set: new Set() // individual room images as fallback
                 };
             }
 
-            // Add images from this specific room
-            if (room.image_url) groupedByType[room.type].aggregated_images_set.add(room.image_url);
+            // Add individual room images only to the fallback set (NOT to the main display set)
+            if (room.image_url) groupedByType[room.type].fallback_images_set.add(room.image_url);
             if (room.extra_images) {
                 try {
                     const extras = JSON.parse(room.extra_images);
-                    if (Array.isArray(extras)) extras.forEach(img => img && groupedByType[room.type].aggregated_images_set.add(img));
+                    if (Array.isArray(extras)) extras.forEach(img => img && groupedByType[room.type].fallback_images_set.add(img));
                 } catch (e) { }
             }
         });
 
         const onePerType = Object.values(groupedByType).map(room => {
-            const finalImages = Array.from(room.aggregated_images_set);
+            const typeImgs = Array.from(room.type_images_set);
+            const fallbackImgs = Array.from(room.fallback_images_set);
+            // Use room type images; only fall back to room images if NO type image is set
+            const finalImages = typeImgs.length > 0 ? typeImgs : fallbackImgs;
             return {
                 ...room,
                 aggregated_images: finalImages

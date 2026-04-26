@@ -493,7 +493,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                   barTouchData: BarTouchData(
                     enabled: true,
                     touchTooltipData: BarTouchTooltipData(
-                       getTooltipColor: (group) => Colors.blueGrey,
+                       tooltipBgColor: Colors.blueGrey,
                        getTooltipItem: (group, groupIndex, rod, rodIndex) {
                          String type = rodIndex == 0 ? 'Income' : 'Expense';
                          return BarTooltipItem(

@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import date, datetime
+from app.schemas.rate_plan import RatePlanOut
 
 class RoomTypeBase(BaseModel):
     name: str
@@ -94,6 +95,7 @@ class RoomTypeUpdate(BaseModel):
 class RoomType(RoomTypeBase):
     id: int
     branch_id: int
+    rate_plans: List[RatePlanOut] = []
 
     class Config:
         from_attributes = True

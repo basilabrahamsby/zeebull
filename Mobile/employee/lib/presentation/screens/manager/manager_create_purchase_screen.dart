@@ -5,6 +5,8 @@ import 'package:intl/intl.dart';
 import 'package:dio/dio.dart';
 import 'dart:math';
 import 'dart:ui';
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
 import 'package:orchid_employee/core/constants/app_colors.dart';
 import 'package:orchid_employee/presentation/widgets/onyx_glass_card.dart';
 import 'manager_create_vendor_screen.dart';
@@ -33,6 +35,8 @@ class _ManagerCreatePurchaseScreenState extends State<ManagerCreatePurchaseScree
   String _status = 'draft';
   String _paymentMethod = 'Bank Transfer';
   String _paymentStatus = 'Pending';
+  XFile? _invoiceImage;        // <-- invoice image
+  String? _existingBillUrl;    // <-- existing bill URL (edit mode)
   
   List<Map<String, dynamic>> _lineItems = [];
   final _invoiceController = TextEditingController();
@@ -98,6 +102,7 @@ class _ManagerCreatePurchaseScreenState extends State<ManagerCreatePurchaseScree
     _invoiceController.text = p['invoice_number'] ?? '';
     _paymentMethod = p['payment_method'] ?? 'Bank Transfer';
     if (!_paymentMethods.contains(_paymentMethod)) _paymentMethod = 'Bank Transfer';
+    _existingBillUrl = p['bill_file_url'];  // load existing bill
     
     _paymentStatus = p['payment_status']?.toString().toLowerCase() ?? 'pending';
     final psIndex = _paymentStatuses.indexWhere((s) => s.toLowerCase() == _paymentStatus);
@@ -177,6 +182,24 @@ class _ManagerCreatePurchaseScreenState extends State<ManagerCreatePurchaseScree
       });
   }
 
+  Future<void> _pickInvoiceImage(ImageSource source) async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(source: source, imageQuality: 85);
+    if (picked != null) setState(() => _invoiceImage = picked);
+  }
+
+  Future<void> _uploadBillImage(ApiService api, int purchaseId) async {
+    if (_invoiceImage == null) return;
+    try {
+      final formData = FormData.fromMap({
+        'file': await MultipartFile.fromFile(_invoiceImage!.path, filename: _invoiceImage!.name),
+      });
+      await api.dio.post('/inventory/purchases/$purchaseId/upload-bill', data: formData);
+    } catch (e) {
+      debugPrint('Bill upload failed: $e');
+    }
+  }
+
   Future<void> _submit() async {
     if (_selectedVendorId == null) {
       _showError("PLEASE SELECT A VENDOR");
@@ -204,7 +227,7 @@ class _ManagerCreatePurchaseScreenState extends State<ManagerCreatePurchaseScree
         'purchase_date': DateFormat('yyyy-MM-dd').format(_purchaseDate), 
         'expected_delivery_date': _expectedDeliveryDate != null ? DateFormat('yyyy-MM-dd').format(_expectedDeliveryDate!) : null,
         'status': _status.toLowerCase(),
-        'vendor_invoice_number': _invoiceController.text.isNotEmpty ? _invoiceController.text : null,
+        'invoice_number': _invoiceController.text.isNotEmpty ? _invoiceController.text : null,
         'payment_method': _paymentMethod,
         'payment_status': _paymentStatus.toLowerCase(),
         'details': _lineItems.map((item) {
@@ -235,13 +258,19 @@ class _ManagerCreatePurchaseScreenState extends State<ManagerCreatePurchaseScree
         }).toList(),
       };
 
+      int savedId;
       if (_isEdit) {
          await api.dio.put('/inventory/purchases/${widget.purchase!['id']}', data: payload);
+         savedId = widget.purchase!['id'];
          if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("PURCHASE ORDER UPDATED", style: TextStyle(fontWeight: FontWeight.w900)), backgroundColor: AppColors.success, behavior: SnackBarBehavior.floating));
       } else {
-         await api.dio.post('/inventory/purchases', data: payload);
+         final res = await api.dio.post('/inventory/purchases', data: payload);
+         savedId = res.data['id'];
          if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("PURCHASE ORDER CREATED", style: TextStyle(fontWeight: FontWeight.w900)), backgroundColor: AppColors.success, behavior: SnackBarBehavior.floating));
       }
+      
+      // Upload invoice image if selected
+      await _uploadBillImage(api, savedId);
       
       if (mounted) {
         Navigator.pop(context, true); 
@@ -396,6 +425,84 @@ class _ManagerCreatePurchaseScreenState extends State<ManagerCreatePurchaseScree
               Expanded(child: _buildGlassDropdown<String>(label: "P. STATUS", value: _paymentStatus, items: _paymentStatuses.map((s) => DropdownMenuItem<String>(value: s, child: Text(s.toUpperCase(), style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)))).toList(), onChanged: (v) => setState(() => _paymentStatus = v!))),
             ],
           ),
+
+          const SizedBox(height: 24),
+          // ── Invoice Image Upload ────────────────────────────────
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text("INVOICE IMAGE", style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1)),
+              const SizedBox(height: 10),
+              if (_invoiceImage != null) ...[
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.file(File(_invoiceImage!.path), height: 160, width: double.infinity, fit: BoxFit.cover),
+                ),
+                const SizedBox(height: 10),
+              ] else if (_existingBillUrl != null) ...[
+                Container(
+                  height: 48,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(color: AppColors.accent.withOpacity(0.08), borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.accent.withOpacity(0.3))),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.receipt_long, color: AppColors.accent, size: 18),
+                      const SizedBox(width: 8),
+                      const Expanded(child: Text("EXISTING BILL ATTACHED", style: TextStyle(color: AppColors.accent, fontSize: 11, fontWeight: FontWeight.w900))),
+                      TextButton(onPressed: () => setState(() => _existingBillUrl = null), child: const Text("REMOVE", style: TextStyle(color: Colors.redAccent, fontSize: 10, fontWeight: FontWeight.w900))),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+              ],
+              Row(
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => _pickInvoiceImage(ImageSource.camera),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white10)),
+                        child: Column(
+                          children: [
+                            Icon(Icons.camera_alt_outlined, color: AppColors.accent.withOpacity(0.7), size: 22),
+                            const SizedBox(height: 4),
+                            Text("CAMERA", style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => _pickInvoiceImage(ImageSource.gallery),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white10)),
+                        child: Column(
+                          children: [
+                            Icon(Icons.photo_library_outlined, color: AppColors.accent.withOpacity(0.7), size: 22),
+                            const SizedBox(height: 4),
+                            Text("GALLERY", style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (_invoiceImage != null) ...[
+                    const SizedBox(width: 12),
+                    IconButton(
+                      onPressed: () => setState(() => _invoiceImage = null),
+                      icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+                      style: IconButton.styleFrom(backgroundColor: Colors.redAccent.withOpacity(0.1)),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
+          // ────────────────────────────────────────────────────────
         ],
       ),
     );

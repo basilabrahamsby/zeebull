@@ -24,8 +24,9 @@ class ManagerFoodOrdersScreen extends StatefulWidget {
   State<ManagerFoodOrdersScreen> createState() => _ManagerFoodOrdersScreenState();
 }
 
-class _ManagerFoodOrdersScreenState extends State<ManagerFoodOrdersScreen> with SingleTickerProviderStateMixin {
+class _ManagerFoodOrdersScreenState extends State<ManagerFoodOrdersScreen> with TickerProviderStateMixin {
   late TabController _tabController;
+  late TabController _managementTabController;
   
   // Data Lists
   List<dynamic> _orders = [];
@@ -70,8 +71,17 @@ class _ManagerFoodOrdersScreenState extends State<ManagerFoodOrdersScreen> with 
   void initState() {
     super.initState();
     _tabController = TabController(length: 6, vsync: this, initialIndex: widget.initialTab);
+    _managementTabController = TabController(length: 2, vsync: this);
     _refreshAllData();
     _tabController.addListener(_handleTabSelection);
+  }
+
+  @override
+  void dispose() {
+    _tabController.removeListener(_handleTabSelection);
+    _tabController.dispose();
+    _managementTabController.dispose();
+    super.dispose();
   }
 
   Future<void> _refreshAllData({bool force = false}) async {
@@ -276,7 +286,7 @@ class _ManagerFoodOrdersScreenState extends State<ManagerFoodOrdersScreen> with 
                       const SizedBox(width: 8),
                       const Expanded(
                         child: Text(
-                          "FOOD & BEVERAGE",
+                          "FOOD & BEVERAGE FIXED",
                           style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: 1.5),
                         ),
                       ),
@@ -539,52 +549,73 @@ class _ManagerFoodOrdersScreenState extends State<ManagerFoodOrdersScreen> with 
   Widget _buildManagementTab() {
     return Container(
       margin: const EdgeInsets.only(top: 8),
-      child: Stack(
-        children: [
-          Consumer<FoodManagementProvider>(
-            builder: (context, provider, _) {
-              return DefaultTabController(
-                length: 2,
-                child: Column(
+      child: Consumer<FoodManagementProvider>(
+        builder: (context, provider, _) {
+          return Column(
+            children: [
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 40),
+                height: 32,
+                decoration: BoxDecoration(color: Colors.white.withOpacity(0.03), borderRadius: BorderRadius.circular(20)),
+                child: TabBar(
+                  controller: _managementTabController,
+                  tabs: const [Tab(text: "ITEMS"), Tab(text: "CATEGORIES")],
+                  labelColor: AppColors.accent,
+                  unselectedLabelColor: Colors.white24,
+                  indicatorSize: TabBarIndicatorSize.tab,
+                  indicator: const BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.all(Radius.circular(20))),
+                  dividerColor: Colors.transparent,
+                  labelStyle: const TextStyle(fontWeight: FontWeight.w900, fontSize: 9, letterSpacing: 1),
+                ),
+              ),
+              Expanded(
+                child: TabBarView(
+                  controller: _managementTabController,
                   children: [
-                    Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 40),
-                      height: 32,
-                      decoration: BoxDecoration(color: Colors.white.withOpacity(0.03), borderRadius: BorderRadius.circular(20)),
-                      child: const TabBar(
-                        tabs: [Tab(text: "ITEMS"), Tab(text: "CATEGORIES")],
-                        labelColor: AppColors.accent,
-                        unselectedLabelColor: Colors.white24,
-                        indicatorSize: TabBarIndicatorSize.tab,
-                        indicator: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.all(Radius.circular(20))),
-                        dividerColor: Colors.transparent,
-                        labelStyle: TextStyle(fontWeight: FontWeight.w900, fontSize: 9, letterSpacing: 1),
-                      ),
+                    Stack(
+                      children: [
+                        _buildItemsList(provider),
+                        Positioned(
+                          bottom: 24,
+                          right: 24,
+                          child: FloatingActionButton(
+                            heroTag: "add_item_fab",
+                            onPressed: () {
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("OPENING ITEM FORM"), duration: Duration(seconds: 1)));
+                              _showItemForm();
+                            },
+                            backgroundColor: AppColors.accent,
+                            foregroundColor: AppColors.onyx,
+                            child: const Icon(Icons.add),
+                          ),
+                        ),
+                      ],
                     ),
-                    Expanded(
-                      child: TabBarView(
-                        children: [
-                          _buildItemsList(provider),
-                          _buildCategoriesList(provider),
-                        ],
-                      ),
+                    Stack(
+                      children: [
+                        _buildCategoriesList(provider),
+                        Positioned(
+                          bottom: 24,
+                          right: 24,
+                          child: FloatingActionButton(
+                            heroTag: "add_category_fab",
+                            onPressed: () {
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("OPENING CATEGORY FORM"), duration: Duration(seconds: 1)));
+                              _showCategoryForm();
+                            },
+                            backgroundColor: AppColors.accent,
+                            foregroundColor: AppColors.onyx,
+                            child: const Icon(Icons.category_outlined),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              );
-            },
-          ),
-          Positioned(
-            bottom: 24,
-            right: 24,
-            child: FloatingActionButton(
-              onPressed: () => _tabController.index == 3 ? _showItemForm() : _showCategoryForm(),
-              backgroundColor: AppColors.accent,
-              foregroundColor: AppColors.onyx,
-              child: const Icon(Icons.add),
-            ),
-          ),
-        ],
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -881,7 +912,7 @@ class _ManagerFoodOrdersScreenState extends State<ManagerFoodOrdersScreen> with 
                       style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent, foregroundColor: AppColors.onyx, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
                       onPressed: () async {
                         final provider = context.read<FoodManagementProvider>();
-                        final data = {'name': nameController.text, 'description': descController.text, 'price': double.tryParse(priceController.text) ?? 0, 'room_service_price': double.tryParse(rsPriceController.text) ?? 0, 'food_category_id': selectedCategory};
+                        final data = {'name': nameController.text, 'description': descController.text, 'price': double.tryParse(priceController.text) ?? 0, 'room_service_price': double.tryParse(rsPriceController.text) ?? 0, 'category_id': selectedCategory, 'available': item?.available ?? true};
                         List<dio_multipart.MultipartFile> mFiles = [];
                         for (var f in selectedImages) {
                           final bytes = await f.readAsBytes();

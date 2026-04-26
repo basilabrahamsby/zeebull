@@ -48,30 +48,31 @@ async def aiosell_webhook(
     
     logger.info(f"[AIOSELL WEBHOOK] Received payload: {payload}")
     
-    reservation_id = payload.get("reservationId")
-    status = str(payload.get("status", "")).upper()
-    channel_name = payload.get("channelName", "OTA")
+    reservation_id = payload.get("bookingID") or payload.get("bookingId")
+    action = str(payload.get("action", "")).lower()
+    channel_name = payload.get("channel", "OTA")
     
     if not reservation_id:
-        return Response(status_code=400, content="Missing reservationId")
+        logger.error(f"[AIOSELL WEBHOOK] Missing bookingID/bookingId in payload: {payload}")
+        return Response(status_code=400, content="Missing bookingID or bookingId")
         
     # BRANCH logic -> Defaulting to standard branch 1 for sandbox integration
     branch_id = 1 
         
-    if status == "NEW":
+    if action == "book":
         return _handle_new_booking(payload, db, branch_id)
-    elif status == "MODIFIED":
+    elif action == "modify":
         return _handle_modify_booking(payload, db)
-    elif status == "CANCELLED":
+    elif action == "cancel":
         return _handle_cancel_booking(payload, db)
     else:
-        logger.warning(f"[AIOSELL WEBHOOK] Unknown status: {status}")
-        return {"success": True, "message": f"Ignored status {status}"}
+        logger.warning(f"[AIOSELL WEBHOOK] Unknown action: {action}")
+        return {"success": True, "message": f"Ignored action {action}"}
 
 
 def _handle_new_booking(payload: dict, db: Session, branch_id: int):
     # Check if we already have it
-    res_id = payload.get("reservationId")
+    res_id = payload.get("bookingID") or payload.get("bookingId")
     existing = db.query(Booking).filter(Booking.external_id == res_id).first()
     if existing:
         return {"success": True, "message": "Booking already exists"}
@@ -87,7 +88,6 @@ def _handle_new_booking(payload: dict, db: Session, branch_id: int):
     if not rooms:
          return Response(status_code=400, content="No rooms array in payload")
          
-    # We take the first room to define the dates and type since Zeebull handles 1 RoomType per booking softly
     primary_room_data = rooms[0]
     room_code = primary_room_data.get("roomCode")
     
@@ -103,8 +103,8 @@ def _handle_new_booking(payload: dict, db: Session, branch_id: int):
              
     # Parse dates
     try:
-        check_in = datetime.strptime(primary_room_data.get("checkIn"), "%Y-%m-%d").date()
-        check_out = datetime.strptime(primary_room_data.get("checkOut"), "%Y-%m-%d").date()
+        check_in = datetime.strptime(payload.get("checkin"), "%Y-%m-%d").date()
+        check_out = datetime.strptime(payload.get("checkout"), "%Y-%m-%d").date()
     except Exception as e:
         logger.error(f"[AIOSELL] Date parsing error: {e}")
         return Response(status_code=400, content="Invalid date format")
@@ -118,13 +118,15 @@ def _handle_new_booking(payload: dict, db: Session, branch_id: int):
         logger.error(f"[AIOSELL] User creation error: {e}")
         
     num_rooms = len(rooms)
-    total_adults = sum([int(r.get("adults", 1)) for r in rooms])
-    total_children = sum([int(r.get("children", 0)) for r in rooms])
+    total_adults = sum([int(r.get("occupancy", {}).get("adults", 1)) for r in rooms])
+    total_children = sum([int(r.get("occupancy", {}).get("children", 0)) for r in rooms])
     
     # OVERRIDE Zeebull Dynamic Pricing -> Use exact totalAmount from Aiosell
-    total_amount = float(payload.get("totalAmount", 0.0))
+    # Support both root 'totalAmount' and nested 'amount.amountAfterTax'
+    total_amount = float(payload.get("totalAmount") or payload.get("amount", {}).get("amountAfterTax", 0.0))
+    
     advance_deposit = 0.0 # Could check if payment is collected by OTA
-    if "Prepaid" in payload.get("channelName", ""):
+    if str(payload.get("pah", "True")).lower() == "false":
         advance_deposit = total_amount
         
     # 3. Create Booking
@@ -137,7 +139,7 @@ def _handle_new_booking(payload: dict, db: Session, branch_id: int):
         adults=total_adults,
         children=total_children,
         room_type_id=room_type_id,
-        source=payload.get("channelName", "OTA"),
+        source=payload.get("channel", "OTA"),
         external_id=res_id,
         user_id=user_id,
         branch_id=branch_id,
@@ -158,7 +160,7 @@ def _handle_new_booking(payload: dict, db: Session, branch_id: int):
     return {"success": True, "booking_id": db_booking.id, "display_id": db_booking.display_id}
 
 def _handle_modify_booking(payload: dict, db: Session):
-    res_id = payload.get("reservationId")
+    res_id = payload.get("bookingID") or payload.get("bookingId")
     booking = db.query(Booking).filter(Booking.external_id == res_id).first()
     
     if not booking:
@@ -171,22 +173,25 @@ def _handle_modify_booking(payload: dict, db: Session):
     if rooms:
         primary = rooms[0]
         try:
-            booking.check_in = datetime.strptime(primary.get("checkIn"), "%Y-%m-%d").date()
-            booking.check_out = datetime.strptime(primary.get("checkOut"), "%Y-%m-%d").date()
+            booking.check_in = datetime.strptime(payload.get("checkin"), "%Y-%m-%d").date()
+            booking.check_out = datetime.strptime(payload.get("checkout"), "%Y-%m-%d").date()
             booking.num_rooms = len(rooms)
-            booking.adults = sum([int(r.get("adults", 1)) for r in rooms])
-            booking.children = sum([int(r.get("children", 0)) for r in rooms])
+            booking.adults = sum([int(r.get("occupancy", {}).get("adults", 1)) for r in rooms])
+            booking.children = sum([int(r.get("occupancy", {}).get("children", 0)) for r in rooms])
         except:
             pass
             
-    booking.total_amount = float(payload.get("totalAmount", booking.total_amount))
+    # Support both root 'totalAmount' and nested 'amount.amountAfterTax'
+    amt = payload.get("totalAmount") or payload.get("amount", {}).get("amountAfterTax")
+    if amt is not None:
+        booking.total_amount = float(amt)
     
     db.commit()
     logger.info(f"[AIOSELL WEBHOOK] Modified Booking {booking.display_id} from {res_id}")
     return {"success": True, "message": "Modified"}
 
 def _handle_cancel_booking(payload: dict, db: Session):
-    res_id = payload.get("reservationId")
+    res_id = payload.get("bookingID") or payload.get("bookingId")
     booking = db.query(Booking).filter(Booking.external_id == res_id).first()
     
     if not booking:

@@ -9,6 +9,10 @@ import 'package:orchid_employee/presentation/widgets/onyx_glass_dialog.dart';
 import 'package:orchid_employee/core/constants/app_colors.dart';
 import 'package:intl/intl.dart';
 import 'dart:ui';
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
+import 'package:dio/dio.dart';
+import 'package:orchid_employee/core/constants/api_constants.dart';
 
 class ManagerInventoryScreen extends StatefulWidget {
   final bool isClockedIn;
@@ -545,83 +549,131 @@ class _ManagerInventoryScreenState extends State<ManagerInventoryScreen> with Si
           decoration: BoxDecoration(color: AppColors.onyx.withOpacity(0.95), borderRadius: const BorderRadius.vertical(top: Radius.circular(32)), border: Border.all(color: Colors.white10)),
           padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom, left: 32, right: 32, top: 32),
           child: StatefulBuilder(
-            builder: (context, setModalState) => SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(isEditing ? "SYNCHRONIZE ITEM" : "INITIALIZE NEW ITEM", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: 1.5)),
-                  const SizedBox(height: 32),
-                  _buildGlassInput(nameController, "ITEM SPECIFICATION", Icons.label_important_outline_rounded),
-                  const SizedBox(height: 16),
-                  Consumer<InventoryProvider>(
-                    builder: (context, p, _) => _buildGlassDropdown<int>(
-                      label: "DOMAINE / CATEGORY",
-                      value: categoryId,
-                      items: p.categories.map((c) => DropdownMenuItem<int>(
-                        value: c['id'], 
-                        child: Text(c['name'].toString().toUpperCase(), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold))
-                      )).toList(),
-                      onChanged: (val) => setModalState(() => categoryId = val),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(child: _buildGlassInput(codeController, "SKU / IDENTIFIER", Icons.qr_code_rounded)),
-                      const SizedBox(width: 12),
-                      Expanded(child: _buildGlassInput(unitController, "MEASURE UNIT", Icons.straighten_rounded)),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(child: _buildGlassInput(stockController, isEditing ? "CURRENT LEVEL" : "INITIAL STOCK", Icons.inventory_rounded, type: TextInputType.number)),
-                      const SizedBox(width: 12),
-                      Expanded(child: _buildGlassInput(priceController, "UNIT VALUATION", Icons.payments_rounded, prefix: "₹", type: TextInputType.number)),
-                    ],
-                  ),
-                  const SizedBox(height: 32),
-                  SizedBox(
-                    width: double.infinity, 
-                    height: 56,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.accent, 
-                        foregroundColor: AppColors.onyx, 
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                        elevation: 0
+            builder: (context, setModalState) {
+              XFile? selectedImage;
+              final ImagePicker picker = ImagePicker();
+
+              return SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(isEditing ? "SYNCHRONIZE ITEM" : "INITIALIZE NEW ITEM", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: 1.5)),
+                    const SizedBox(height: 32),
+                    
+                    // Image Picker Section
+                    Center(
+                      child: InkWell(
+                        onTap: () async {
+                          final XFile? image = await picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
+                          if (image != null) setModalState(() { selectedImage = image; });
+                        },
+                        child: Container(
+                          height: 120,
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.05),
+                            border: Border.all(color: Colors.white10),
+                            borderRadius: BorderRadius.circular(20)
+                          ),
+                          child: selectedImage != null 
+                            ? ClipRRect(borderRadius: BorderRadius.circular(20), child: Image.file(File(selectedImage!.path), fit: BoxFit.cover))
+                            : (item?.imagePath != null 
+                                ? ClipRRect(borderRadius: BorderRadius.circular(20), child: Image.network("${ApiConstants.baseUrl}/${item!.imagePath}", fit: BoxFit.cover))
+                                : Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      const Icon(Icons.add_a_photo_outlined, size: 24, color: AppColors.accent),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        "ATTACH ITEM IMAGE",
+                                        style: TextStyle(color: Colors.white38, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 1),
+                                      )
+                                    ],
+                                  )),
+                        ),
                       ),
-                      onPressed: () async {
-                         if (nameController.text.isEmpty || (categoryId == null && !isEditing)) return;
-                         final messenger = ScaffoldMessenger.of(context);
-                         final provider = context.read<InventoryProvider>();
-                         final data = {
-                           'name': nameController.text, 
-                           'category_id': categoryId, 
-                           'item_code': codeController.text, 
-                           'unit': unitController.text, 
-                           'selling_price': double.tryParse(priceController.text) ?? 0, 
-                           'min_stock_level': double.tryParse(minStockController.text) ?? 0
-                         };
-                         Navigator.pop(ctx); 
-                         bool success = isEditing 
-                            ? await provider.updateItem(item.id, data) 
-                            : await provider.createItem({...data, 'initial_stock': double.tryParse(stockController.text) ?? 0});
-                         
-                         messenger.showSnackBar(SnackBar(content: Text(success ? "REPOSITORY UPDATED" : "OPERATION FAILED"), backgroundColor: success ? Colors.green : Colors.redAccent)); 
-                      },
-                      child: Text(isEditing ? "SAVE SYNCHRONIZATION" : "GENERATE RECORD", style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 1.5)),
                     ),
-                  ),
-                  const SizedBox(height: 40),
-                ],
-              ),
-            ),
+                    const SizedBox(height: 24),
+
+                    _buildGlassInput(nameController, "ITEM SPECIFICATION", Icons.label_important_outline_rounded),
+                    const SizedBox(height: 16),
+                    Consumer<InventoryProvider>(
+                      builder: (context, p, _) => _buildGlassDropdown<int>(
+                        label: "DOMAINE / CATEGORY",
+                        value: categoryId,
+                        items: p.categories.map((c) => DropdownMenuItem<int>(
+                          value: c['id'], 
+                          child: Text(c['name'].toString().toUpperCase(), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold))
+                        )).toList(),
+                        onChanged: (val) => setModalState(() => categoryId = val),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(child: _buildGlassInput(codeController, "SKU / IDENTIFIER", Icons.qr_code_rounded)),
+                        const SizedBox(width: 12),
+                        Expanded(child: _buildGlassInput(unitController, "MEASURE UNIT", Icons.straighten_rounded)),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(child: _buildGlassInput(stockController, isEditing ? "CURRENT LEVEL" : "INITIAL STOCK", Icons.inventory_rounded, type: TextInputType.number)),
+                        const SizedBox(width: 12),
+                        Expanded(child: _buildGlassInput(priceController, "UNIT VALUATION", Icons.payments_rounded, prefix: "₹", type: TextInputType.number)),
+                      ],
+                    ),
+                    const SizedBox(height: 32),
+                    SizedBox(
+                      width: double.infinity, 
+                      height: 56,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.accent, 
+                          foregroundColor: AppColors.onyx, 
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          elevation: 0
+                        ),
+                        onPressed: () async {
+                           if (nameController.text.isEmpty || (categoryId == null && !isEditing)) return;
+                           final messenger = ScaffoldMessenger.of(context);
+                           final provider = context.read<InventoryProvider>();
+                           
+                           final Map<String, dynamic> data = {
+                             'name': nameController.text, 
+                             'category_id': categoryId, 
+                             'item_code': codeController.text, 
+                             'unit': unitController.text, 
+                             'selling_price': double.tryParse(priceController.text) ?? 0, 
+                             'min_stock_level': double.tryParse(minStockController.text) ?? 0
+                           };
+
+                           if (selectedImage != null) {
+                             data['image'] = await MultipartFile.fromFile(selectedImage!.path, filename: selectedImage!.name);
+                           }
+
+                           Navigator.pop(ctx); 
+                           bool success = isEditing 
+                              ? await provider.updateItem(item.id, data) 
+                              : await provider.createItem({...data, 'initial_stock': double.tryParse(stockController.text) ?? 0});
+                           
+                           messenger.showSnackBar(SnackBar(content: Text(success ? "REPOSITORY UPDATED" : "OPERATION FAILED"), backgroundColor: success ? Colors.green : Colors.redAccent)); 
+                        },
+                        child: Text(isEditing ? "SAVE SYNCHRONIZATION" : "GENERATE RECORD", style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 1.5)),
+                      ),
+                    ),
+                    const SizedBox(height: 40),
+                  ],
+                ),
+              );
+            },
           ),
         ),
       ),
     );
+
   }
 
   void _showTransactionDetails(Map<String, dynamic> tx) {

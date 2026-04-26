@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
+import '../providers/auth_provider.dart';
 import '../providers/dashboard_provider.dart';
 import '../providers/expense_provider.dart';
 import '../providers/staff_provider.dart';
@@ -13,6 +14,8 @@ import 'room_list_screen.dart';
 import 'bookings_screen.dart';
 import 'food_analytics_screen.dart';
 import 'inventory_screen.dart';
+import 'services_screen.dart';
+import 'staff_screen.dart';
 import 'purchase_orders_screen.dart'; // exports PurchaseOrderScreen
 import '../providers/branch_provider.dart';
 import '../models/branch.dart';
@@ -52,6 +55,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
   Widget build(BuildContext context) {
     final dashboardProvider = Provider.of<DashboardProvider>(context);
     final branchProvider = Provider.of<BranchProvider>(context);
+    final authProvider = Provider.of<AuthProvider>(context);
     
     // Refresh data if branch changes (simple notification approach)
     // In a more robust app, you'd use a listener in the provider or a consumer
@@ -85,7 +89,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
       appBar: AppBar(
         title: const Text('Admin Dashboard'),
         actions: [
-          if (dashboardProvider.user?.isSuperadmin == true && branchProvider.branches.isNotEmpty)
+          if (authProvider.user?.isSuperadmin == true && branchProvider.branches.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(right: 16),
               child: DropdownButtonHideUnderline(

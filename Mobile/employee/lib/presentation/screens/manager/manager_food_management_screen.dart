@@ -29,7 +29,7 @@ class _ManagerFoodManagementScreenState extends State<ManagerFoodManagementScree
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Food Management"),
+        title: const Text("Food Management FIXED"),
         bottom: TabBar(
           controller: _tabController,
           tabs: const [

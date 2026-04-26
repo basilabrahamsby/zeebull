@@ -129,7 +129,11 @@ async def create_item_slash(
 def _list_items_impl(db: Session, skip: int = 0, limit: int = 20, branch_id: int = None):
     """Helper function for list_items"""
     try:
-        return food_item.get_all_food_items(db, skip=skip, limit=limit, branch_id=branch_id)
+        items = food_item.get_all_food_items(db, skip=skip, limit=limit, branch_id=branch_id)
+        print(f"[DEBUG-FOOD] Backend sending {len(items)} items for branch {branch_id}")
+        for item in items:
+            print(f"[DEBUG-FOOD] Item: {item.name} (ID: {item.id}, Branch: {item.branch_id}, Available: {item.available})")
+        return items
     except Exception as e:
         import traceback
         error_detail = f"Failed to fetch food items: {str(e)}\n{traceback.format_exc()}"

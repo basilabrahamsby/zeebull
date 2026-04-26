@@ -54,7 +54,7 @@ def create_category(
     current_user: User = Depends(get_current_user),
     branch_id: int = Depends(get_branch_id)
 ):
-    return inventory_crud.create_category(db, category)
+    return inventory_crud.create_category(db, category, branch_id=branch_id)
 
 
 @router.get("/categories", response_model=List[InventoryCategoryOut])
@@ -66,7 +66,7 @@ def get_categories(
     current_user: User = Depends(get_current_user),
     branch_id: Optional[int] = Depends(get_branch_id)
 ):
-    categories = inventory_crud.get_all_categories(db, skip=skip, limit=limit, active_only=active_only)
+    categories = inventory_crud.get_all_categories(db, skip=skip, limit=limit, active_only=active_only, branch_id=branch_id)
     return categories
 
 
@@ -165,6 +165,18 @@ async def create_item(
             vendor_item_code = None
         if item_code == "" or (isinstance(item_code, str) and item_code.lower() == "null"):
             item_code = None
+
+        # Generate item_code if missing
+        if not item_code:
+            import random
+            while True:
+                # Pattern: ITM-XXXX
+                new_code = f"ITM-{random.randint(1000, 9999)}"
+                # Check if exists
+                exists = db.query(InventoryItem).filter(InventoryItem.item_code == new_code).first()
+                if not exists:
+                    item_code = new_code
+                    break
         
         # Check if category enforces fixed asset status
         if category.is_asset_fixed:
@@ -199,8 +211,8 @@ async def create_item(
             preferred_vendor_id=preferred_vendor_id,
             vendor_item_code=vendor_item_code,
             lead_time_days=lead_time_days,
-            is_active=is_active
-            # branch_id=branch_id  # Item is global
+            is_active=is_active,
+            branch_id=branch_id  # FIXED: branch_id was commented out
         )
         
         db.add(created_item)
@@ -209,12 +221,14 @@ async def create_item(
         except IntegrityError as e:
             db.rollback()
             err_msg = str(e).lower()
-            if "uix_inventory_item_code" in err_msg or "item_code" in err_msg:
+            if "uix_inventory_item_code" in err_msg:
                 raise HTTPException(status_code=400, detail="Item Code already exists. Please use a unique code.")
-            elif "uix_inventory_item_barcode" in err_msg or "barcode" in err_msg:
+            elif "uix_inventory_item_barcode" in err_msg:
                 raise HTTPException(status_code=400, detail="Barcode already exists.")
             elif "uix_inventory_item_name" in err_msg or "inventory_items_name_key" in err_msg:
                  raise HTTPException(status_code=400, detail="Item Name already exists.")
+            elif "branch_id" in err_msg and "null" in err_msg:
+                 raise HTTPException(status_code=400, detail="Branch assignment missing. Please ensure your user is assigned to a branch.")
             else:
                 print(f"Database Error: {e}")
                 raise HTTPException(status_code=400, detail=f"Database error: {str(e)}")
@@ -828,45 +842,46 @@ def create_purchase(
     print(f"  Destination Location ID: {purchase.destination_location_id}")
     print(f"  Details count: {len(purchase.details)}")
     
-    created = inventory_crud.create_purchase_master(db, purchase, branch_id=branch_id, created_by=current_user.id)
+    # 1. Handle auto-assign destination location BEFORE creating the master
+    # This ensures the record is created with the correct location ID initially
+    if purchase.status.lower() == "received" and not purchase.destination_location_id:
+        from app.models.inventory import Location
+        # Try to find a default warehouse location
+        default_location = db.query(Location).filter(
+            Location.location_type.in_(["WAREHOUSE", "CENTRAL_WAREHOUSE", "BRANCH_STORE"]),
+            (Location.branch_id == branch_id if branch_id is not None else True)
+        ).first()
+        
+        if not default_location:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot receive purchase without a destination location. Please create a warehouse location first or specify one in the purchase."
+            )
+        
+        # Auto-assign the default location to the schema before CRUD creation
+        purchase.destination_location_id = default_location.id
+        print(f"[AUTO-ASSIGN] No destination location specified in request. Using default warehouse: {default_location.name} (ID: {default_location.id})")
 
+    # 2. Create the master record
+    created = inventory_crud.create_purchase_master(db, purchase, branch_id=branch_id, created_by=current_user.id)
     
-    # Use centralized status update logic to handle inventory, prices, and journal entries
-    # This avoids redundant logic and ensures atomicity
+    # 3. Use centralized status update logic to handle inventory, prices, and journal entries
+    # If it was created as 'received', we MUST call update_purchase_status to trigger inventory flow
     target_status = purchase.status.lower()
     
-    # Logic for auto-assigning location if receiving
     if target_status == "received":
-        # Validate and ensure destination location is set
-        if not created.destination_location_id:
-            from app.models.inventory import Location
-            # Try to find a default warehouse location
-            default_location = db.query(Location).filter(
-                Location.location_type.in_(["WAREHOUSE", "CENTRAL_WAREHOUSE", "BRANCH_STORE"]),
-                (Location.branch_id == branch_id if branch_id is not None else True)
-            ).first()
-            
-            if not default_location:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Cannot receive purchase without a destination location. Please create a warehouse location first or specify one in the purchase."
-                )
-            
-            # Auto-assign the default location
-            created.destination_location_id = default_location.id
-            db.commit()
-            print(f"[AUTO-ASSIGN] No destination location specified. Using default warehouse: {default_location.name}")
+        # CRITICAL FIX: Temporarily reset status in DB to 'draft' to trigger the transition logic
+        # since create_purchase_master already saved it as 'received' and committed it.
+        # This ensures update_purchase_status sees a change from draft -> received.
+        created.status = "draft"
+        db.commit()
         
-        # Trigger the centralized status update logic
-        # We temporarily set status to draft in DB if it was created as received to trigger the transition
-        # in the centralized update_purchase_status logic
-        if created.status.lower() == "received":
-            created.status = "draft"
-            db.commit()
-            
         created = inventory_crud.update_purchase_status(db, created.id, "received", current_user_id=current_user.id)
     elif target_status in ["confirmed", "cancelled"]:
-        # For other significant statuses, use the centralized logic (handles journal entries for confirmed)
+        # Ensure we transition properly
+        if created.status != "draft":
+            created.status = "draft"
+            db.commit()
         created = inventory_crud.update_purchase_status(db, created.id, target_status, current_user_id=current_user.id)
     
     # Optimized: Batch load items to avoid N+1 queries
@@ -1019,10 +1034,11 @@ def update_purchase(
         raise HTTPException(status_code=400, detail="Cannot update purchase")
     
     # CASE 1: Transition Logic (handled centrally in CRUD)
-    # If the status was changed in the update, trigger the centralized status logic
     if purchase_update.status is not None and purchase_update.status.lower() != old_status.lower():
+        target_status = purchase_update.status.lower()
+        
         # Handle auto-assign location for receiving if needed
-        if purchase_update.status.lower() == "received" and not updated.destination_location_id:
+        if target_status == "received" and not updated.destination_location_id:
             default_location = db.query(Location).filter(
                 Location.location_type.in_(["WAREHOUSE", "CENTRAL_WAREHOUSE", "BRANCH_STORE"]),
                 (Location.branch_id == branch_id if branch_id is not None else True)
@@ -1032,8 +1048,12 @@ def update_purchase(
                 updated.destination_location_id = default_location.id
                 db.commit()
         
+        # Reset to old status temporarily to ensure CRUD sees a transition
+        updated.status = old_status
+        db.commit()
+
         # Call centralized logic
-        updated = inventory_crud.update_purchase_status(db, updated.id, purchase_update.status, current_user_id=current_user.id)
+        updated = inventory_crud.update_purchase_status(db, updated.id, target_status, current_user_id=current_user.id)
     
     db.commit()
     return get_purchase(purchase_id, db, current_user, branch_id=branch_id)

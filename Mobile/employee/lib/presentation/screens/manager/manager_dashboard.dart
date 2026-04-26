@@ -415,7 +415,7 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
       physics: const NeverScrollableScrollPhysics(),
       mainAxisSpacing: 16,
       crossAxisSpacing: 16,
-      childAspectRatio: 1.4,
+      childAspectRatio: 1.2,
       children: [
         _buildModuleCard("Bookings", Icons.hotel_outlined, "Manage Stay", Colors.purple,
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ManagerBookingsScreen(isClockedIn: isClockedIn)))),
@@ -438,7 +438,7 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
       onTap: onTap,
       borderRadius: BorderRadius.circular(32),
       child: OnyxGlassCard(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.center,
@@ -452,7 +452,7 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
               ),
               child: Icon(icon, color: color, size: 24),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             Text(
               title.toUpperCase(), 
               style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15, color: Colors.white, letterSpacing: 0.5)

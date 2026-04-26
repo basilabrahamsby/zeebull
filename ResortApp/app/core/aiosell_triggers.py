@@ -102,6 +102,7 @@ def trigger_rates_push(room_type_id: int):
     """
     db = SessionLocal()
     try:
+        from app.models.room import RatePlan
         room_type = db.query(RoomType).filter(RoomType.id == room_type_id).first()
         if not room_type:
             print(f"[AIOSELL DEBUG] Rates Push aborted: RoomType {room_type_id} not found")
@@ -110,25 +111,41 @@ def trigger_rates_push(room_type_id: int):
         if not room_type.channel_manager_id:
             print(f"[AIOSELL DEBUG] Rates Push aborted: RoomType {room_type.name} has no CM mapping")
             return
-            
-        print(f"[AIOSELL DEBUG] Starting Rate Push for {room_type.name} ({room_type.channel_manager_id}) @ {room_type.base_price}")
+
+        # Fetch dynamic rate plans
+        rate_plans = db.query(RatePlan).filter(RatePlan.room_type_id == room_type_id).all()
+        
+        if not rate_plans:
+            # Fallback legacy logic if no dynamic plans exist
+            print(f"[AIOSELL DEBUG] No dynamic rate plans for {room_type.name}, using legacy format")
+            rate_plans = [RatePlan(channel_manager_id=f"{room_type.channel_manager_id}-S-101")]
+
+        print(f"[AIOSELL DEBUG] Starting Rate Push for {room_type.name} ({len(rate_plans)} plans)")
         
         start = date.today()
         end = start + timedelta(days=365)
         
-        # Rate Plan ID format as provided by Aiosell: e.g. EXECUTIVE-S-101
-        rate_plan_id = f"{room_type.channel_manager_id}-S-101"
+        for plan in rate_plans:
+            if not plan.channel_manager_id: continue
+            
+            # Priority 1: Fixed price override on the rate plan
+            # Priority 2: Room Type Base Price + Rate Plan Offset (Automatic update)
+            if plan.base_price and plan.base_price > 0:
+                effective_price = plan.base_price
+            else:
+                effective_price = room_type.base_price + (plan.price_offset or 0)
 
-        success = push_rate(
-            room_code=room_type.channel_manager_id,
-            base_price=room_type.base_price,
-            start_date=start,
-            end_date=end,
-            rate_plan_code=rate_plan_id
-        )
-        status = "SUCCESS" if success else "FAILED"
-        print(f"[AIOSELL DEBUG] Rate Push {status} for {room_type.name}")
-        logger.info(f"[AIOSELL TRIGGER] Pushed rates for {room_type.name} at {room_type.base_price}. Result: {status}")
+            success = push_rate(
+                room_code=room_type.channel_manager_id,
+                base_price=effective_price,
+                start_date=start,
+                end_date=end,
+                rate_plan_code=plan.channel_manager_id
+            )
+            status = "SUCCESS" if success else "FAILED"
+            print(f"[AIOSELL DEBUG] Rate Push {status} for Plan {plan.channel_manager_id}")
+            
+        logger.info(f"[AIOSELL TRIGGER] Pushed rates for {room_type.name} ({len(rate_plans)} plans)")
     except Exception as e:
         print(f"[AIOSELL ERROR] trigger_rates_push failed: {e}")
         logger.error(f"Aiosell rates trigger error: {e}")

@@ -17,6 +17,8 @@ class RoomType(Base):
     channel_manager_id = Column(String, nullable=True) # For future OTA sync
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False, index=True)
     
+    rate_plans = relationship("RatePlan", back_populates="room_type", cascade="all, delete-orphan")
+    
     # Amenities moved to type level
     air_conditioning = Column(Boolean, default=False)
     wifi = Column(Boolean, default=False)
@@ -180,3 +182,21 @@ class Room(Base):
 
     def __repr__(self):
         return f"<Room id={self.id} number={self.number} status={self.status}>"
+
+
+class RatePlan(Base):
+    __tablename__ = "rate_plans"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False) # e.g. "Single CP"
+    room_type_id = Column(Integer, ForeignKey("room_types.id"))
+    occupancy = Column(Integer, default=2) # 1=S, 2=D, 3=T, 4=Q
+    meal_plan = Column(String, nullable=True) # CP, EP, MAP, AP
+    channel_manager_id = Column(String, nullable=True) # Aiosell rateplanID
+    base_price = Column(Float, default=0.0)
+    weekend_price = Column(Float, nullable=True)
+    price_offset = Column(Float, default=0.0)
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False, index=True)
+    
+    room_type = relationship("RoomType", back_populates="rate_plans")
+    branch = relationship("Branch")

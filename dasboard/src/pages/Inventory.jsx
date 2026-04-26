@@ -1909,6 +1909,25 @@ const Inventory = () => {
       const res = await API.post("/inventory/purchases", purchaseData);
       setPurchases(prev => [res.data, ...prev]);
 
+      // If created as received, refresh items and stocks to reflect inventory changes immediately
+      if (purchaseData.status === "received") {
+        try {
+          const [itemsRes, stocksRes] = await Promise.all([
+            API.get("/inventory/items?limit=1000"),
+            API.get("/inventory/stock-by-location")
+          ]);
+          setItems(itemsRes.data || []);
+          setLocationStock(stocksRes.data || []);
+          
+          // Also refresh transactions if that's the active tab
+          if (activeTab === "transactions") {
+            fetchTransactions(0, true);
+          }
+        } catch (err) {
+          console.error("Failed to refresh inventory data:", err);
+        }
+      }
+
       // Upload bill if a file was selected (optional)
       if (purchaseForm.bill_file) {
         try {
@@ -4257,7 +4276,7 @@ const Inventory = () => {
               setShowPurchaseDetails(false);
               setSelectedPurchase(null);
             }}
-            onUpdate={(updatedPurchase) => {
+            onUpdate={async (updatedPurchase) => {
               // Update the purchase in the list
               setPurchases(
                 purchases.map((p) =>
@@ -4265,6 +4284,25 @@ const Inventory = () => {
                 ),
               );
               setSelectedPurchase(updatedPurchase);
+
+              // If marked as received, refresh items and stocks to reflect inventory changes immediately
+              if (updatedPurchase.status === "received") {
+                try {
+                  const [itemsRes, stocksRes] = await Promise.all([
+                    API.get("/inventory/items?limit=1000"),
+                    API.get("/inventory/stock-by-location")
+                  ]);
+                  setItems(itemsRes.data || []);
+                  setLocationStock(stocksRes.data || []);
+                  
+                  // Also refresh transactions if that's the active tab
+                  if (activeTab === "transactions") {
+                    fetchTransactions(0, true);
+                  }
+                } catch (err) {
+                  console.error("Failed to refresh inventory data:", err);
+                }
+              }
             }}
           />
         )
@@ -7175,6 +7213,7 @@ function PurchaseDetailsModal({ purchase, onClose, onUpdate }) {
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const [showPaymentStatusDropdown, setShowPaymentStatusDropdown] = useState(false);
   const [showBillViewer, setShowBillViewer] = useState(false);
+  const [isUploadingBill, setIsUploadingBill] = useState(false);
 
   // Resolve the bill file URL properly using the imageUtils helper
   const billFileUrl = purchase?.bill_file_url ? getImageUrl(purchase.bill_file_url) : null;
@@ -7234,6 +7273,31 @@ function PurchaseDetailsModal({ purchase, onClose, onUpdate }) {
     } finally {
       setUpdatingPaymentStatus(false);
       setShowPaymentStatusDropdown(false);
+    }
+  };
+
+  const handleBillUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setIsUploadingBill(true);
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const response = await API.post(`/inventory/purchases/${purchase.id}/upload-bill`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+
+      if (onUpdate) {
+        onUpdate({ ...purchase, bill_file_url: response.data.bill_file_url });
+      }
+      alert("Invoice uploaded successfully!");
+    } catch (error) {
+      console.error("Error uploading bill:", error);
+      alert(`Failed to upload invoice: ${error.response?.data?.detail || "Please try again."}`);
+    } finally {
+      setIsUploadingBill(false);
     }
   };
 
@@ -7466,6 +7530,31 @@ function PurchaseDetailsModal({ purchase, onClose, onUpdate }) {
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
                 {isPDF ? 'View PDF' : 'View Invoice'}
               </button>
+            )}
+            {/* Upload Invoice Button - shown if no bill exists */}
+            {!billFileUrl && (
+              <>
+                <input
+                  type="file"
+                  id="bill-upload-input"
+                  className="hidden"
+                  accept=".pdf,.jpg,.jpeg,.png"
+                  onChange={handleBillUpload}
+                />
+                <button
+                  onClick={() => document.getElementById('bill-upload-input').click()}
+                  disabled={isUploadingBill}
+                  className="px-3 py-2 text-sm font-medium text-white bg-amber-500 rounded-lg hover:bg-amber-600 flex items-center gap-2 disabled:opacity-50"
+                  title="Upload Invoice / Bill"
+                >
+                  {isUploadingBill ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  ) : (
+                    <Plus className="w-4 h-4" />
+                  )}
+                  {isUploadingBill ? 'Uploading...' : 'Upload Invoice'}
+                </button>
+              </>
             )}
             {/* PDF Export Button */}
             <button

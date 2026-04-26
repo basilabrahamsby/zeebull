@@ -280,6 +280,25 @@ const BookingDetailsModal = ({
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Group Quota</p>
                 <p className="font-bold text-slate-700 leading-tight">{booking.adults} Adults - {booking.children} Children</p>
               </div>
+              <div className="md:col-span-2 bg-slate-50/80 rounded-2xl p-4 border border-slate-100">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Booking Channel</p>
+                <div className="flex items-center gap-3 flex-wrap">
+                  {booking.source && booking.source !== 'Admin' && booking.source !== 'Direct' && booking.source !== 'direct' && booking.source !== 'admin' ? (
+                    <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-violet-50 border border-violet-200">
+                      <span className="w-2 h-2 rounded-full bg-violet-500 animate-pulse"></span>
+                      <span className="text-xs font-bold text-violet-700">{booking.source}</span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                      <span className="text-xs font-bold text-emerald-700">{booking.source || 'Direct'}</span>
+                    </span>
+                  )}
+                  {booking.external_id && (
+                    <span className="text-[10px] text-slate-400 font-mono bg-slate-100 px-2 py-1 rounded-lg">OTA Ref: #{booking.external_id}</span>
+                  )}
+                </div>
+              </div>
             </div>
           </section>
 
@@ -5880,7 +5899,17 @@ const Bookings = () => {
                           >
                             <td className="px-8 py-6 bg-slate-50/50 group-hover:bg-white rounded-l-[2rem] border-y-2 border-l-2 border-transparent group-hover:border-indigo-100 transition-all">
                               <div className="font-bold text-indigo-600 text-sm tracking-tight">{generateBookingId(b)}</div>
-                              <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wide mt-1">{b.is_package ? 'Package Stream' : 'Standard Node'}</div>
+                              {b.source && b.source !== 'Admin' && b.source !== 'Direct' && b.source !== 'direct' && b.source !== 'admin' ? (
+                                <div className="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-violet-50 border border-violet-200">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-violet-500 animate-pulse"></span>
+                                  <span className="text-[9px] font-bold text-violet-600 uppercase tracking-wide">{b.source}</span>
+                                </div>
+                              ) : (
+                                <div className="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-50 border border-slate-200">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+                                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">{b.source || 'Direct'}</span>
+                                </div>
+                              )}
                             </td>
                             <td className="px-8 py-6 bg-slate-50/50 group-hover:bg-white border-y-2 border-transparent group-hover:border-indigo-100 transition-all">
                               <div className="font-bold text-slate-800 text-base tracking-tight leading-none mb-1">{b.guest_name}</div>
