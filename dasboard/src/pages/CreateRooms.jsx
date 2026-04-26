@@ -497,7 +497,7 @@ const RoomTypeModal = ({ onClose, type, isEditing, onSubmit, branches, isEnterpr
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-start z-50 p-4 overflow-y-auto">
-      <div className="bg-white p-6 rounded-2xl shadow-2xl relative max-w-4xl w-full my-8 animate-in fade-in zoom-in duration-300">
+      <div className="bg-white p-6 rounded-2xl shadow-2xl relative max-w-5xl w-full my-8 animate-in fade-in zoom-in duration-300">
         <button onClick={onClose} className="absolute top-4 right-4 text-gray-500 hover:text-gray-800 text-3xl font-bold">&times;</button>
         <h2 className="text-2xl font-bold mb-6 text-gray-800">{isEditing ? "(Edit) Edit Room Type" : "(New) Add New Room Type"}</h2>
         
@@ -646,90 +646,6 @@ const RoomTypeModal = ({ onClose, type, isEditing, onSubmit, branches, isEnterpr
                 />
               </div>
 
-              {/* Aiosell Rate Plans Section */}
-              <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
-                <div className="flex justify-between items-center mb-4">
-                  <label className="block text-xs font-black text-indigo-400 uppercase tracking-widest flex items-center gap-2">
-                    <i className="fas fa-list-ul text-xs"></i> Aiosell Rate Plan Mapping
-                  </label>
-                  <button 
-                    type="button" 
-                    onClick={addRatePlan}
-                    className="text-[10px] bg-indigo-100 text-indigo-700 px-3 py-1 rounded-lg font-black hover:bg-indigo-200 transition-all flex items-center gap-1 uppercase tracking-tighter"
-                  >
-                    <i className="fas fa-plus"></i> Add Plan
-                  </button>
-                </div>
-                
-                <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
-                  {ratePlans.map((plan, index) => (
-                    <div key={index} className="flex gap-2 items-end bg-gray-50/50 p-3 rounded-xl border border-gray-100 group relative animate-in slide-in-from-right-2 duration-200">
-                      <div className="flex-1">
-                        <label className="block text-[9px] font-black text-gray-400 uppercase mb-1 ml-1">Plan Name</label>
-                        <input 
-                          value={plan.name} 
-                          onChange={(e) => updateRatePlan(index, 'name', e.target.value)}
-                          className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg focus:border-indigo-500 outline-none font-bold text-gray-700 bg-white"
-                          placeholder="e.g. Single CP"
-                        />
-                      </div>
-                      <div className="w-14">
-                        <label className="block text-[9px] font-black text-gray-400 uppercase mb-1 ml-1">Occ.</label>
-                        <input 
-                          type="number"
-                          value={plan.occupancy} 
-                          onChange={(e) => updateRatePlan(index, 'occupancy', e.target.value)}
-                          className="w-full px-2 py-2 text-xs border border-gray-200 rounded-lg focus:border-indigo-500 outline-none text-center font-black text-indigo-600 bg-white"
-                          min="1" max="6"
-                        />
-                      </div>
-                      <div className="flex-[1.5]">
-                        <label className="block text-[9px] font-black text-gray-400 uppercase mb-1 ml-1">Aiosell ID</label>
-                        <input 
-                          value={plan.channel_manager_id} 
-                          onChange={(e) => updateRatePlan(index, 'channel_manager_id', e.target.value)}
-                          className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg focus:border-indigo-500 outline-none font-mono text-gray-600 bg-white"
-                          placeholder="e.g. room-s-cp"
-                        />
-                      </div>
-                      <div className="w-20">
-                        <label className="block text-[9px] font-black text-gray-400 uppercase mb-1 ml-1" title="Relative to Room Base Price">Offset (+/-)</label>
-                        <input 
-                          type="number"
-                          value={plan.price_offset} 
-                          onChange={(e) => updateRatePlan(index, 'price_offset', e.target.value)}
-                          className="w-full px-2 py-2 text-xs border border-gray-200 rounded-lg focus:border-indigo-500 outline-none font-black text-indigo-400 bg-white"
-                          placeholder="0"
-                        />
-                      </div>
-                      <div className="w-20">
-                        <label className="block text-[9px] font-black text-gray-400 uppercase mb-1 ml-1" title="Fixed price override">Fixed (₹)</label>
-                        <input 
-                          type="number"
-                          value={plan.base_price} 
-                          onChange={(e) => updateRatePlan(index, 'base_price', e.target.value)}
-                          className="w-full px-2 py-2 text-xs border border-gray-200 rounded-lg focus:border-indigo-500 outline-none font-black text-green-600 bg-white"
-                          placeholder="0"
-                        />
-                      </div>
-                      <button 
-                        type="button" 
-                        onClick={() => removeRatePlan(index)}
-                        className="p-2 text-gray-300 hover:text-red-500 transition-colors"
-                      >
-                        <i className="fas fa-trash-alt text-xs"></i>
-                      </button>
-                    </div>
-                  ))}
-                  {ratePlans.length === 0 && (
-                    <div className="text-center py-6 bg-gray-50/50 rounded-2xl border-2 border-dashed border-gray-100">
-                      <i className="fas fa-link-slash text-gray-200 text-2xl mb-2"></i>
-                      <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">No mappings defined</p>
-                      <p className="text-[9px] text-gray-300">Add rate plans to sync with Aiosell</p>
-                    </div>
-                  )}
-                </div>
-              </div>
           </div>
 
           <div className="space-y-6">
@@ -794,6 +710,106 @@ const RoomTypeModal = ({ onClose, type, isEditing, onSubmit, branches, isEnterpr
                   </select>
                 </div>
               )}
+          </div>
+
+          {/* Aiosell Rate Plans Section - Now Spanning Full Width */}
+          <div className="bg-white p-6 rounded-2xl border-2 border-indigo-100 shadow-sm md:col-span-2">
+            <div className="flex justify-between items-center mb-6">
+              <label className="block text-sm font-black text-indigo-600 uppercase tracking-widest flex items-center gap-2">
+                <i className="fas fa-list-ul text-lg"></i> Aiosell Rate Plan Mapping
+              </label>
+              <button 
+                type="button" 
+                onClick={addRatePlan}
+                className="text-xs bg-indigo-600 text-white px-5 py-2 rounded-xl font-black hover:bg-indigo-700 transition-all flex items-center gap-2 uppercase tracking-wider shadow-lg shadow-indigo-100"
+              >
+                <i className="fas fa-plus"></i> Add New Mapping
+              </button>
+            </div>
+            
+            <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+              {ratePlans.map((plan, index) => (
+                <div key={index} className="flex gap-4 items-end bg-gray-50/80 p-5 rounded-2xl border border-gray-200 group relative animate-in slide-in-from-right-2 duration-200 hover:border-indigo-300 transition-all">
+                  <div className="flex-[2]">
+                    <label className="block text-[11px] font-black text-gray-400 uppercase mb-2 ml-1 tracking-wider">Plan Name</label>
+                    <div className="relative">
+                      <i className="fas fa-signature absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+                      <input 
+                        value={plan.name} 
+                        onChange={(e) => updateRatePlan(index, 'name', e.target.value)}
+                        className="w-full pl-9 pr-4 py-3 text-sm border-2 border-white rounded-xl focus:border-indigo-500 outline-none font-bold text-gray-700 shadow-sm"
+                        placeholder="e.g. Luxury Single CP"
+                      />
+                    </div>
+                  </div>
+                  <div className="w-20">
+                    <label className="block text-[11px] font-black text-gray-400 uppercase mb-2 ml-1 tracking-wider text-center">Occ.</label>
+                    <input 
+                      type="number"
+                      value={plan.occupancy} 
+                      onChange={(e) => updateRatePlan(index, 'occupancy', e.target.value)}
+                      className="w-full px-2 py-3 text-sm border-2 border-white rounded-xl focus:border-indigo-500 outline-none text-center font-black text-indigo-600 shadow-sm"
+                      min="1" max="10"
+                    />
+                  </div>
+                  <div className="flex-[2]">
+                    <label className="block text-[11px] font-black text-gray-400 uppercase mb-2 ml-1 tracking-wider">Aiosell ID</label>
+                    <div className="relative">
+                      <i className="fas fa-fingerprint absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+                      <input 
+                        value={plan.channel_manager_id} 
+                        onChange={(e) => updateRatePlan(index, 'channel_manager_id', e.target.value)}
+                        className="w-full pl-9 pr-4 py-3 text-sm border-2 border-white rounded-xl focus:border-indigo-500 outline-none font-mono font-bold text-indigo-900 shadow-sm"
+                        placeholder="e.g. room-s-cp"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-[11px] font-black text-gray-400 uppercase mb-2 ml-1 tracking-wider" title="Relative to Room Base Price">Offset (₹)</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xs">+/-</span>
+                      <input 
+                        type="number"
+                        value={plan.price_offset} 
+                        onChange={(e) => updateRatePlan(index, 'price_offset', e.target.value)}
+                        className="w-full pl-9 pr-3 py-3 text-sm border-2 border-white rounded-xl focus:border-indigo-500 outline-none font-black text-indigo-500 shadow-sm"
+                        placeholder="0"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-[11px] font-black text-gray-400 uppercase mb-2 ml-1 tracking-wider" title="Fixed price override">Fixed (₹)</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xs">₹</span>
+                      <input 
+                        type="number"
+                        value={plan.base_price} 
+                        onChange={(e) => updateRatePlan(index, 'base_price', e.target.value)}
+                        className="w-full pl-7 pr-3 py-3 text-sm border-2 border-white rounded-xl focus:border-indigo-500 outline-none font-black text-green-600 shadow-sm"
+                        placeholder="0"
+                      />
+                    </div>
+                  </div>
+                  <button 
+                    type="button" 
+                    onClick={() => removeRatePlan(index)}
+                    className="mb-1 p-3 bg-red-50 text-red-500 hover:text-red-700 hover:bg-red-100 rounded-xl transition-all border border-red-200"
+                    title="Remove mapping"
+                  >
+                    <i className="fas fa-trash-alt text-lg"></i>
+                  </button>
+                </div>
+              ))}
+              {ratePlans.length === 0 && (
+                <div className="text-center py-12 bg-gray-50/50 rounded-3xl border-2 border-dashed border-gray-200">
+                  <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm">
+                    <i className="fas fa-link-slash text-gray-300 text-2xl"></i>
+                  </div>
+                  <p className="text-sm text-gray-500 font-black uppercase tracking-widest">No mappings defined</p>
+                  <p className="text-xs text-gray-400 mt-1">Add rate plans to sync rates and availability with Aiosell</p>
+                </div>
+              )}
+            </div>
           </div>
           
           <div className="bg-gray-50 p-5 rounded-2xl border border-gray-200 md:col-span-2">
