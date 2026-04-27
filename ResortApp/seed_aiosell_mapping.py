@@ -1,15 +1,17 @@
 import sys
 import os
 
-# Add ResortApp to sys.path
-sys.path.append(r"d:\Zeebull\ResortApp")
+# Add current directory to sys.path
+_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(_BASE_DIR)
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from app.models.room import RoomType, RatePlan
 from app.database import Base
 
-DATABASE_URL = "postgresql+psycopg2://postgres:qwerty123@localhost:5432/zeebull"
+# Use credentials from environment or defaults
+DATABASE_URL = "postgresql+psycopg2://postgres:qwerty123@localhost:5432/zeebuldb"
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(bind=engine)
 db = SessionLocal()

@@ -20,8 +20,8 @@ graceful_timeout = 30  # Graceful shutdown timeout
 keepalive = 5  # Increased keepalive for better connection reuse
 
 # Logging
-accesslog = "/var/log/orchid/access.log"
-errorlog = "/var/log/orchid/error.log"
+accesslog = "/var/www/teqmates/ResortApp/access.log"
+errorlog = "/var/www/teqmates/ResortApp/error.log"
 loglevel = "info"
 access_log_format = '%(h)s %(l)s %(u)s %(t)s "%(r)s" %(s)s %(b)s "%(f)s" "%(a)s" %(D)s'
 
@@ -47,8 +47,8 @@ limit_request_fields = 100
 limit_request_field_size = 8190
 
 # Application
-pythonpath = "/var/www/zeebull/ResortApp"
-chdir = "/var/www/zeebull/ResortApp"
+pythonpath = "/var/www/teqmates/ResortApp"
+chdir = "/var/www/teqmates/ResortApp"
 
 # Performance
 worker_tmp_dir = "/dev/shm"

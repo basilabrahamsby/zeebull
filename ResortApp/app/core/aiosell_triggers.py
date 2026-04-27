@@ -5,7 +5,8 @@ import logging
 from app.database import SessionLocal
 from app.models.room import RoomType, Room
 from app.models.booking import Booking, BookingRoom
-from app.core.aiosell_client import push_inventory, push_rate, batch_push_inventory
+from app.models.booking import Booking, BookingRoom
+from app.core.aiosell_client import push_inventory, push_rate, batch_push_inventory, batch_push_rate
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +52,7 @@ def _calculate_availability_for_date(db: Session, room_type_id: int, target_date
     return max(0, available)
 
 
-def trigger_inventory_push(room_type_id: int, days: int = 30):
+def trigger_inventory_push(room_type_id: int, days: int = 180):
     """
     Calculates availability and PUSHES directly to Aiosell.
     Designed to be run as a BackgroundTask.
@@ -123,8 +124,9 @@ def trigger_rates_push(room_type_id: int):
         print(f"[AIOSELL DEBUG] Starting Rate Push for {room_type.name} ({len(rate_plans)} plans)")
         
         start = date.today()
-        end = start + timedelta(days=365)
+        end = start + timedelta(days=180) # Max 180 days as per Aiosell best practices
         
+        batch_rate_data = []
         for plan in rate_plans:
             if not plan.channel_manager_id: continue
             
@@ -135,17 +137,21 @@ def trigger_rates_push(room_type_id: int):
             else:
                 effective_price = room_type.base_price + (plan.price_offset or 0)
 
-            success = push_rate(
-                room_code=room_type.channel_manager_id,
-                base_price=effective_price,
+            batch_rate_data.append({
+                "room_code": room_type.channel_manager_id,
+                "rateplan_code": plan.channel_manager_id,
+                "rate": effective_price
+            })
+            
+        if batch_rate_data:
+            success = batch_push_rate(
+                rate_data=batch_rate_data,
                 start_date=start,
-                end_date=end,
-                rate_plan_code=plan.channel_manager_id
+                end_date=end
             )
             status = "SUCCESS" if success else "FAILED"
-            print(f"[AIOSELL DEBUG] Rate Push {status} for Plan {plan.channel_manager_id}")
-            
-        logger.info(f"[AIOSELL TRIGGER] Pushed rates for {room_type.name} ({len(rate_plans)} plans)")
+            print(f"[AIOSELL DEBUG] Batch Rate Push {status} for {room_type.name}")
+            logger.info(f"[AIOSELL TRIGGER] Pushed batch rates for {room_type.name} ({len(rate_plans)} plans)")
     except Exception as e:
         print(f"[AIOSELL ERROR] trigger_rates_push failed: {e}")
         logger.error(f"Aiosell rates trigger error: {e}")
@@ -173,8 +179,8 @@ def trigger_restrictions_push(room_type_id: int, stop_sell: bool = False, min_st
         
         from app.core.aiosell_client import push_restriction
         start = date.today()
-        # Push restrictions for the next 1 year by default (or as per requirements)
-        end = start + timedelta(days=365)
+        # Push restrictions for the next 180 days as per Aiosell best practices
+        end = start + timedelta(days=180)
         
         success = push_restriction(
             room_code=room_type.channel_manager_id,

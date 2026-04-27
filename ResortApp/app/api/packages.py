@@ -60,6 +60,10 @@ async def create_package_api(
         # If booking_type is room_type, room_types must be provided
         if booking_type == "room_type" and not room_types:
             raise HTTPException(status_code=400, detail="room_types is required when booking_type is 'room_type'")
+            
+        # Ensure a package is always created under a specific branch
+        if branch_id is None:
+            raise HTTPException(status_code=400, detail="A specific branch must be selected to create a package (cannot be 'All')")
         
         # If booking_type is whole_property, room_types should be empty
         if booking_type == "whole_property":
@@ -153,6 +157,10 @@ async def create_package_api_slash(
         # If booking_type is room_type, room_types must be provided
         if booking_type == "room_type" and not room_types:
             raise HTTPException(status_code=400, detail="room_types is required when booking_type is 'room_type'")
+            
+        # Ensure a package is always created under a specific branch
+        if branch_id is None:
+            raise HTTPException(status_code=400, detail="A specific branch must be selected to create a package (cannot be 'All')")
         
         # If booking_type is whole_property, room_types should be empty
         if booking_type == "whole_property":

@@ -23,7 +23,7 @@ class Package(Base):
     food_timing = Column(String, nullable=True)    # JSON string: {"Breakfast": "08:00", ...}
     complimentary = Column(String, nullable=True)  # Free inclusions
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=True, index=True)
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False, index=True)
     
     branch = relationship("Branch")
 

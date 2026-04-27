@@ -6,7 +6,7 @@ import os
 # 2. Update the connection string below with your PRODUCTION credentials.
 # 3. This script is "safe" - it checks if tables/columns exist before creating them.
 
-PRODUCTION_DB_URL = "postgresql://postgres:qwerty123@localhost:5432/zeebull"
+PRODUCTION_DB_URL = "postgresql://postgres:qwerty123@localhost:5432/zeebuldb"
 
 def run_safe_migration():
     try:
