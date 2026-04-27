@@ -172,10 +172,6 @@ def trigger_rates_push(room_type_id: int, days: int = 90):
                 
                 # 3. Apply Plan-specific logic
                 if plan.base_price and plan.base_price > 0:
-                    # Plan has a fixed price that overrides everything? 
-                    # Usually offsets are better for dynamic pricing.
-                    # If plan.base_price is set, we use it, but maybe we should still apply day-type?
-                    # For now, let's assume if plan.base_price is set, it's a fixed rate.
                     rate = plan.base_price
                 else:
                     rate = daily_base + (plan.price_offset or 0)
