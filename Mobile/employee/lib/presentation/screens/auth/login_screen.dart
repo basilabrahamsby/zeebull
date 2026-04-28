@@ -45,7 +45,7 @@ class _LoginScreenState extends State<LoginScreen> {
           Navigator.of(context).pushNamedAndRemoveUntil('/dashboard', (route) => false);
         } else if (!success && mounted) {
            ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Login failed: unknown error.')),
+            SnackBar(content: Text(authProvider.error ?? 'Login failed: unknown error.')),
           );
         }
       } catch (e) {
