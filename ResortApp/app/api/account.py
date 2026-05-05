@@ -1310,20 +1310,20 @@ def get_automatic_accounting_report(
 @router.post("/seed-chart-of-accounts")
 def seed_chart_of_accounts(
     db: Session = Depends(get_db),
+    branch_id: int = Depends(get_branch_id),
     current_user: User = Depends(get_current_user)
 ):
     """
-    Seed a standard hospitality Chart of Accounts.
-    Creates 17 account groups and 41 ledgers.
-    Safe to call: skipped automatically if groups already exist.
+    Seed a standard hospitality Chart of Accounts for the current branch.
+    Safe to call: skipped automatically if groups already exist for this branch.
     """
     from app.models.account import AccountGroup, AccountLedger
 
-    existing = db.query(AccountGroup).count()
+    existing = db.query(AccountGroup).filter(AccountGroup.branch_id == branch_id).count()
     if existing > 0:
         return {
             "status": "skipped",
-            "message": f"Already have {existing} account groups. Delete them first to re-seed.",
+            "message": f"Already have {existing} account groups in this branch. Delete them first to re-seed.",
             "groups_created": 0,
             "ledgers_created": 0,
         }
@@ -1355,7 +1355,7 @@ def seed_chart_of_accounts(
 
     group_map = {}
     for g in ACCOUNT_GROUPS:
-        grp = AccountGroup(**g)
+        grp = AccountGroup(**g, branch_id=branch_id)
         db.add(grp)
         db.flush()
         group_map[g["name"]] = grp.id
@@ -1417,7 +1417,7 @@ def seed_chart_of_accounts(
 
     ledger_count = 0
     for l in LEDGERS:
-        ledger = AccountLedger(**l)
+        ledger = AccountLedger(**l, branch_id=branch_id)
         db.add(ledger)
         ledger_count += 1
 
@@ -1425,7 +1425,7 @@ def seed_chart_of_accounts(
 
     return {
         "status": "success",
-        "message": f"Seeded {len(ACCOUNT_GROUPS)} account groups and {ledger_count} ledgers.",
+        "message": f"Seeded {len(ACCOUNT_GROUPS)} account groups and {ledger_count} ledgers for this branch.",
         "groups_created": len(ACCOUNT_GROUPS),
         "ledgers_created": ledger_count,
     }

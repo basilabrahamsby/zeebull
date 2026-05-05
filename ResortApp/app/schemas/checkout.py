@@ -219,3 +219,18 @@ class InventoryCheckRequest(BaseModel):
     inventory_notes: Optional[str] = None
     items: List[InventoryCheckItem] = []
     asset_damages: List[AssetDamageItem] = []
+
+class CheckoutUpdate(BaseModel):
+    room_total: Optional[float] = None
+    food_total: Optional[float] = None
+    service_total: Optional[float] = None
+    package_total: Optional[float] = None
+    tax_amount: Optional[float] = None
+    discount_amount: Optional[float] = None
+    grand_total: Optional[float] = None
+    payment_method: Optional[str] = None
+    payment_status: Optional[str] = None
+    guest_name: Optional[str] = None
+    room_number: Optional[str] = None
+    notes: Optional[str] = None
+    invoice_number: Optional[str] = None

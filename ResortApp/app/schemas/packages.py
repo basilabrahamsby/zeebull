@@ -101,7 +101,12 @@ class PackageBookingOut(PackageBookingBase):
     status: str
     branch_id: Optional[int] = None
     total_amount: Optional[float] = 0.0
+    advance_deposit: float = 0.0
     num_rooms: int = 1
+    
+    is_confirmed: bool = False
+    confirmed_at: Optional[datetime] = None
+    confirmation_notes: Optional[str] = None
     rooms: List[PackageBookingRoomOut] = Field(default_factory=list)
     package: Optional[PackageOut]
     checkout: Optional[CheckoutFull] = None # Support detailed checkout info

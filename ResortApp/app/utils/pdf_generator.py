@@ -225,3 +225,126 @@ def generate_checkout_bill_pdf(checkout, bill_details, output_path):
     doc.build(elements)
     
     return output_path
+
+def generate_advance_payment_receipt_pdf(booking, payments, output_path):
+    """
+    Generate a PDF receipt for an advance payment
+    
+    Args:
+        booking: Booking/PackageBooking instance
+        payments: List of Payment model instances
+        output_path: Full path where PDF should be saved
+    """
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    
+    doc = SimpleDocTemplate(output_path, pagesize=A4,
+                           rightMargin=0.5*inch, leftMargin=0.5*inch,
+                           topMargin=0.5*inch, bottomMargin=0.5*inch)
+    
+    elements = []
+    styles = getSampleStyleSheet()
+    
+    # Custom styles
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=24,
+        textColor=colors.HexColor('#059669'), # Emerald 600
+        spaceAfter=12,
+        alignment=TA_CENTER
+    )
+    
+    heading_style = ParagraphStyle(
+        'CustomHeading',
+        parent=styles['Heading2'],
+        fontSize=14,
+        textColor=colors.HexColor('#1F2937'),
+        spaceAfter=10,
+        spaceBefore=10
+    )
+    
+    # Header
+    elements.append(Paragraph("ORCHID TRAILS RESORT", title_style))
+    elements.append(Paragraph("Advance Payment Receipt", styles['Heading2']))
+    elements.append(Spacer(1, 0.2*inch))
+    
+    # Receipt Info
+    display_id = getattr(booking, 'display_id', f"#{booking.id}")
+    receipt_info_data = [
+        ['Booking ID:', display_id, 'Date:', datetime.now().strftime('%d-%m-%Y %H:%M')],
+        ['Guest Name:', booking.guest_name or 'N/A', 'Status:', 'Confirmed'],
+        ['Check-in:', booking.check_in.strftime('%d-%m-%Y'), 'Check-out:', booking.check_out.strftime('%d-%m-%Y')],
+    ]
+    
+    receipt_info_table = Table(receipt_info_data, colWidths=[1.5*inch, 2.5*inch, 1.2*inch, 1.8*inch])
+    receipt_info_table.setStyle(TableStyle([
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+        ('FONTNAME', (2, 0), (2, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 10),
+        ('TEXTCOLOR', (0, 0), (-1, -1), colors.HexColor('#374151')),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+    ]))
+    elements.append(receipt_info_table)
+    elements.append(Spacer(1, 0.3*inch))
+    
+    # Payment breakdown
+    elements.append(Paragraph("Payment Breakdown", heading_style))
+    
+    payment_data = [['#', 'Method', 'Status', 'Amount']]
+    total_paid = 0
+    for idx, p in enumerate(payments, 1):
+        method_label = str(p.method).upper()
+        payment_data.append([str(idx), method_label, 'PAID', f'Rs.{p.amount:,.2f}'])
+        total_paid += p.amount
+    
+    # Financial Summary
+    payment_data.append(['', '', '', ''])
+    payment_data.append(['', '', 'TOTAL PAID', f'Rs.{total_paid:,.2f}'])
+    
+    booking_total = getattr(booking, 'total_amount', 0)
+    balance_due = booking_total - total_paid
+    payment_data.append(['', '', 'TOTAL BOOKING VALUE', f'Rs.{booking_total:,.2f}'])
+    payment_data.append(['', '', 'BALANCE DUE', f'Rs.{max(0, balance_due):,.2f}'])
+    
+    payment_table = Table(payment_data, colWidths=[0.5*inch, 2.5*inch, 2*inch, 2*inch])
+    payment_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#059669')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+        ('TOPPADDING', (0, 0), (-1, 0), 10),
+        
+        ('GRID', (0, 0), (-1, len(payments)), 0.5, colors.grey),
+        ('ALIGN', (3, 1), (3, -1), 'RIGHT'),
+        
+        ('FONTNAME', (2, -3), (2, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (2, -3), (2, -1), 11),
+        ('TEXTCOLOR', (3, -1), (3, -1), colors.HexColor('#DC2626') if balance_due > 0 else colors.HexColor('#059669')),
+        ('FONTSIZE', (3, -1), (3, -1), 12),
+        ('FONTNAME', (3, -1), (3, -1), 'Helvetica-Bold'),
+    ]))
+    elements.append(payment_table)
+    
+    # Notes
+    if getattr(booking, 'confirmation_notes', None):
+        elements.append(Spacer(1, 0.4*inch))
+        elements.append(Paragraph("Confirmation Notes", heading_style))
+        elements.append(Paragraph(booking.confirmation_notes, styles['Normal']))
+    
+    # Footer
+    elements.append(Spacer(1, 0.6*inch))
+    footer_text = f"""
+    <para align=center>
+    This is a computer-generated receipt for the advance payment received.<br/>
+    Please present this receipt during check-in for verification.<br/><br/>
+    <b>Orchid Trails Resort</b><br/>
+    <i>Generated on {datetime.now().strftime('%d-%m-%Y %H:%M:%S')}</i>
+    </para>
+    """
+    elements.append(Paragraph(footer_text, styles['Normal']))
+    
+    doc.build(elements)
+    return output_path

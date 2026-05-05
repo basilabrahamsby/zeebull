@@ -157,10 +157,11 @@ def mark_order_paid(
 
     """
     Mark a food order as paid at delivery time.
-    Calculates GST (5%) and updates payment details.
+    Calculates GST and updates payment details based on dynamic settings.
     """
     from app.models.foodorder import FoodOrder
     from datetime import timezone, datetime
+    from app.utils.settings_helpers import get_gst_settings
     
     order = db.query(FoodOrder).filter(FoodOrder.id == order_id, FoodOrder.branch_id == branch_id).first()
 
@@ -170,9 +171,13 @@ def mark_order_paid(
     if order.billing_status == "paid":
         raise HTTPException(status_code=400, detail="Order already marked as paid")
     
-    # Calculate GST (5% for food)
+    # Get dynamic GST settings
+    gst_settings = get_gst_settings(db, branch_id)
+    
+    # Calculate GST if enabled
     base_amount = order.amount or 0
-    gst_amount = base_amount * 0.05
+    gst_rate = float(gst_settings["food_gst_rate"]) if gst_settings["gst_enabled"] else 0.0
+    gst_amount = base_amount * (gst_rate / 100.0)
     total_with_gst = base_amount + gst_amount
     
     # Update order with payment details
@@ -203,7 +208,7 @@ def mark_order_paid(
             food_order_id=order.id,
             amount=total_with_gst,
             room_number=room_number,
-            gst_rate=5.0,
+            gst_rate=gst_rate,
             branch_id=branch_id,
             created_by=current_user.id
         )

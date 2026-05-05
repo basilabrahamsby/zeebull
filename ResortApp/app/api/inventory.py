@@ -78,9 +78,9 @@ def update_category(
     current_user: User = Depends(get_current_user),
     branch_id: int = Depends(get_branch_id)
 ):
-    updated = inventory_crud.update_category(db, category_id, category)
+    updated = inventory_crud.update_category(db, category_id, category, branch_id=branch_id)
     if not updated:
-        raise HTTPException(status_code=404, detail="Category not found")
+        raise HTTPException(status_code=404, detail="Category not found in this branch")
     return updated
 
 
@@ -91,10 +91,10 @@ def delete_category(
     current_user: User = Depends(get_current_user),
     branch_id: int = Depends(get_branch_id)
 ):
-    # Check if category exists
-    category = inventory_crud.get_category_by_id(db, category_id)
+    # Check if category exists in this branch
+    category = inventory_crud.get_category_by_id(db, category_id, branch_id=branch_id)
     if not category:
-        raise HTTPException(status_code=404, detail="Category not found")
+        raise HTTPException(status_code=404, detail="Category not found in this branch")
     
     # Check if category has active items
     items_count = db.query(InventoryItem).filter(InventoryItem.category_id == category_id, InventoryItem.is_active == True).count()
@@ -278,7 +278,8 @@ def get_items(
             limit=limit, 
             category_id=category_id, 
             active_only=active_only,
-            is_fixed_asset=is_fixed_asset
+            is_fixed_asset=is_fixed_asset,
+            branch_id=branch_id
         )
         
         # Fetch last purchase prices efficiently

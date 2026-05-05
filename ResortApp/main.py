@@ -108,6 +108,16 @@ except Exception as e:
     traceback.print_exc()
     inventory = None
 
+# Import day audit router
+try:
+    from app.api import day_audit as day_audit_module
+    print("[OK] Day Audit router imported successfully")
+except Exception as e:
+    print(f"[ERROR] ERROR importing day_audit router: {e}")
+    import traceback
+    traceback.print_exc()
+    day_audit_module = None
+
 # Import comprehensive reports router separately to catch any import errors
 try:
     from app.api import comprehensive_reports
@@ -393,6 +403,18 @@ if inventory is not None:
         traceback.print_exc()
 else:
     print("[ERROR] Inventory router not imported, skipping registration")
+
+# Include day audit router if it was imported successfully
+if day_audit_module is not None:
+    try:
+        app.include_router(day_audit_module.router, prefix="/api", tags=["Day Audit"])
+        print(f"[OK] Day Audit router registered with {len(day_audit_module.router.routes)} routes")
+    except Exception as e:
+        print(f"[ERROR] ERROR registering day_audit router: {e}")
+        import traceback
+        traceback.print_exc()
+else:
+    print("[ERROR] Day Audit router not imported, skipping registration")
 
 # Include stock reconciliation router
 # try:

@@ -377,40 +377,104 @@ def generate_invoice_number(db: Session) -> str:
     return invoice_number
 
 
-def calculate_gst_breakdown(room_charges: float, food_charges: float, package_charges: float) -> Dict:
+def calculate_gst_breakdown(
+    db: Session, 
+    branch_id: int, 
+    room_charges: float, 
+    food_charges: float, 
+    package_charges: float, 
+    service_charges: float = 0.0, 
+    consumables_charges: float = 0.0, 
+    inventory_charges: float = 0.0, 
+    nights: int = 1,
+    use_night_charges: bool = False,
+    booking_id: int = None
+) -> Dict:
     """
-    Calculate GST breakdown with dynamic rates
-    Room: 12% if < 7500, 18% if >= 7500
-    Food: 5% or 18% (configurable)
-    Package: Same as room
+    Calculate GST breakdown with dynamic rates from branch settings.
+    Respects the gst_enabled toggle.
+    Room GST is slab-based depending on daily price range, or derived from NightCharge if enabled.
     """
-    # Room GST
-    if room_charges > 0:
-        if room_charges < 7500:
-            room_gst = room_charges * 0.12
+    from app.utils.settings_helpers import get_gst_settings
+    from app.models.day_audit import NightCharge
+    
+    gst_settings = get_gst_settings(db, branch_id)
+    
+    # If GST is disabled globally for this branch, return zero
+    if not gst_settings.get("gst_enabled", False):
+        return {
+            "room_gst": 0.0,
+            "food_gst": 0.0,
+            "package_gst": 0.0,
+            "service_gst": 0.0,
+            "consumables_gst": 0.0,
+            "inventory_gst": 0.0,
+            "total_gst": 0.0
+        }
+    
+    # Room GST Logic
+    room_gst = 0.0
+    room_gst_rate = 0.0
+    
+    if use_night_charges and booking_id:
+        # Sum pre-posted nightly charges with their locked GST rates
+        night_charges = db.query(NightCharge).filter(
+            NightCharge.booking_id == booking_id,
+            NightCharge.is_reversed == False
+        ).all()
+        if night_charges:
+            room_gst = sum(nc.gst_amount for nc in night_charges)
+            # Calculate an effective room_gst_rate for package_gst if needed
+            total_room_charge = sum(nc.room_charge for nc in night_charges)
+            if total_room_charge > 0:
+                room_gst_rate = room_gst / total_room_charge
+            else:
+                room_gst_rate = 0.0
+    
+    if room_gst == 0.0 and room_charges > 0:
+        if gst_settings.get("gst_room_type") == "MANUAL":
+            room_gst_rate = float(gst_settings.get("room_gst_rate", 0)) / 100.0
         else:
-            room_gst = room_charges * 0.18
-    else:
-        room_gst = 0.0
+            # Slab-based Logic (Default)
+            daily_rate = (room_charges + package_charges) / max(1, nights)
+            
+            r1 = float(gst_settings.get("gst_slab_rate_1", 5)) / 100.0
+            r2 = float(gst_settings.get("gst_slab_rate_2", 12)) / 100.0
+            r3 = float(gst_settings.get("gst_slab_rate_3", 18)) / 100.0
+            
+            room_gst_rate = r3
+            if daily_rate < 5000:
+                room_gst_rate = r1
+            elif daily_rate < 7500:
+                room_gst_rate = r2
+            
+        room_gst = room_charges * room_gst_rate
     
-    # Package GST (same as room)
-    if package_charges > 0:
-        if package_charges < 7500:
-            package_gst = package_charges * 0.12
-        else:
-            package_gst = package_charges * 0.18
-    else:
-        package_gst = 0.0
+    # Package GST (usually same as room rate)
+    package_gst = package_charges * room_gst_rate
     
-    # Food GST (5% typically, or 18% if composite supply)
-    food_gst = food_charges * 0.05  # Default 5%, can be made configurable
+    # Food GST
+    food_rate = float(gst_settings["food_gst_rate"]) / 100.0
+    food_gst = food_charges * food_rate
     
-    total_gst = room_gst + food_gst + package_gst
+    # Service GST
+    service_rate = float(gst_settings["service_gst_rate"]) / 100.0
+    service_gst = service_charges * service_rate
+    
+    # Consumables (usually same as food rate or service rate, let's use food rate as default)
+    consumables_gst = consumables_charges * food_rate
+    
+    # Inventory (usually same as service rate)
+    inventory_gst = inventory_charges * service_rate
+    
+    total_gst = room_gst + food_gst + package_gst + service_gst + consumables_gst + inventory_gst
     
     return {
         "room_gst": room_gst,
         "food_gst": food_gst,
         "package_gst": package_gst,
+        "service_gst": service_gst,
+        "consumables_gst": consumables_gst,
+        "inventory_gst": inventory_gst,
         "total_gst": total_gst
     }
-
