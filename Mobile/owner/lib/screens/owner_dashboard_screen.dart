@@ -267,10 +267,21 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
               
               InkWell(
                 onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PnLScreen())),
-                child: Container(
-                   height: 200, 
-                   padding: const EdgeInsets.all(16),
-                   decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade200)),
+                 child: Container(
+                    height: 200, 
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white, 
+                      borderRadius: BorderRadius.circular(16), 
+                      border: Border.all(color: Colors.grey.shade100, width: 1.5),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.015),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        )
+                      ]
+                    ),
                    child: Column(
                      children: [
                        Row(
@@ -297,7 +308,18 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                   Expanded(
                     child: Container(
                       padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade200)),
+                      decoration: BoxDecoration(
+                        color: Colors.white, 
+                        borderRadius: BorderRadius.circular(16), 
+                        border: Border.all(color: Colors.grey.shade100, width: 1.5),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.015),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          )
+                        ]
+                      ),
                       child: Column(
                         children: [
                           const Text("Sources", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
@@ -311,7 +333,18 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                   Expanded(
                     child: Container(
                       padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade200)),
+                      decoration: BoxDecoration(
+                        color: Colors.white, 
+                        borderRadius: BorderRadius.circular(16), 
+                        border: Border.all(color: Colors.grey.shade100, width: 1.5),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.015),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          )
+                        ]
+                      ),
                       child: Column(
                         children: [
                           const Text("Payment Modes", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
@@ -342,10 +375,21 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
 
               // 7. Financial Trends
               _buildSectionTitle("Financial Trends (6 Months)"),
-               Container(
-                 height: 250, 
-                 padding: const EdgeInsets.all(16),
-                 decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade200)),
+                Container(
+                  height: 250, 
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white, 
+                    borderRadius: BorderRadius.circular(16), 
+                    border: Border.all(color: Colors.grey.shade100, width: 1.5),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.015),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      )
+                    ]
+                  ),
                  child: _buildTrendsChart(financialTrends),
               ),
 
@@ -453,14 +497,20 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
   Widget _kpi(String title, String value, IconData icon, Color color, {String? subtitle, VoidCallback? onTap}) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(16),
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: Colors.white, 
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey.shade200),
-          boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.05), blurRadius: 5, offset: const Offset(0, 2))]
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.grey.shade100, width: 1.5),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.015),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            )
+          ]
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -474,7 +524,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                   decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
                   child: Icon(icon, color: color, size: 20),
                 ),
-                const Icon(Icons.arrow_forward_ios, size: 10, color: Colors.grey),
+                const Icon(Icons.arrow_outward_rounded, size: 14, color: Color(0xFF94A3B8)),
               ],
             ),
             const Spacer(),
