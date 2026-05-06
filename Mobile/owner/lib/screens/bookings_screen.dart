@@ -288,7 +288,7 @@ class _BookingsScreenState extends State<BookingsScreen> with SingleTickerProvid
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          _buildStatCard('Occupancy', stats['occupancy']!, const Color(0xFFD4AF37)),
+          _buildStatCard('Occupancy', stats['occupancy']!, const Color(0xFF15803D)),
           _buildStatCard('Revenue', stats['revenue']!, const Color(0xFF10B981)),
           _buildStatCard('Cancel Rate', stats['cancelRate']!, const Color(0xFFEF4444)),
           _buildStatCard('ADR', stats['adr']!, const Color(0xFFF59E0B)),

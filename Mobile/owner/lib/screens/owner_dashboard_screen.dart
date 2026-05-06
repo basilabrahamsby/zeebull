@@ -95,7 +95,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
               child: DropdownButtonHideUnderline(
                 child: DropdownButton<String>(
                   value: branchProvider.activeBranchId,
-                  icon: const Icon(Icons.business, color: Color(0xFFD4AF37)),
+                  icon: const Icon(Icons.business, color: Color(0xFF15803D)),
                   onChanged: (String? newValue) {
                     if (newValue != null) {
                        branchProvider.switchBranch(newValue).then((_) => _refreshAllData());
@@ -104,7 +104,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                   items: [
                     const DropdownMenuItem<String>(
                       value: 'all',
-                      child: Text('Enterprise View', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFFD4AF37))),
+                      child: Text('Enterprise View', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF15803D))),
                     ),
                     ...branchProvider.branches.map<DropdownMenuItem<String>>((Branch branch) {
                       return DropdownMenuItem<String>(
@@ -135,7 +135,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                 decoration: BoxDecoration(
                   color: const Color(0xFF1E293B), // Slate 800
                   borderRadius: BorderRadius.circular(16),
-                  boxShadow: [BoxShadow(color: const Color(0xFFD4AF37).withOpacity(0.2), blurRadius: 12, offset: const Offset(0, 6))]
+                  boxShadow: [BoxShadow(color: const Color(0xFF15803D).withOpacity(0.2), blurRadius: 12, offset: const Offset(0, 6))]
                 ),
                 child: Row(
                   children: [
@@ -156,7 +156,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                         sectionsSpace: 0, centerSpaceRadius: 0,
                         sections: totalRooms > 0 
                           ? [
-                              PieChartSectionData(color: const Color(0xFFD4AF37), value: occupiedRooms.toDouble(), radius: 35, showTitle: false),
+                              PieChartSectionData(color: const Color(0xFF15803D), value: occupiedRooms.toDouble(), radius: 35, showTitle: false),
                               PieChartSectionData(color: const Color(0xFF334155), value: (totalRooms - occupiedRooms).toDouble(), radius: 30, showTitle: false),
                             ]
                           : [
@@ -439,7 +439,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showQuickActionsMenu(context),
-        backgroundColor: const Color(0xFFD4AF37),
+        backgroundColor: const Color(0xFF15803D),
         elevation: 4,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: const Icon(Icons.add_rounded, color: Colors.white, size: 28),
