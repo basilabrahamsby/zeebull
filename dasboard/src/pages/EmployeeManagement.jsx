@@ -697,7 +697,11 @@ const AttendanceTracking = () => {
   const handleClockIn = async () => {
     if (!selectedEmployeeId) return showMessage('Please select an employee.', 'error');
     try {
-      const response = await api.post('/attendance/clock-in', { employee_id: selectedEmployeeId, location });
+      const formData = new FormData();
+      formData.append('employee_id', selectedEmployeeId);
+      formData.append('location', location);
+
+      const response = await api.post('/attendance/clock-in', formData);
       setWorkLogs([response.data, ...workLogs]);
       showMessage('Clocked in successfully.', 'success');
     } catch (err) {
@@ -737,8 +741,10 @@ const AttendanceTracking = () => {
     }
 
     try {
-      // Corrected to use POST and send employee_id in the body, matching the backend implementation
-      const response = await api.post('/attendance/clock-out', { employee_id: selectedEmployeeId });
+      const formData = new FormData();
+      formData.append('employee_id', selectedEmployeeId);
+
+      const response = await api.post('/attendance/clock-out', formData);
       // Update the log in the state with the returned data which includes the check_out_time
       setWorkLogs(workLogs.map(log => log.id === response.data.id ? response.data : log).sort((a, b) => new Date(b.date) - new Date(a.date) || b.id - a.id));
       showMessage('Clocked out successfully.', 'success');
