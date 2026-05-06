@@ -52,7 +52,7 @@ class MyApp extends StatelessWidget {
         scaffoldMessengerKey: scaffoldMessengerKey,
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF2563EB)),
+          colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFFD4AF37)),
           useMaterial3: true,
           textTheme: GoogleFonts.outfitTextTheme(),
         ),

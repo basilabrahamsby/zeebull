@@ -122,7 +122,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
               height: size.width * 0.8,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: const Color(0xFF2563EB).withOpacity(0.15),
+                color: const Color(0xFFD4AF37).withOpacity(0.15),
               ),
             ).blurred(sigma: 100),
           ),
@@ -244,7 +244,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                   ),
                                   focusedBorder: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(16),
-                                    borderSide: const BorderSide(color: Color(0xFF2563EB), width: 2),
+                                    borderSide: const BorderSide(color: Color(0xFFD4AF37), width: 2),
                                   ),
                                   errorBorder: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(16),
@@ -277,7 +277,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                   ),
                                   focusedBorder: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(16),
-                                    borderSide: const BorderSide(color: Color(0xFF2563EB), width: 2),
+                                    borderSide: const BorderSide(color: Color(0xFFD4AF37), width: 2),
                                   ),
                                   errorBorder: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(16),
@@ -313,7 +313,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                   },
                                   controlAffinity: ListTileControlAffinity.leading,
                                   contentPadding: EdgeInsets.zero,
-                                  activeColor: const Color(0xFF2563EB),
+                                  activeColor: const Color(0xFFD4AF37),
                                   checkColor: Colors.white,
                                   dense: true,
                                 ),
@@ -327,11 +327,11 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                 decoration: BoxDecoration(
                                   borderRadius: BorderRadius.circular(16),
                                   gradient: const LinearGradient(
-                                    colors: [Color(0xFF2563EB), Color(0xFF1D4ED8)],
+                                    colors: [Color(0xFFD4AF37), Color(0xFF9A7B1C)],
                                   ),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: const Color(0xFF2563EB).withOpacity(0.3),
+                                      color: const Color(0xFFD4AF37).withOpacity(0.3),
                                       blurRadius: 15,
                                       offset: const Offset(0, 5),
                                     ),
@@ -396,7 +396,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                             decoration: BoxDecoration(
                               color: Colors.white,
                               borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: const Color(0xFF2563EB).withOpacity(0.3)),
+                              border: Border.all(color: const Color(0xFFD4AF37).withOpacity(0.3)),
                               boxShadow: [
                                 BoxShadow(
                                   color: Colors.black.withOpacity(0.02),
@@ -407,7 +407,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                             child: const Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(Icons.fingerprint, size: 28, color: Color(0xFF2563EB)),
+                                Icon(Icons.fingerprint, size: 28, color: Color(0xFFD4AF37)),
                                 SizedBox(width: 12),
                                 Text(
                                   'Login with Biometrics',
