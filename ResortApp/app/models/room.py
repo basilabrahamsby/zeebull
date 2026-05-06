@@ -7,7 +7,8 @@ class RoomType(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
-    total_inventory = Column(Integer, default=0) # Capacity for booking
+    total_inventory = Column(Integer, default=0) # Physical capacity for internal booking
+    online_inventory = Column(Integer, nullable=True) # OTA quota: rooms exposed to channel manager (e.g. Aiosell)
     base_price = Column(Float, default=0.0)
     weekend_price = Column(Float, nullable=True)
     long_weekend_price = Column(Float, nullable=True)

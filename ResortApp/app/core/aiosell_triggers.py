@@ -10,46 +10,77 @@ from app.core.aiosell_client import push_inventory, push_rate, batch_push_invent
 
 logger = logging.getLogger(__name__)
 
-def _calculate_availability_for_date(db: Session, room_type_id: int, target_date: date, branch_id: int = 1) -> int:
-    """Calculates exactly how many rooms of a type are open on a given night"""
-    
+def _calculate_availability_for_date(db: Session, room_type_id: int, target_date: date, branch_id: int = None) -> int:
+    """
+    Calculates OTA-facing availability for a room type on a given night.
+
+    Logic:
+      - physical_available  = (total_inventory or physical count) - total_bookings
+      - If online_inventory is set:
+          ota_available = online_inventory - total_bookings
+          pushed value  = min(ota_available, physical_available)  [can't exceed physical]
+      - If online_inventory is NOT set: fall back to physical_available
+
+    Example: 10 physical rooms, online_inventory=8, 1 booking
+      → physical_available = 9, ota_available = 7  → Aiosell gets 7
+    """
     room_type = db.query(RoomType).filter(RoomType.id == room_type_id).first()
     if not room_type: return 0
-    
-    # 1. Total rooms of this type
+
+    # Resolve branch_id: use passed value, fallback to room_type's branch
+    effective_branch = branch_id if branch_id is not None else room_type.branch_id
+
+    # 1. Physical room count (non-deleted)
     total_physical = db.query(Room).filter(
-        Room.room_type_id == room_type_id, 
-        Room.branch_id == branch_id,
+        Room.room_type_id == room_type_id,
+        Room.branch_id == effective_branch,
         Room.status != "Deleted"
     ).count()
-    
-    # Base capacity is total_inventory if set, else physical
+
+    # Internal capacity: prefer total_inventory field, else count physical rooms
     capacity = room_type.total_inventory if (room_type.total_inventory and room_type.total_inventory > 0) else total_physical
-    
-    # 2. Hard allocations on that date
+
+    # Active booking statuses — match exact DB values (case-sensitive)
+    ACTIVE_STATUSES = ["Booked", "booked", "checked-in", "Checked-in", "Confirmed", "confirmed", "Occupied", "occupied"]
+
+    # 2. Hard allocations (specific room assigned to booking)
     assigned_overlaps = db.query(BookingRoom).join(Booking).join(Room).filter(
         Room.room_type_id == room_type_id,
-        Booking.branch_id == branch_id,
-        Booking.status.in_(["Booked", "Checked-in", "Confirmed"]),
+        Booking.branch_id == effective_branch,
+        Booking.status.in_(ACTIVE_STATUSES),
         Booking.check_in <= target_date,
         Booking.check_out > target_date
     ).count()
-    
-    # 3. Soft allocations
+
+    # 3. Soft allocations (room-type booking without an assigned room)
     from sqlalchemy import func
     soft_overlaps_sum = db.query(func.sum(Booking.num_rooms)).filter(
         Booking.room_type_id == room_type_id,
-        Booking.branch_id == branch_id,
-        Booking.status.in_(["Booked", "Confirmed"]),
+        Booking.branch_id == effective_branch,
+        Booking.status.in_(ACTIVE_STATUSES),
         Booking.check_in <= target_date,
         Booking.check_out > target_date,
         ~Booking.booking_rooms.any()
     ).scalar()
-    
+
     soft_overlaps = int(soft_overlaps_sum) if soft_overlaps_sum else 0
-    
-    available = capacity - (assigned_overlaps + soft_overlaps)
-    return max(0, available)
+    total_bookings = assigned_overlaps + soft_overlaps
+
+    # Physical availability (internal view)
+    physical_available = max(0, capacity - total_bookings)
+
+    # OTA quota logic:
+    #   None  → not configured, fall back to physical availability
+    #   0     → explicit stop-sell, push 0 to CM
+    #   N > 0 → OTA ceiling; subtract bookings, cap at physical_available
+    if room_type.online_inventory is not None:
+        if room_type.online_inventory <= 0:
+            return 0  # Explicitly set to 0 = stop sell on OTA
+        ota_available = room_type.online_inventory - total_bookings
+        return max(0, min(ota_available, physical_available))
+
+    # online_inventory not configured — expose full physical availability
+    return physical_available
 
 
 def trigger_inventory_push(room_type_id: int, days: int = 180):
@@ -72,22 +103,38 @@ def trigger_inventory_push(room_type_id: int, days: int = 180):
         
         start_date = date.today()
         batch_data = []
+        current_qty = -1
+        segment_start = None
         
         for i in range(days):
             target_date = start_date + timedelta(days=i)
             available = _calculate_availability_for_date(db, room_type_id, target_date)
-            
+
+            # Group consecutive dates with same availability into a single range
+            if available != current_qty:
+                if segment_start is not None:
+                    batch_data.append({
+                        "room_code": room_type.channel_manager_id,
+                        "qty": current_qty,
+                        "start_date": segment_start,
+                        "end_date": target_date - timedelta(days=1)
+                    })
+                segment_start = target_date
+                current_qty = available
+
+        # Flush the last segment
+        if segment_start is not None:
             batch_data.append({
                 "room_code": room_type.channel_manager_id,
-                "qty": available,
-                "start_date": target_date,
-                "end_date": target_date
+                "qty": current_qty,
+                "start_date": segment_start,
+                "end_date": start_date + timedelta(days=days - 1)
             })
             
         if batch_data:
             success = batch_push_inventory(batch_data)
             status = "SUCCESS" if success else "FAILED"
-            print(f"[AIOSELL DEBUG] Inventory Push {status} for {room_type.name}")
+            print(f"[AIOSELL DEBUG] Inventory Push {status} for {room_type.name} ({len(batch_data)} segments)")
             logger.info(f"[AIOSELL TRIGGER] Pushed inventory for {room_type.name} ({room_type.channel_manager_id}) for {days} days. Result: {status}")
     except Exception as e:
         print(f"[AIOSELL ERROR] trigger_inventory_push failed: {e}")
@@ -146,12 +193,14 @@ def trigger_rates_push(room_type_id: int, days: int = 90):
             for i in range(days + 1):
                 target_date = start_date + timedelta(days=i)
                 
-                # 1. Determine Day Type
+                # 1. Determine Day Type (Prioritize HOLIDAY)
                 day_type = None
-                for ov in overrides:
-                    if ov.start_date <= target_date <= ov.end_date:
-                        day_type = ov.day_type
-                        break
+                day_overrides = [ov for ov in overrides if ov.start_date <= target_date <= ov.end_date]
+                if day_overrides:
+                    # Sort to ensure HOLIDAY > LONG_WEEKEND > others
+                    priority = {"HOLIDAY": 0, "LONG_WEEKEND": 1, "WEEKEND": 2, "WEEKDAY": 3}
+                    day_overrides.sort(key=lambda x: priority.get(x.day_type, 99))
+                    day_type = day_overrides[0].day_type
                 
                 # 2. Calculate Daily Base for this RoomType
                 if day_type == "HOLIDAY" and room_type.holiday_price:

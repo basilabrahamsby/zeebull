@@ -10,11 +10,13 @@ from datetime import date
 router = APIRouter(tags=["Pricing Calendar"])
 
 
-def _trigger_all_room_rates(db: Session):
+def _trigger_all_room_rates():
     """
     Fetches all room types that have a channel manager mapping and triggers
     an Aiosell rate push for each one in the background.
     """
+    from app.database import SessionLocal
+    db = SessionLocal()
     try:
         from app.core.aiosell_triggers import trigger_rates_push
         room_types = db.query(RoomType).filter(
@@ -29,11 +31,14 @@ def _trigger_all_room_rates(db: Session):
         print(f"[AIOSELL] Pricing Calendar changed — pushing rates for {len(room_types)} room type(s).")
         for rt in room_types:
             try:
+                # Use a large enough window to cover the calendar changes
                 trigger_rates_push(rt.id, days=180)
             except Exception as e:
                 print(f"[AIOSELL ERROR] Failed to push rates for room type {rt.id} ({rt.name}): {e}")
     except Exception as e:
         print(f"[AIOSELL ERROR] _trigger_all_room_rates failed: {e}")
+    finally:
+        db.close()
 
 
 @router.post("", response_model=PricingCalendarOut)
@@ -51,7 +56,7 @@ def create_calendar_entry(
     db.refresh(new_entry)
 
     # Push updated rates to Aiosell for all mapped room types
-    background_tasks.add_task(_trigger_all_room_rates, db)
+    background_tasks.add_task(_trigger_all_room_rates)
 
     return new_entry
 
@@ -89,7 +94,7 @@ def update_calendar_entry(
     db.refresh(db_entry)
 
     # Push updated rates to Aiosell for all mapped room types
-    background_tasks.add_task(_trigger_all_room_rates, db)
+    background_tasks.add_task(_trigger_all_room_rates)
 
     return db_entry
 
@@ -108,6 +113,6 @@ def delete_calendar_entry(
     db.commit()
 
     # Push updated rates to Aiosell for all mapped room types (reverts holiday pricing)
-    background_tasks.add_task(_trigger_all_room_rates, db)
+    background_tasks.add_task(_trigger_all_room_rates)
 
     return {"message": "Entry deleted successfully"}
