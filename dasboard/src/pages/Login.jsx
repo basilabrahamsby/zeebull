@@ -199,12 +199,12 @@ export default function LoginPage() {
         {/* Animated Business Growth Image 1 */}
         <div 
           className="absolute inset-0 bg-cover bg-center bg-no-repeat animate-slideshow-1"
-          style={{ backgroundImage: "url('/growth-bg1.png')" }}
+          style={{ backgroundImage: `url('${process.env.PUBLIC_URL}/growth-bg1.png')` }}
         />
         {/* Animated Business Growth Image 2 */}
         <div 
           className="absolute inset-0 bg-cover bg-center bg-no-repeat animate-slideshow-2"
-          style={{ backgroundImage: "url('/growth-bg2.png')" }}
+          style={{ backgroundImage: `url('${process.env.PUBLIC_URL}/growth-bg2.png')` }}
         />
         
         {/* Modern Abstract Geometric Background overlays */}
