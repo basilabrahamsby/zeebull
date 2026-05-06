@@ -1508,7 +1508,12 @@ const EmployeeListAndForm = () => {
     fetchRoles();
   }, []);
 
-  const authHeader = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } });
+  const authHeader = () => ({ 
+    headers: { 
+      Authorization: `Bearer ${localStorage.getItem("token")}`,
+      "X-Branch-ID": localStorage.getItem("activeBranchId") || "all"
+    } 
+  });
 
   const fetchEmployees = async () => {
     try {
