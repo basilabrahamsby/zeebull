@@ -433,9 +433,9 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                  ),
 
 
-              const SizedBox(height: 40),
             ],
           ),
+        ),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showQuickActionsMenu(context),
