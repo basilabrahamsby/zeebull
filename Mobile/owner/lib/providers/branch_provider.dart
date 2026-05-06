@@ -29,7 +29,7 @@ class BranchProvider with ChangeNotifier {
   }
 
   Future<void> _init() async {
-    _activeBranchId = await _storage.read(key: 'active_branch_id') ?? '1';
+    _activeBranchId = await _storage.read(key: 'active_branch_id') ?? 'all';
     await fetchBranches();
   }
 
@@ -42,9 +42,9 @@ class BranchProvider with ChangeNotifier {
       final List data = response.data;
       _branches = data.map((json) => Branch.fromJson(json)).toList();
       
-      // If active branch is not in the list, default to the first one
+      // If active branch is not in the list, and not 'all', default to the first one
       if (_branches.isNotEmpty) {
-        final exists = _branches.any((b) => b.id.toString() == _activeBranchId);
+        final exists = _branches.any((b) => b.id.toString() == _activeBranchId) || _activeBranchId == 'all';
         if (!exists) {
           await switchBranch(_branches.first.id.toString());
         }
