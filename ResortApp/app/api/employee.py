@@ -50,6 +50,12 @@ def add_employee(
     branch_id: int = Depends(get_branch_id)
 ):
 
+    if branch_id is None:
+        raise HTTPException(
+            status_code=400, 
+            detail="Cannot create employee in enterprise 'All Branches' view. Please select a specific property from the top-left dropdown."
+        )
+
     if daily_tasks is None or daily_tasks.strip() == "":
         default_tasks = ["Review shift briefing", "Verify assigned area/inventory", "Check equipment & uniform"]
         daily_tasks = json.dumps(default_tasks)
