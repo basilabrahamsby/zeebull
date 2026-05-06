@@ -8,12 +8,13 @@ import { Calendar as CalendarIcon, User, DollarSign, Utensils, ConciergeBell, Be
 
 import * as XLSX from "xlsx";
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
-import { Plus } from "lucide-react";
+import { Plus, Camera } from "lucide-react";
 
 import CountUp from "react-countup";
 import BannerMessage from "../components/BannerMessage";
 import EmployeeProfileModal from "../components/EmployeeProfileModal";
 import { getMediaBaseUrl } from "../utils/env";
+import { getImageUrl } from "../utils/imageUtils";
 import { formatDateIST, formatDateTimeIST } from "../utils/dateUtils";
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
@@ -665,6 +666,8 @@ const AttendanceTracking = () => {
   const [location, setLocation] = useState('Office'); // For live clock-in/out
   // State to manage which day's detailed logs are shown
   const [selectedDay, setSelectedDay] = useState(null); // Stores the date string of the expanded day
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(null);
 
   useEffect(() => {
     api.get('/employees').then(res => setEmployees(res.data));
@@ -696,18 +699,43 @@ const AttendanceTracking = () => {
 
   const handleClockIn = async () => {
     if (!selectedEmployeeId) return showMessage('Please select an employee.', 'error');
-    try {
-      const formData = new FormData();
-      formData.append('employee_id', selectedEmployeeId);
-      formData.append('location', location);
+    if (!selectedFile) return showMessage('Please capture or upload a photo to clock in.', 'error');
 
-      const response = await api.post('/attendance/clock-in', formData);
-      setWorkLogs([response.data, ...workLogs]);
-      showMessage('Clocked in successfully.', 'success');
-    } catch (err) {
-      const errorMsg = err.response?.data?.detail;
-      const message = typeof errorMsg === 'string' ? errorMsg : 'Failed to clock in.';
-      showMessage(message, 'error');
+    const submitClockIn = async (lat = null, lng = null) => {
+      try {
+        const formData = new FormData();
+        formData.append('employee_id', selectedEmployeeId);
+        formData.append('location', location);
+        if (selectedFile) {
+          formData.append('image', selectedFile);
+        }
+        if (lat !== null) formData.append('latitude', lat);
+        if (lng !== null) formData.append('longitude', lng);
+
+        const response = await api.post('/attendance/clock-in', formData);
+        setWorkLogs([response.data, ...workLogs]);
+        setSelectedFile(null);
+        setPreviewUrl(null);
+        showMessage('Clocked in successfully.', 'success');
+      } catch (err) {
+        const errorMsg = err.response?.data?.detail;
+        const message = typeof errorMsg === 'string' ? errorMsg : 'Failed to clock in.';
+        showMessage(message, 'error');
+      }
+    };
+
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          submitClockIn(position.coords.latitude, position.coords.longitude);
+        },
+        () => {
+          submitClockIn();
+        },
+        { timeout: 5000 }
+      );
+    } else {
+      submitClockIn();
     }
   };
 
@@ -909,6 +937,49 @@ const AttendanceTracking = () => {
                 <option>On-Site</option>
               </select>
             </div>
+
+            {/* Photo Selection Input */}
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider px-0.5">Selfie / Photo (Required)</label>
+              <div className="flex flex-col items-center justify-center border-2 border-dashed border-gray-200 rounded-xl p-4 bg-white hover:border-indigo-400 transition-all cursor-pointer relative overflow-hidden shadow-sm">
+                {previewUrl ? (
+                  <div className="relative w-full h-32">
+                    <img src={previewUrl} alt="Preview" className="w-full h-full object-cover rounded-lg" />
+                    <button 
+                      type="button" 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedFile(null);
+                        setPreviewUrl(null);
+                      }}
+                      className="absolute top-1.5 right-1.5 bg-red-600 hover:bg-red-700 text-white rounded-full p-1 shadow-md transition-colors"
+                    >
+                      <Plus size={14} className="rotate-45" />
+                    </button>
+                  </div>
+                ) : (
+                  <label className="flex flex-col items-center justify-center cursor-pointer w-full h-24">
+                    <Camera size={28} className="text-gray-400 mb-1" />
+                    <span className="text-xs font-extrabold text-indigo-600">Take Photo / Upload</span>
+                    <span className="text-[10px] text-gray-400 mt-0.5">JPEG, PNG up to 5MB</span>
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      capture="user" 
+                      onChange={(e) => {
+                        const file = e.target.files[0];
+                        if (file) {
+                          setSelectedFile(file);
+                          setPreviewUrl(URL.createObjectURL(file));
+                        }
+                      }}
+                      className="hidden" 
+                    />
+                  </label>
+                )}
+              </div>
+            </div>
+
             <div className="flex space-x-2">
               <button onClick={handleClockIn} className="flex-1 bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700">Clock In</button>
               <button onClick={handleClockOut} className="flex-1 bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700">Clock Out</button>
@@ -1098,6 +1169,7 @@ const AttendanceTracking = () => {
                                           <th className="py-2 px-3 text-left font-semibold text-gray-700 border-b">Check-in Time</th>
                                           <th className="py-2 px-3 text-left font-semibold text-gray-700 border-b">Check-out Time</th>
                                           <th className="py-2 px-3 text-left font-semibold text-gray-700 border-b">Location</th>
+                                          <th className="py-2 px-3 text-left font-semibold text-gray-700 border-b">Photo</th>
                                           <th className="py-2 px-3 text-left font-semibold text-gray-700 border-b">Duration</th>
                                           <th className="py-2 px-3 text-left font-semibold text-gray-700 border-b">Tasks Done</th>
                                           <th className="py-2 px-3 text-left font-semibold text-gray-700 border-b">Status</th>
@@ -1118,7 +1190,20 @@ const AttendanceTracking = () => {
                                               <td className="py-2 px-3">
                                                 <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
                                                   {log.location || 'N/A'}
+                                                  {log.latitude && log.longitude && ` (${log.latitude.toFixed(4)}, ${log.longitude.toFixed(4)})`}
                                                 </span>
+                                              </td>
+                                              <td className="py-2 px-3">
+                                                {log.clock_in_image ? (
+                                                  <button 
+                                                    onClick={() => window.open(getImageUrl(log.clock_in_image), '_blank')}
+                                                    className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-800 font-extrabold hover:underline"
+                                                  >
+                                                    <Camera size={12} /> View Photo
+                                                  </button>
+                                                ) : (
+                                                  <span className="text-gray-400">-</span>
+                                                )}
                                               </td>
                                               <td className="py-2 px-3">
                                                 {hours > 0 ? (
