@@ -10,12 +10,12 @@ def get_branch_id(
 ) -> Optional[int]:
     """
     Dependency to get the branch_id for scoping data.
-    - If user is superadmin AND sends X-Branch-ID: all  → return None (all branches)
-    - If user is superadmin AND sends X-Branch-ID: <num> → return that specific branch
-    - If user is superadmin with no header             → use their own branch_id (or None if not set)
-    - If user is NOT superadmin                        → always use their assigned branch_id
+    - If user is superadmin or Manager/Owner/Admin AND sends X-Branch-ID: all  → return None (all branches)
+    - If user is superadmin or Manager/Owner/Admin AND sends X-Branch-ID: <num> → return that specific branch
+    - Otherwise fallback to their own branch_id
     """
-    if getattr(current_user, "is_superadmin", False):
+    user_role = current_user.role.name.lower() if current_user.role else ""
+    if getattr(current_user, "is_superadmin", False) or user_role in ["manager", "owner", "admin", "superadmin"]:
         if x_branch_id is not None:
             if x_branch_id.lower() == 'all':
                 return None  # Enterprise view — show all branches
@@ -23,7 +23,7 @@ def get_branch_id(
                 return int(x_branch_id)
             except ValueError:
                 pass
-        # No header sent — fall back to the superadmin's own branch_id (may be None for true global admins)
+        # No header sent — fall back to their own branch_id
         return getattr(current_user, 'branch_id', None)
     
     if current_user.branch_id is None:

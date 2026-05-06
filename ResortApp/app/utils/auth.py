@@ -137,8 +137,9 @@ def get_branch_id(
     request: Request,
     current_user: User = Depends(get_current_user)
 ) -> Optional[int]:
-    # 1. If superadmin, allow override via header or query param
-    if getattr(current_user, 'is_superadmin', False):
+    # 1. If superadmin or Manager/Owner/Admin, allow override via header or query param
+    user_role = current_user.role.name.lower() if current_user.role else ""
+    if getattr(current_user, 'is_superadmin', False) or user_role in ["manager", "owner", "admin", "superadmin"]:
         branch_header = request.headers.get("X-Branch-ID")
         if branch_header == "all":
             return None
@@ -148,7 +149,7 @@ def get_branch_id(
             except ValueError:
                 pass
         
-        # If superadmin didn't provide a branch_header or is unassigned, permit returning None/their branch_id
+        # Permit returning None/their branch_id
         return getattr(current_user, 'branch_id', None)
     
     # 2. Otherwise, return user's fixed branch_id
