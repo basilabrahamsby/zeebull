@@ -382,8 +382,22 @@ def delete_room_type(
     if db.query(Room).filter(Room.room_type_id == type_id).first():
         raise HTTPException(status_code=400, detail="Cannot delete Room Type while rooms are associated with it")
         
-    db.delete(db_room_type)
-    db.commit()
+    # Check if any bookings are associated with this type
+    if db.query(Booking).filter(Booking.room_type_id == type_id).first():
+        raise HTTPException(status_code=400, detail="Cannot delete Room Type while bookings are associated with it")
+        
+    try:
+        # Delete associated rate plans first to prevent foreign key violation
+        from app.models.room import RatePlan
+        db.query(RatePlan).filter(RatePlan.room_type_id == type_id).delete()
+        
+        db.delete(db_room_type)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        print(f"Error deleting room type: {e}")
+        raise HTTPException(status_code=500, detail=f"Error deleting room type: {str(e)}")
+        
     return {"message": "Room Type deleted successfully"}
 
 @router.get("/types/availability", response_model=List[RoomTypeAvailability])
