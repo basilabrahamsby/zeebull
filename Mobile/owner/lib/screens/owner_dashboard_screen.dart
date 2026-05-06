@@ -95,16 +95,16 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
               child: DropdownButtonHideUnderline(
                 child: DropdownButton<String>(
                   value: branchProvider.activeBranchId,
-                  icon: const Icon(Icons.business, color: Color(0xFF4F46E5)),
+                  icon: const Icon(Icons.business, color: Color(0xFF2563EB)),
                   onChanged: (String? newValue) {
                     if (newValue != null) {
-                      branchProvider.switchBranch(newValue).then((_) => _refreshAllData());
+                       branchProvider.switchBranch(newValue).then((_) => _refreshAllData());
                     }
                   },
                   items: [
                     const DropdownMenuItem<String>(
                       value: 'all',
-                      child: Text('Enterprise View', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF4F46E5))),
+                      child: Text('Enterprise View', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF2563EB))),
                     ),
                     ...branchProvider.branches.map<DropdownMenuItem<String>>((Branch branch) {
                       return DropdownMenuItem<String>(
@@ -135,7 +135,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                 decoration: BoxDecoration(
                   color: const Color(0xFF1E293B), // Slate 800
                   borderRadius: BorderRadius.circular(16),
-                  boxShadow: [BoxShadow(color: const Color(0xFF4F46E5).withOpacity(0.2), blurRadius: 12, offset: const Offset(0, 6))]
+                  boxShadow: [BoxShadow(color: const Color(0xFF2563EB).withOpacity(0.2), blurRadius: 12, offset: const Offset(0, 6))]
                 ),
                 child: Row(
                   children: [
@@ -156,7 +156,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                         sectionsSpace: 0, centerSpaceRadius: 0,
                         sections: totalRooms > 0 
                           ? [
-                              PieChartSectionData(color: const Color(0xFF4F46E5), value: occupiedRooms.toDouble(), radius: 35, showTitle: false),
+                              PieChartSectionData(color: const Color(0xFF2563EB), value: occupiedRooms.toDouble(), radius: 35, showTitle: false),
                               PieChartSectionData(color: const Color(0xFF334155), value: (totalRooms - occupiedRooms).toDouble(), radius: 30, showTitle: false),
                             ]
                           : [
