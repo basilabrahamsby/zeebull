@@ -89,7 +89,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
       appBar: AppBar(
         title: const Text('Admin Dashboard'),
         actions: [
-          if (authProvider.user?.isSuperadmin == true && branchProvider.branches.isNotEmpty)
+          if (branchProvider.branches.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(right: 16),
               child: DropdownButtonHideUnderline(
