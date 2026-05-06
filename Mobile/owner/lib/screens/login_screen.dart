@@ -99,6 +99,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     final size = MediaQuery.of(context).size;
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
       body: Stack(
         children: [
           // Background Gradient
@@ -107,7 +108,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [Color(0xFF0F172A), Color(0xFF1B3D1B)],
+                colors: [Color(0xFFF1F5F9), Color(0xFFE2E8F0)],
               ),
             ),
           ),
@@ -119,9 +120,9 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
             child: Container(
               width: size.width * 0.8,
               height: size.width * 0.8,
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: Color(0xFF8BC34A),
+                color: const Color(0xFF4F46E5).withOpacity(0.15),
               ),
             ).blurred(sigma: 100),
           ),
@@ -131,9 +132,9 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
             child: Container(
               width: size.width * 0.7,
               height: size.width * 0.7,
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: Color(0xFF2D5016),
+                color: const Color(0xFF38BDF8).withOpacity(0.15),
               ),
             ).blurred(sigma: 100),
           ),
@@ -152,12 +153,12 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF1B3D1B),
+                          color: Colors.white,
                           borderRadius: BorderRadius.circular(28),
-                          border: Border.all(color: Colors.white.withOpacity(0.1), width: 2),
+                          border: Border.all(color: Colors.grey.shade100, width: 2),
                           boxShadow: [
                             BoxShadow(
-                              color: const Color(0xFF8BC34A).withOpacity(0.3),
+                              color: Colors.black.withOpacity(0.05),
                               blurRadius: 30,
                               spreadRadius: 5,
                             ),
@@ -177,203 +178,204 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                         style: TextStyle(
                           fontSize: 32,
                           fontWeight: FontWeight.bold,
-                          color: Colors.white,
+                          color: Color(0xFF1E293B), // Slate 800
                           letterSpacing: 0.5,
                         ),
                       ),
                       const SizedBox(height: 8),
-                      Text(
+                      const Text(
                         'Sign in to manage your properties',
                         style: TextStyle(
                           fontSize: 15,
-                          color: Colors.white.withOpacity(0.7),
+                          color: Color(0xFF475569), // Slate 600
                         ),
                       ),
                       const SizedBox(height: 40),
 
-                      // Glassmorphism Form Card
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(24),
-                        child: BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-                          child: Container(
-                            padding: const EdgeInsets.all(28.0),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.08),
-                              borderRadius: BorderRadius.circular(24),
-                              border: Border.all(
-                                color: Colors.white.withOpacity(0.2),
-                              ),
+                      // Form Card
+                      Container(
+                        padding: const EdgeInsets.all(28.0),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(24),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.03),
+                              blurRadius: 20,
+                              offset: const Offset(0, 10),
                             ),
-                            child: Form(
-                              key: _formKey,
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  if (authProvider.error != null)
-                                    Container(
-                                      padding: const EdgeInsets.all(12),
-                                      margin: const EdgeInsets.only(bottom: 20),
-                                      decoration: BoxDecoration(
-                                        color: Colors.redAccent.withOpacity(0.2),
-                                        borderRadius: BorderRadius.circular(12),
-                                        border: Border.all(color: Colors.redAccent.withOpacity(0.5)),
-                                      ),
-                                      child: Text(
-                                        authProvider.error!,
-                                        style: const TextStyle(color: Colors.redAccent, fontSize: 13),
-                                        textAlign: TextAlign.center,
-                                      ),
-                                    ),
+                          ],
+                          border: Border.all(
+                            color: Colors.grey.shade100,
+                          ),
+                        ),
+                        child: Form(
+                          key: _formKey,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (authProvider.error != null)
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  margin: const EdgeInsets.only(bottom: 20),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red.shade50,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: Colors.red.shade200),
+                                  ),
+                                  child: Text(
+                                    authProvider.error!,
+                                    style: TextStyle(color: Colors.red.shade700, fontSize: 13),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
 
-                                  // Email Field
-                                  TextFormField(
-                                    controller: _emailController,
-                                    style: const TextStyle(color: Colors.white),
-                                    decoration: InputDecoration(
-                                      labelText: 'Email',
-                                      labelStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
-                                      prefixIcon: Icon(Icons.email_outlined, color: Colors.white.withOpacity(0.7)),
-                                      enabledBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(16),
-                                        borderSide: BorderSide(color: Colors.white.withOpacity(0.3)),
-                                      ),
-                                      focusedBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(16),
-                                        borderSide: const BorderSide(color: Color(0xFF8BC34A), width: 2),
-                                      ),
-                                      errorBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(16),
-                                        borderSide: const BorderSide(color: Colors.redAccent),
-                                      ),
-                                      focusedErrorBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(16),
-                                        borderSide: const BorderSide(color: Colors.redAccent, width: 2),
-                                      ),
-                                      fillColor: Colors.white.withOpacity(0.05),
-                                      filled: true,
-                                    ),
-                                    validator: (value) =>
-                                        value?.isEmpty ?? true ? 'Please enter your email' : null,
+                              // Email Field
+                              TextFormField(
+                                controller: _emailController,
+                                style: const TextStyle(color: Color(0xFF0F172A)),
+                                decoration: InputDecoration(
+                                  labelText: 'Email',
+                                  labelStyle: const TextStyle(color: Color(0xFF64748B)),
+                                  prefixIcon: const Icon(Icons.email_outlined, color: Color(0xFF64748B)),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                    borderSide: BorderSide(color: Colors.grey.shade300),
                                   ),
-                                  const SizedBox(height: 20),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                    borderSide: const BorderSide(color: Color(0xFF4F46E5), width: 2),
+                                  ),
+                                  errorBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                    borderSide: const BorderSide(color: Colors.redAccent),
+                                  ),
+                                  focusedErrorBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                    borderSide: const BorderSide(color: Colors.redAccent, width: 2),
+                                  ),
+                                  fillColor: const Color(0xFFF8FAFC),
+                                  filled: true,
+                                ),
+                                validator: (value) =>
+                                    value?.isEmpty ?? true ? 'Please enter your email' : null,
+                              ),
+                              const SizedBox(height: 20),
 
-                                  // Password Field
-                                  TextFormField(
-                                    controller: _passwordController,
-                                    obscureText: true,
-                                    style: const TextStyle(color: Colors.white),
-                                    decoration: InputDecoration(
-                                      labelText: 'Password',
-                                      labelStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
-                                      prefixIcon: Icon(Icons.lock_outline, color: Colors.white.withOpacity(0.7)),
-                                      enabledBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(16),
-                                        borderSide: BorderSide(color: Colors.white.withOpacity(0.3)),
-                                      ),
-                                      focusedBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(16),
-                                        borderSide: const BorderSide(color: Color(0xFF8BC34A), width: 2),
-                                      ),
-                                      errorBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(16),
-                                        borderSide: const BorderSide(color: Colors.redAccent),
-                                      ),
-                                      focusedErrorBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(16),
-                                        borderSide: const BorderSide(color: Colors.redAccent, width: 2),
-                                      ),
-                                      fillColor: Colors.white.withOpacity(0.05),
-                                      filled: true,
-                                    ),
-                                    validator: (value) =>
-                                        value?.isEmpty ?? true ? 'Please enter your password' : null,
+                              // Password Field
+                              TextFormField(
+                                controller: _passwordController,
+                                obscureText: true,
+                                style: const TextStyle(color: Color(0xFF0F172A)),
+                                decoration: InputDecoration(
+                                  labelText: 'Password',
+                                  labelStyle: const TextStyle(color: Color(0xFF64748B)),
+                                  prefixIcon: const Icon(Icons.lock_outline, color: Color(0xFF64748B)),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                    borderSide: BorderSide(color: Colors.grey.shade300),
                                   ),
-                                  const SizedBox(height: 16),
-                                  
-                                  // Remember Me
-                                  Theme(
-                                    data: Theme.of(context).copyWith(
-                                      unselectedWidgetColor: Colors.white.withOpacity(0.5),
-                                    ),
-                                    child: CheckboxListTile(
-                                      title: Text(
-                                        'Remember me (Enable Biometrics)',
-                                        style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 13),
-                                      ),
-                                      value: _rememberMe,
-                                      onChanged: (value) {
-                                        setState(() {
-                                          _rememberMe = value ?? false;
-                                        });
-                                      },
-                                      controlAffinity: ListTileControlAffinity.leading,
-                                      contentPadding: EdgeInsets.zero,
-                                      activeColor: const Color(0xFF8BC34A),
-                                      checkColor: const Color(0xFF1B3D1B),
-                                      dense: true,
-                                    ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                    borderSide: const BorderSide(color: Color(0xFF4F46E5), width: 2),
                                   ),
-                                  const SizedBox(height: 24),
-                                  
-                                  // Sign In Button
-                                  Container(
-                                    width: double.infinity,
-                                    height: 54,
-                                    decoration: BoxDecoration(
+                                  errorBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                    borderSide: const BorderSide(color: Colors.redAccent),
+                                  ),
+                                  focusedErrorBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                    borderSide: const BorderSide(color: Colors.redAccent, width: 2),
+                                  ),
+                                  fillColor: const Color(0xFFF8FAFC),
+                                  filled: true,
+                                ),
+                                validator: (value) =>
+                                    value?.isEmpty ?? true ? 'Please enter your password' : null,
+                              ),
+                              const SizedBox(height: 16),
+                              
+                              // Remember Me
+                              Theme(
+                                data: Theme.of(context).copyWith(
+                                  unselectedWidgetColor: Colors.grey.shade400,
+                                ),
+                                child: CheckboxListTile(
+                                  title: const Text(
+                                    'Remember me (Enable Biometrics)',
+                                    style: TextStyle(color: Color(0xFF334155), fontSize: 13, fontWeight: FontWeight.w500),
+                                  ),
+                                  value: _rememberMe,
+                                  onChanged: (value) {
+                                    setState(() {
+                                      _rememberMe = value ?? false;
+                                    });
+                                  },
+                                  controlAffinity: ListTileControlAffinity.leading,
+                                  contentPadding: EdgeInsets.zero,
+                                  activeColor: const Color(0xFF4F46E5),
+                                  checkColor: Colors.white,
+                                  dense: true,
+                                ),
+                              ),
+                              const SizedBox(height: 24),
+                              
+                              // Sign In Button
+                              Container(
+                                width: double.infinity,
+                                height: 54,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(16),
+                                  gradient: const LinearGradient(
+                                    colors: [Color(0xFF4F46E5), Color(0xFF3730A3)],
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: const Color(0xFF4F46E5).withOpacity(0.3),
+                                      blurRadius: 15,
+                                      offset: const Offset(0, 5),
+                                    ),
+                                  ],
+                                ),
+                                child: ElevatedButton(
+                                  onPressed: authProvider.isLoading
+                                      ? null
+                                      : () async {
+                                          if (_formKey.currentState?.validate() ?? false) {
+                                            final success = await authProvider.login(
+                                              _emailController.text,
+                                              _passwordController.text,
+                                              saveCredentials: _rememberMe,
+                                            );
+                                            if (success && mounted) {
+                                               // Navigation handled by AuthenticationWrapper
+                                            }
+                                          }
+                                        },
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.transparent,
+                                    shadowColor: Colors.transparent,
+                                    shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(16),
-                                      gradient: const LinearGradient(
-                                        colors: [Color(0xFF8BC34A), Color(0xFF689F38)],
-                                      ),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: const Color(0xFF8BC34A).withOpacity(0.4),
-                                          blurRadius: 15,
-                                          offset: const Offset(0, 5),
-                                        ),
-                                      ],
-                                    ),
-                                    child: ElevatedButton(
-                                      onPressed: authProvider.isLoading
-                                          ? null
-                                          : () async {
-                                              if (_formKey.currentState?.validate() ?? false) {
-                                                final success = await authProvider.login(
-                                                  _emailController.text,
-                                                  _passwordController.text,
-                                                  saveCredentials: _rememberMe,
-                                                );
-                                                if (success && mounted) {
-                                                   // Navigation handled by AuthenticationWrapper
-                                                }
-                                              }
-                                            },
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.transparent,
-                                        shadowColor: Colors.transparent,
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(16),
-                                        ),
-                                      ),
-                                      child: authProvider.isLoading
-                                          ? const SizedBox(
-                                              height: 24,
-                                              width: 24,
-                                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3),
-                                            )
-                                          : const Text(
-                                              'Sign In',
-                                              style: TextStyle(
-                                                fontSize: 16,
-                                                fontWeight: FontWeight.bold,
-                                                color: Colors.white,
-                                              ),
-                                            ),
                                     ),
                                   ),
-                                ],
+                                  child: authProvider.isLoading
+                                      ? const SizedBox(
+                                          height: 24,
+                                          width: 24,
+                                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3),
+                                        )
+                                      : const Text(
+                                          'Sign In to Dashboard',
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                ),
                               ),
-                            ),
+                            ],
                           ),
                         ),
                       ),
@@ -383,7 +385,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                         const SizedBox(height: 32),
                         const Text(
                           'OR',
-                          style: TextStyle(color: Colors.white54, fontWeight: FontWeight.bold),
+                          style: TextStyle(color: Color(0xFF94A3B8), fontWeight: FontWeight.bold),
                         ),
                         const SizedBox(height: 24),
                         InkWell(
@@ -392,19 +394,25 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                           child: Container(
                             padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 24),
                             decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.05),
+                              color: Colors.white,
                               borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: const Color(0xFF8BC34A).withOpacity(0.5)),
+                              border: Border.all(color: const Color(0xFF4F46E5).withOpacity(0.3)),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.02),
+                                  blurRadius: 10,
+                                )
+                              ]
                             ),
-                            child: Row(
+                            child: const Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                const Icon(Icons.fingerprint, size: 28, color: Color(0xFF8BC34A)),
-                                const SizedBox(width: 12),
+                                Icon(Icons.fingerprint, size: 28, color: Color(0xFF4F46E5)),
+                                SizedBox(width: 12),
                                 Text(
                                   'Login with Biometrics',
                                   style: TextStyle(
-                                    color: Colors.white.withOpacity(0.9),
+                                    color: Color(0xFF1E293B),
                                     fontSize: 15,
                                     fontWeight: FontWeight.w600,
                                   ),
