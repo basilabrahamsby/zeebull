@@ -252,8 +252,20 @@ export default function LoginPage() {
             </div>
           </div>
         </div>
+        
+        {/* Developer Credit */}
+        <div className="absolute bottom-6 right-8 z-20">
+          <a 
+            href="https://teqmates.com" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 text-slate-400/80 hover:text-white text-[11px] font-medium transition-all duration-300 group"
+          >
+            <span>Powered by</span>
+            <span className="text-indigo-400 group-hover:text-indigo-300 font-bold tracking-wider">Teqmates.com</span>
+          </a>
+        </div>
       </div>
-      
       {/* Tailwind animations */}
       <style>
         {`
