@@ -271,15 +271,27 @@ class _BookingsScreenState extends State<BookingsScreen> with SingleTickerProvid
 
   Widget _buildStatsRow(Map<String, String> stats) {
     return Container(
-      padding: const EdgeInsets.all(12),
-      color: Colors.grey[100],
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade100, width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          _buildStatCard('Occupancy', stats['occupancy']!, Colors.blue),
-          _buildStatCard('Revenue', stats['revenue']!, Colors.green),
-          _buildStatCard('Cancel Rate', stats['cancelRate']!, Colors.red),
-          _buildStatCard('ADR', stats['adr']!, Colors.orange),
+          _buildStatCard('Occupancy', stats['occupancy']!, const Color(0xFF4F46E5)),
+          _buildStatCard('Revenue', stats['revenue']!, const Color(0xFF10B981)),
+          _buildStatCard('Cancel Rate', stats['cancelRate']!, const Color(0xFFEF4444)),
+          _buildStatCard('ADR', stats['adr']!, const Color(0xFFF59E0B)),
         ],
       ),
     );
@@ -289,16 +301,26 @@ class _BookingsScreenState extends State<BookingsScreen> with SingleTickerProvid
     return Column(
       children: [
         Text(value, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color)),
-        Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+        Text(label, style: const TextStyle(fontSize: 11, color: Color(0xFF64748B), fontWeight: FontWeight.w500)),
       ],
     );
   }
 
   Widget _buildBookingCard(Booking booking) {
-    return Card(
-      elevation: 2,
+    return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade100, width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.015),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
       child: InkWell(
         onTap: () {
           Navigator.push(
@@ -306,8 +328,9 @@ class _BookingsScreenState extends State<BookingsScreen> with SingleTickerProvid
              MaterialPageRoute(builder: (_) => BookingDetailScreen(bookingId: booking.id, isPackage: booking.isPackage))
            );
         },
+        borderRadius: BorderRadius.circular(16),
         child: Padding(
-          padding: const EdgeInsets.all(12.0),
+          padding: const EdgeInsets.all(16.0),
           child: Column(
             children: [
               // Top Row: Ref & Status

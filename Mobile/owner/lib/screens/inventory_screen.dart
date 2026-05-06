@@ -113,7 +113,18 @@ class InventoryScreen extends StatelessWidget {
         child: Container(
            width: isFullWidth ? double.infinity : null,
            padding: const EdgeInsets.all(16),
-           decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4)]),
+           decoration: BoxDecoration(
+             color: Colors.white, 
+             borderRadius: BorderRadius.circular(16),
+             border: Border.all(color: Colors.grey.shade100, width: 1.5),
+             boxShadow: [
+               BoxShadow(
+                 color: Colors.black.withOpacity(0.015),
+                 blurRadius: 8,
+                 offset: const Offset(0, 2),
+               )
+             ]
+           ),
            child: Row(
              children: [
                 CircleAvatar(backgroundColor: color.withOpacity(0.1), child: Icon(icon, color: color)),
@@ -142,8 +153,15 @@ class InventoryScreen extends StatelessWidget {
             width: double.infinity,
             decoration: BoxDecoration(
               color: Colors.white, 
-              borderRadius: BorderRadius.circular(12),
-               boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4)]
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.grey.shade100, width: 1.5),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.015),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                )
+              ]
             ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
