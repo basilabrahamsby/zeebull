@@ -15,6 +15,7 @@ import BannerMessage from "../components/BannerMessage";
 import { getImageUrl } from "../utils/imageUtils";
 import Packages from "./Package";
 import Rooms from "./CreateRooms";
+import BookingCalendar from "../components/BookingCalendar";
 import { getCurrentDateIST, getCurrentDateTimeIST, formatDateShort, formatDateTimeShort } from "../utils/dateUtils";
 import {
   X, Plus, Calendar, User, Phone, Mail,
@@ -24,7 +25,7 @@ import {
   RefreshCw, Grid, Coffee, ClipboardList, Package, ExternalLink,
   Utensils, Settings, ChevronDown, UserCheck, Box, PlusCircle,
   CheckCircle2, XCircle, Zap, LogOut, Star, Eye, MessageSquare, Building2,
-  Briefcase, Heart, CreditCard
+  Briefcase, Heart, CreditCard, FileText
 } from "lucide-react";
 
 ChartJS.register(ArcElement, Tooltip, Legend);
@@ -80,7 +81,7 @@ KPI_Card.displayName = "KPI_Card";
 
 // Utility moved to utils/imageUtils.js
 
-const BookingStatusBadge = React.memo(({ status, isPackage, packageName }) => {
+const BookingStatusBadge = React.memo(({ status, isPackage, packageName, isConfirmed, advanceDeposit }) => {
   const normalizedStatus = status?.toLowerCase().trim().replace(/[-_]/g, "-") || "pending";
 
   const statusConfig = {
@@ -120,16 +121,24 @@ const BookingStatusBadge = React.memo(({ status, isPackage, packageName }) => {
   const Icon = config.icon;
 
   return (
-    <div className={`flex items-center gap-3 px-4 py-2 rounded-2xl border shadow-sm transition-all duration-500 hover:shadow-md ${config.className}`}>
-      <div className="relative">
-        <Icon className="w-3.5 h-3.5" />
-        <span className={`absolute -top-1 -right-1 w-2 h-2 rounded-full border-2 border-white ${config.dot} animate-pulse`}></span>
+    <div className="flex flex-col gap-1.5">
+      <div className={`flex items-center gap-3 px-4 py-2 rounded-2xl border shadow-sm transition-all duration-500 hover:shadow-md ${config.className}`}>
+        <div className="relative">
+          <Icon className="w-3.5 h-3.5" />
+          <span className={`absolute -top-1 -right-1 w-2 h-2 rounded-full border-2 border-white ${config.dot} animate-pulse`}></span>
+        </div>
+        <span className="text-[10px] font-bold uppercase tracking-wide">{config.label}</span>
+        {isPackage && (
+          <div className="ml-1 pl-3 border-l border-current/20 flex items-center gap-1.5">
+            <Star className="w-3 h-3 fill-current" />
+            <span className="text-[9px] font-bold">{packageName || "PREMIUM"}</span>
+          </div>
+        )}
       </div>
-      <span className="text-[10px] font-bold uppercase tracking-wide">{config.label}</span>
-      {isPackage && (
-        <div className="ml-1 pl-3 border-l border-current/20 flex items-center gap-1.5">
-          <Star className="w-3 h-3 fill-current" />
-          <span className="text-[9px] font-bold">{packageName || "PREMIUM"}</span>
+      {isConfirmed && (
+        <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-100 text-emerald-700 rounded-xl text-[8px] font-bold uppercase tracking-widest border border-emerald-200 shadow-sm w-fit">
+          <CreditCard className="w-2.5 h-2.5" />
+          Advance: {formatCurrency(advanceDeposit || 0)}
         </div>
       )}
     </div>
@@ -164,6 +173,8 @@ const BookingDetailsModal = ({
   onImageClick,
   roomIdToRoom,
   onAddAllocation,
+  onConfirm,
+  onDownloadReceipt,
   inventoryItems = [],
   inventoryLocations = [],
   authHeader,
@@ -219,7 +230,13 @@ const BookingDetailsModal = ({
             <div>
               <h2 className="text-xl sm:text-2xl font-bold text-slate-800 tracking-tight leading-none mb-1">Booking Details</h2>
               <div className="flex items-center gap-2">
-                <BookingStatusBadge status={booking.status || "Pending"} isPackage={booking.is_package} packageName={booking.package?.title} />
+                <BookingStatusBadge 
+                  status={booking.status || "Pending"} 
+                  isPackage={booking.is_package} 
+                  packageName={booking.package?.title} 
+                  isConfirmed={booking.is_confirmed}
+                  advanceDeposit={booking.advance_deposit}
+                />
                 <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider leading-none">{booking.display_id || `#${booking.id}`}</span>
               </div>
             </div>
@@ -437,6 +454,24 @@ const BookingDetailsModal = ({
               >
                 <Plus className="w-4 h-4" />
                 Service Task
+              </button>
+            )}
+            {!isCheckedIn && booking.status?.toLowerCase().replace(/[-_]/g, "") === "booked" && !booking.is_confirmed && onConfirm && (
+               <button
+                 onClick={() => onConfirm(booking)}
+                 className="px-8 py-3.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-2xl font-bold uppercase tracking-wider text-[10px] hover:shadow-2xl hover:shadow-emerald-500/20 transition-all flex items-center gap-2 active:scale-95"
+               >
+                 <CheckCircle2 className="w-4 h-4" />
+                 Confirm & Record Advance
+               </button>
+             )}
+            {(booking.is_confirmed || booking.advance_deposit > 0) && (
+              <button
+                onClick={() => onDownloadReceipt(booking.id, booking.is_package)}
+                className="px-8 py-3.5 bg-emerald-50 text-emerald-600 border border-emerald-200 rounded-2xl font-bold uppercase tracking-wider text-[10px] hover:bg-emerald-600 hover:text-white transition-all flex items-center gap-2 active:scale-95"
+              >
+                <FileText className="w-4 h-4" />
+                Print Receipt
               </button>
             )}
           </div>
@@ -1865,6 +1900,186 @@ const AddExtraAllocationModal = ({
   );
 };
 
+const ConfirmBookingModal = ({
+  booking,
+  onConfirm,
+  onClose,
+  isSubmitting,
+}) => {
+  const [payments, setPayments] = useState([{ amount: 0, method: 'cash' }]);
+  const [notes, setNotes] = useState(booking?.confirmation_notes || "");
+
+  if (!booking) return null;
+
+  const handleConfirm = () => {
+    onConfirm(booking.id, payments, notes, booking.is_package);
+  };
+
+  const addPaymentRow = () => setPayments([...payments, { amount: 0, method: 'cash' }]);
+  const removePaymentRow = (index) => {
+    if (payments.length > 1) {
+      setPayments(payments.filter((_, i) => i !== index));
+    }
+  };
+  const updatePayment = (index, field, value) => {
+    const updated = [...payments];
+    updated[index][field] = field === 'amount' ? (value === "" ? "" : parseFloat(value)) : value;
+    setPayments(updated);
+  };
+
+  const totalAmount = payments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xl flex items-center justify-center p-6 z-[200]">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.9, y: 30 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.9, y: 30 }}
+        className="bg-white/95 rounded-[3.5rem] shadow-[0_50px_100px_-20px_rgba(0,0,0,0.3)] w-full max-w-2xl overflow-hidden flex flex-col border border-white relative"
+      >
+        <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-emerald-500 via-teal-500 to-indigo-500 z-50"></div>
+        <div className="absolute -top-24 -right-24 w-64 h-64 bg-emerald-50 rounded-full blur-3xl opacity-50"></div>
+        <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-indigo-50 rounded-full blur-3xl opacity-50"></div>
+
+        {/* Header */}
+        <div className="px-12 py-10 flex justify-between items-center relative z-10">
+          <div className="flex items-center gap-6">
+            <div className="w-16 h-16 rounded-[2rem] bg-emerald-600 shadow-2xl shadow-emerald-200 flex items-center justify-center">
+              <CheckCircle2 className="w-8 h-8 text-white" />
+            </div>
+            <div>
+              <h2 className="text-3xl font-bold text-slate-800 tracking-tight uppercase leading-none mb-2">Confirm Booking</h2>
+              <div className="flex items-center gap-3">
+                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                <span className="text-slate-400 text-[10px] font-bold uppercase tracking-normal">Recording Advance Payment</span>
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="group w-12 h-12 bg-slate-50 hover:bg-rose-50 text-slate-400 hover:text-rose-500 rounded-2xl transition-all duration-500 border-2 border-slate-100 flex items-center justify-center"
+          >
+            <X className="w-5 h-5 group-hover:rotate-90 transition-transform" />
+          </button>
+        </div>
+
+        <div className="px-12 pb-12 space-y-8 relative z-10 overflow-y-auto max-h-[60vh] custom-scrollbar">
+           <div className="bg-slate-50/50 rounded-[2rem] p-8 border-2 border-slate-100 shadow-sm grid grid-cols-2 gap-8">
+              <div className="col-span-2 flex items-center justify-between border-b border-slate-100 pb-6 mb-2">
+                <div>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-2 px-1">Guest Identification</p>
+                  <div className="flex items-center gap-2 px-1">
+                    <User className="w-4 h-4 text-indigo-400" />
+                    <p className="font-bold text-slate-700 text-xl tracking-tight">{booking.guest_name}</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-2 px-1">Booking Value</p>
+                  <p className="font-bold text-slate-800 text-xl tracking-tight">{formatCurrency(booking.total_amount || 0)}</p>
+                </div>
+              </div>
+
+              <div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-2 px-1">Total Advance</p>
+                <p className="font-bold text-emerald-600 text-2xl tracking-tighter">{formatCurrency(totalAmount)}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-2 px-1">Balance Due</p>
+                <p className="font-bold text-indigo-600 text-2xl tracking-tighter">{formatCurrency((booking.total_amount || 0) - totalAmount)}</p>
+              </div>
+            </div>
+
+          {/* Payments List */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between px-2">
+              <h3 className="font-bold text-slate-800 uppercase tracking-wide text-[10px]">Payment Breakdown</h3>
+              <button 
+                onClick={addPaymentRow}
+                className="flex items-center gap-2 text-[10px] font-bold text-indigo-600 hover:text-indigo-700 uppercase tracking-widest bg-indigo-50 px-4 py-2 rounded-xl border border-indigo-100 transition-all active:scale-95"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Add Method
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {payments.map((payment, idx) => (
+                <div key={idx} className="flex items-center gap-4 animate-fadeIn">
+                  <div className="flex-1 relative group">
+                    <input
+                      type="number"
+                      value={payment.amount}
+                      onChange={(e) => updatePayment(idx, 'amount', e.target.value)}
+                      placeholder="Amount"
+                      className="w-full px-6 py-4 bg-white border-2 border-slate-100 rounded-2xl font-bold text-slate-800 focus:border-indigo-500 transition-all outline-none text-sm shadow-inner"
+                    />
+                    <div className="absolute left-[-2rem] top-1/2 -translate-y-1/2 text-slate-300 font-bold text-xs">
+                      #{idx + 1}
+                    </div>
+                  </div>
+                  <div className="flex-[0.8]">
+                    <select
+                      value={payment.method}
+                      onChange={(e) => updatePayment(idx, 'method', e.target.value)}
+                      className="w-full px-6 py-4 bg-slate-50 border-2 border-transparent focus:bg-white focus:border-indigo-100 rounded-2xl text-sm font-bold text-slate-700 outline-none transition-all appearance-none"
+                    >
+                      <option value="cash">💵 Cash</option>
+                      <option value="upi">📱 UPI</option>
+                      <option value="card">💳 Card</option>
+                      <option value="bank_transfer">🏦 Bank</option>
+                    </select>
+                  </div>
+                  {payments.length > 1 && (
+                    <button 
+                      onClick={() => removePaymentRow(idx)}
+                      className="p-4 bg-rose-50 text-rose-500 rounded-2xl hover:bg-rose-500 hover:text-white transition-all active:scale-95"
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Notes */}
+          <div className="space-y-3">
+              <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Confirmation Protocol Notes</label>
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Add any specific details from the call (e.g. 'Confirmed lunch timing', 'Special bedding requested')..."
+                className="w-full px-6 py-4 bg-slate-50 border-2 border-transparent focus:bg-white focus:border-indigo-100 rounded-[2rem] text-sm font-bold text-slate-700 outline-none transition-all placeholder:text-slate-300 resize-none h-32 shadow-inner"
+              />
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="px-12 py-10 bg-slate-50/50 border-t border-slate-100 flex flex-col sm:flex-row gap-6">
+          <button
+            onClick={onClose}
+            className="flex-1 px-8 py-5 bg-white text-slate-400 rounded-[2rem] font-bold uppercase tracking-wide text-[10px] border-2 border-slate-100 hover:text-slate-600 hover:bg-slate-100 transition-all active:scale-95"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleConfirm}
+            disabled={isSubmitting}
+            className="flex-[1.5] px-10 py-5 bg-emerald-600 text-white rounded-[2rem] font-bold uppercase tracking-normal text-[10px] shadow-2xl shadow-emerald-200 hover:bg-emerald-700 transition-all flex items-center justify-center gap-4 disabled:opacity-30 disabled:grayscale disabled:cursor-not-allowed group active:scale-95"
+          >
+            {isSubmitting ? (
+              <RefreshCw className="w-5 h-5 animate-spin" />
+            ) : (
+              <CheckCircle className="w-5 h-5 group-hover:scale-110 transition-transform" />
+            )}
+            <span>Confirm Booking</span>
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+};
+
 const ExtendBookingModal = ({
   booking,
   onSave,
@@ -3009,6 +3224,22 @@ const BookingFormModal = ({
                           </select>
                         </div>
 
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide ml-1">Room Tariff (Per Night / Per Room)</label>
+                          <div className="group relative">
+                            <div className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-slate-400 group-focus-within:text-indigo-600 transition-colors text-xs">₹</div>
+                            <input
+                              type="number"
+                              name="custom_room_rate"
+                              value={formData.custom_room_rate}
+                              onChange={handleChange}
+                              placeholder="0.00"
+                              className="w-full pl-8 pr-3 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all outline-none font-bold text-slate-700 shadow-sm text-sm"
+                            />
+                          </div>
+                          <p className="text-[9px] text-slate-400 ml-1 font-medium italic">* Editable for this booking only</p>
+                        </div>
+
                         <div className="grid grid-cols-3 gap-4">
                           <div className="space-y-1">
                             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide ml-1">No. of Rooms</label>
@@ -3254,6 +3485,7 @@ const Bookings = () => {
     const tabs = [
       { id: "dashboard", label: "Overview", permission: "bookings:view" },
       { id: "booking", label: "Bookings", permission: "bookings:view" },
+      { id: "calendar", label: "Calendar", permission: "bookings:view" },
       { id: "package", label: "Packages", permission: "packages:view" },
       { id: "room", label: "Rooms", permission: "rooms:view" }
     ];
@@ -3275,6 +3507,7 @@ const Bookings = () => {
     children: 0,
     num_rooms: 1, // Added for Soft Allocation multiplier
     source: "Admin", // Added for source tracking
+    custom_room_rate: "",
   });
   const today = getCurrentDateIST();
 
@@ -3332,6 +3565,7 @@ const Bookings = () => {
   const [regularBookingsLoaded, setRegularBookingsLoaded] = useState(0);
   const [bookingTab, setBookingTab] = useState("room"); // "room" or "package"
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
+  const [bookingToConfirm, setBookingToConfirm] = useState(null);
 
   // Map of roomId -> room for robust display when API omits nested room payloads
   const roomIdToRoom = useMemo(() => {
@@ -3348,6 +3582,51 @@ const Bookings = () => {
     }),
     [],
   );
+
+  const handleConfirmBooking = async (bookingId, payments, notes, isPackage) => {
+    setIsSubmitting(true);
+    try {
+      const endpoint = isPackage 
+        ? `/packages/booking/${bookingId}/confirm` 
+        : `/bookings/${bookingId}/confirm`;
+      
+      const response = await API.post(endpoint, {
+        payments: payments.filter(p => p.amount > 0),
+        notes: notes
+      }, authHeader());
+      
+      showBannerMessage("success", `Booking ${response.data.display_id || bookingId} confirmed successfully!`);
+      setBookingToConfirm(null);
+      if (modalBooking) {
+         setModalBooking(response.data);
+      }
+      fetchData(); // Refresh list
+    } catch (error) {
+      console.error("Error confirming booking:", error);
+      showBannerMessage("error", "Failed to confirm booking: " + (error.response?.data?.detail || error.message));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDownloadReceipt = async (bookingId, isPackage) => {
+    try {
+      const response = await API.get(`/bookings/${bookingId}/receipt?is_package=${isPackage}`, {
+        ...authHeader(),
+        responseType: 'blob'
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `receipt_${bookingId}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (error) {
+      console.error("Error downloading receipt:", error);
+      showBannerMessage("error", "Failed to download receipt");
+    }
+  };
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
@@ -4368,10 +4647,12 @@ const Bookings = () => {
 
   const handleRoomTypeChange = (e) => {
     const { value } = e.target;
+    const selectedType = roomTypeObjects.find(rt => rt.id === Number(value));
     setFormData((prev) => ({
       ...prev,
       room_type_id: value,
-      roomNumbers: []
+      roomNumbers: [],
+      custom_room_rate: selectedType ? (selectedType.base_price || 0) : ""
     }));
   };
 
@@ -4487,6 +4768,7 @@ const Bookings = () => {
           adults: parseInt(formData.adults),
           children: parseInt(formData.children),
           num_rooms: parseInt(formData.num_rooms) || 1,
+          custom_room_rate: formData.custom_room_rate ? parseFloat(formData.custom_room_rate) : null,
         },
         authHeader(),
       );
@@ -5771,6 +6053,8 @@ const Bookings = () => {
                               status={booking.status}
                               isPackage={booking.is_package}
                               packageName={booking.package?.title || (booking.is_package ? packages.find(p => p.id == booking.package_id)?.title : null)}
+                              isConfirmed={booking.is_confirmed}
+                              advanceDeposit={booking.advance_deposit}
                             />
                           </td>
                           <td className="px-4 py-3 text-gray-700">
@@ -5966,6 +6250,8 @@ const Bookings = () => {
                                 status={b.status}
                                 isPackage={b.is_package}
                                 packageName={b.package?.title || (b.is_package ? packages.find(p => p.id == b.package_id)?.title : null)}
+                                isConfirmed={b.is_confirmed}
+                                advanceDeposit={b.advance_deposit}
                               />
                             </td>
                             <td className="px-8 py-6 bg-slate-50/50 group-hover:bg-white rounded-r-[2rem] border-y-2 border-r-2 border-transparent group-hover:border-indigo-100 transition-all text-center">
@@ -6009,6 +6295,24 @@ const Bookings = () => {
                                     title="Initialize Check-in"
                                   >
                                     <Zap className="w-5 h-5" />
+                                  </button>
+                                )}
+                                {(b.is_confirmed || b.advance_deposit > 0) && (
+                                  <button
+                                    onClick={() => handleDownloadReceipt(b.id, b.is_package)}
+                                    className="w-10 h-10 bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white rounded-xl border-2 border-emerald-100 hover:border-emerald-600 transition-all shadow-sm flex items-center justify-center"
+                                    title="Download Advance Receipt"
+                                  >
+                                    <FileText className="w-5 h-5" />
+                                  </button>
+                                )}
+                                {hasPermission('bookings:edit') && b.status?.toLowerCase().replace(/[-_]/g, "") === "booked" && !b.is_confirmed && (
+                                  <button
+                                    onClick={() => setBookingToConfirm(b)}
+                                    className="w-10 h-10 bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white rounded-xl border-2 border-emerald-100 hover:border-emerald-600 transition-all shadow-sm flex items-center justify-center"
+                                    title="Confirm Booking"
+                                  >
+                                    <CheckCircle2 className="w-5 h-5" />
                                   </button>
                                 )}
                                 {hasPermission('bookings:edit') && (
@@ -6087,6 +6391,15 @@ const Bookings = () => {
           </>
         )}
 
+        {/* Calendar Tab */}
+        {mainTab === "calendar" && (
+          <BookingCalendar 
+            rooms={allRooms} 
+            bookings={bookings} 
+            roomTypeObjects={roomTypeObjects} 
+          />
+        )}
+
         {/* Package Management Tab */}
         {mainTab === "package" && <Packages noLayout={true} />}
 
@@ -6104,6 +6417,9 @@ const Bookings = () => {
               setModalBooking(null);
               setBookingForAllocation(booking);
             }}
+            onConfirm={(booking) => {
+              setBookingToConfirm(booking);
+            }}
             inventoryItems={inventoryItems.filter((item) => {
               const dept = String(item.department || "").toLowerCase();
               const catName = String(item.category_name || item.category?.name || "").toLowerCase();
@@ -6116,6 +6432,7 @@ const Bookings = () => {
             })}
             inventoryLocations={inventoryLocations}
             authHeader={authHeader}
+            onDownloadReceipt={handleDownloadReceipt}
           />
         )}
         {bookingForAllocation && (
@@ -6131,6 +6448,14 @@ const Bookings = () => {
               window.dispatchEvent(new CustomEvent("inventory-refresh"));
               // The modal will refresh items automatically after adding
             }}
+          />
+        )}
+        {bookingToConfirm && (
+          <ConfirmBookingModal
+            booking={bookingToConfirm}
+            onClose={() => setBookingToConfirm(null)}
+            onConfirm={handleConfirmBooking}
+            isSubmitting={isSubmitting}
           />
         )}
         {bookingToExtend && (

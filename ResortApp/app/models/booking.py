@@ -33,6 +33,11 @@ class Booking(Base):
     room_rate = Column(Float, default=0.0)
     rate_plan_code = Column(String, nullable=True)
     
+    # Confirmation Fields
+    is_confirmed = Column(Boolean, default=False)
+    confirmed_at = Column(DateTime, nullable=True)
+    confirmation_notes = Column(String, nullable=True)
+    
     branch = relationship("Branch")
     room_type = relationship("RoomType")
 

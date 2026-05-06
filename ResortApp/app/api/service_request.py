@@ -162,8 +162,13 @@ def get_service_requests(
                     ] if sr.food_order.items else []
                 }
 
+            # Dynamic GST calculation for summary
+            from app.utils.settings_helpers import get_gst_settings
+            gst_settings = get_gst_settings(db, branch_id)
+            gst_rate = float(gst_settings["food_gst_rate"]) / 100.0 if gst_settings["gst_enabled"] else 0.0
+            
             fo_amount = sr.food_order.amount if sr.food_order else getattr(sr, 'food_order_amount', 0)
-            fo_gst = sr.food_order.gst_amount if sr.food_order and sr.food_order.gst_amount else (fo_amount * 0.05 if fo_amount else 0)
+            fo_gst = sr.food_order.gst_amount if sr.food_order and sr.food_order.gst_amount else (fo_amount * gst_rate if fo_amount else 0)
             fo_total = sr.food_order.total_with_gst if sr.food_order and sr.food_order.total_with_gst else (fo_amount + fo_gst if fo_amount else 0)
 
             result.append({
@@ -624,6 +629,11 @@ def update_service_request(
             ] if reloaded.food_order.items else []
         }
 
+    # Calculate dynamic GST for response
+    from app.utils.settings_helpers import get_gst_settings
+    gst_settings = get_gst_settings(db, branch_id)
+    gst_rate = float(gst_settings["food_gst_rate"]) / 100.0 if gst_settings["gst_enabled"] else 0.0
+
     return {
         "id": reloaded.id,
         "food_order_id": reloaded.food_order_id,
@@ -644,8 +654,8 @@ def update_service_request(
         "employee_name": reloaded.employee.name if reloaded.employee else None,
         "refill_data": json.loads(reloaded.refill_data) if reloaded.refill_data else None,
         "food_order_amount": reloaded.food_order.amount if reloaded.food_order else 0,
-        "food_order_gst": reloaded.food_order.gst_amount if reloaded.food_order and reloaded.food_order.gst_amount else ((reloaded.food_order.amount * 0.05) if reloaded.food_order and reloaded.food_order.amount else 0),
-        "food_order_total": reloaded.food_order.total_with_gst if reloaded.food_order and reloaded.food_order.total_with_gst else ((reloaded.food_order.amount * 1.05) if reloaded.food_order and reloaded.food_order.amount else 0),
+        "food_order_gst": reloaded.food_order.gst_amount if reloaded.food_order and reloaded.food_order.gst_amount else ((reloaded.food_order.amount * gst_rate) if reloaded.food_order and reloaded.food_order.amount else 0),
+        "food_order_total": reloaded.food_order.total_with_gst if reloaded.food_order and reloaded.food_order.total_with_gst else ((reloaded.food_order.amount * (1.0 + gst_rate)) if reloaded.food_order and reloaded.food_order.amount else 0),
         "food_order_status": reloaded.food_order.status if reloaded.food_order else None,
         "food_order_billing_status": reloaded.food_order.billing_status if reloaded.food_order else None,
         "guest_name": reloaded.food_order.booking.guest_name if reloaded.food_order and reloaded.food_order.booking else (reloaded.food_order.package_booking.guest_name if reloaded.food_order and reloaded.food_order.package_booking else None),

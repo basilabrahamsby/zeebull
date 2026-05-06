@@ -24,22 +24,24 @@ def create_category(db: Session, data: InventoryCategoryCreate, branch_id: int):
 
 
 def get_all_categories(db: Session, skip: int = 0, limit: int = 100, active_only: bool = True, branch_id: Optional[int] = None):
-    from sqlalchemy.orm import joinedload
+    # Categories are shared master data visible to all branches.
+    # branch_id parameter is accepted for API compatibility but intentionally not used as a filter.
     query = db.query(InventoryCategory)
-    if branch_id:
-        query = query.filter(InventoryCategory.branch_id == branch_id)
     if active_only:
         query = query.filter(InventoryCategory.is_active == True)
     return query.offset(skip).limit(limit).all()
 
 
-def get_category_by_id(db: Session, category_id: int):
+def get_category_by_id(db: Session, category_id: int, branch_id: Optional[int] = None):
     query = db.query(InventoryCategory).filter(InventoryCategory.id == category_id)
+    if branch_id is not None:
+        query = query.filter(InventoryCategory.branch_id == branch_id)
     return query.first()
 
 
-def update_category(db: Session, category_id: int, data: InventoryCategoryUpdate):
-    category = get_category_by_id(db, category_id)
+def update_category(db: Session, category_id: int, data: InventoryCategoryUpdate, branch_id: Optional[int] = None):
+    from app.models.inventory import InventoryCategory
+    category = get_category_by_id(db, category_id, branch_id=branch_id)
     if not category:
         return None
     
@@ -60,12 +62,16 @@ def create_item(db: Session, data: InventoryItemCreate, branch_id: int):
     return item
 
 
-def get_all_items(db: Session, skip: int = 0, limit: int = 100, category_id: Optional[int] = None, active_only: bool = True, is_fixed_asset: Optional[bool] = None):
-    """Optimized with eager loading to prevent N+1 queries"""
+def get_all_items(db: Session, skip: int = 0, limit: int = 100, category_id: Optional[int] = None, active_only: bool = True, is_fixed_asset: Optional[bool] = None, branch_id: Optional[int] = None):
+    """Items are global master data visible to all branches.
+    Stock levels are branch-scoped via LocationStock and per-branch purchases/transactions.
+    branch_id is accepted for API compatibility but not used as a filter here.
+    """
     query = db.query(InventoryItem).options(
         joinedload(InventoryItem.category),
         joinedload(InventoryItem.preferred_vendor)
     )
+    # NOTE: branch_id intentionally NOT applied — items are shared across branches.
     if category_id:
         query = query.filter(InventoryItem.category_id == category_id)
     if active_only:
@@ -182,7 +188,7 @@ def create_vendor(db: Session, data: VendorCreate, branch_id: int):
 def get_all_vendors(db: Session, branch_id: Optional[int] = None, skip: int = 0, limit: int = 100, active_only: bool = False):
     from sqlalchemy.orm import joinedload
     query = db.query(Vendor).options(joinedload(Vendor.branch))
-    if branch_id:
+    if branch_id is not None:
         query = query.filter(Vendor.branch_id == branch_id)
     if active_only:
         query = query.filter(Vendor.is_active == True)
@@ -191,7 +197,7 @@ def get_all_vendors(db: Session, branch_id: Optional[int] = None, skip: int = 0,
 
 def get_vendor_by_id(db: Session, vendor_id: int, branch_id: Optional[int] = None):
     query = db.query(Vendor).filter(Vendor.id == vendor_id)
-    if branch_id:
+    if branch_id is not None:
         query = query.filter(Vendor.branch_id == branch_id)
     return query.first()
 
@@ -358,7 +364,7 @@ def get_all_purchases(db: Session, branch_id: int, skip: int = 0, limit: int = 1
 
 def get_purchase_by_id(db: Session, purchase_id: int, branch_id: Optional[int] = None):
     query = db.query(PurchaseMaster).filter(PurchaseMaster.id == purchase_id)
-    if branch_id:
+    if branch_id is not None:
         query = query.filter(PurchaseMaster.branch_id == branch_id)
     return query.first()
 
@@ -372,7 +378,7 @@ def get_item_stocks(db: Session, item_id: int, branch_id: Optional[int] = None):
         LocationStock.item_id == item_id,
         LocationStock.quantity > 0
     )
-    if branch_id:
+    if branch_id is not None:
         query = query.filter(LocationStock.branch_id == branch_id)
     
     stocks = query.all()
@@ -1327,7 +1333,7 @@ def get_all_waste_logs(db: Session, skip: int = 0, limit: int = 100, branch_id: 
 def get_waste_log_by_id(db: Session, waste_log_id: int, branch_id: Optional[int] = None):
     from app.models.inventory import WasteLog
     query = db.query(WasteLog).filter(WasteLog.id == waste_log_id)
-    if branch_id:
+    if branch_id is not None:
         query = query.filter(WasteLog.branch_id == branch_id)
     return query.first()
 
@@ -1392,7 +1398,7 @@ def get_all_locations(db: Session, skip: int = 0, limit: int = 10000, branch_id:
     # Skip auto-sync here - it's handled in the API endpoint to avoid transaction conflicts
     # Just return locations directly
     query = db.query(Location).options(joinedload(Location.branch)).filter(Location.is_active == True)
-    if branch_id:
+    if branch_id is not None:
         query = query.filter(Location.branch_id == branch_id)
     return query.offset(skip).limit(limit).all()
 
@@ -1598,7 +1604,7 @@ def create_asset_mapping(db: Session, data: dict, branch_id: int, assigned_by: O
 def get_all_asset_mappings(db: Session, skip: int = 0, limit: int = 100, location_id: Optional[int] = None, branch_id: Optional[int] = None):
     from app.models.inventory import AssetMapping
     query = db.query(AssetMapping).filter(AssetMapping.is_active == True)
-    if branch_id:
+    if branch_id is not None:
         query = query.filter(AssetMapping.branch_id == branch_id)
 
     if location_id:
@@ -1887,7 +1893,7 @@ def create_asset_registry(db: Session, data: dict, branch_id: int, created_by: i
         warehouse_query = db.query(Location).filter(
             Location.location_type.in_(["WAREHOUSE", "CENTRAL_WAREHOUSE"])
         )
-        if branch_id:
+        if branch_id is not None:
              warehouse_query = warehouse_query.filter(Location.branch_id == branch_id)
              
         warehouse = warehouse_query.first()
@@ -2026,11 +2032,13 @@ def delete_asset_registry(db: Session, asset_id: int):
 
 
 
-def get_all_stock_requisitions(db: Session, skip: int = 0, limit: int = 100, status: Optional[str] = None):
+def get_all_stock_requisitions(db: Session, skip: int = 0, limit: int = 100, status: Optional[str] = None, branch_id: Optional[int] = None):
     query = db.query(StockRequisition).options(
         joinedload(StockRequisition.details).joinedload(StockRequisitionDetail.item),
         joinedload(StockRequisition.requester)
     )
+    if branch_id is not None:
+        query = query.filter(StockRequisition.branch_id == branch_id)
     if status:
         query = query.filter(StockRequisition.status == status)
     return query.order_by(StockRequisition.created_at.desc()).offset(skip).limit(limit).all()
@@ -2067,7 +2075,7 @@ def get_all_stock_issues(db: Session, skip: int = 0, limit: int = 100, branch_id
         joinedload(StockIssue.destination_location),
         joinedload(StockIssue.issuer)
     )
-    if branch_id:
+    if branch_id is not None:
         query = query.filter(StockIssue.branch_id == branch_id)
     return query.order_by(StockIssue.created_at.desc()).offset(skip).limit(limit).all()
 

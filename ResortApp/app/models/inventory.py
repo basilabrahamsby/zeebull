@@ -11,7 +11,7 @@ class InventoryCategory(Base):
     name = Column(String, nullable=False, index=True)
     description = Column(Text, nullable=True)
 
-    __table_args__ = (UniqueConstraint('name', name='uix_inventory_category_name'),)
+    __table_args__ = (UniqueConstraint('name', 'branch_id', name='uix_inventory_category_name_branch'),)
     
     # Basic Identification
     parent_department = Column(String, nullable=True)  # Restaurant, Facility, Hotel, Office, Fire & Safety, Security
@@ -159,9 +159,9 @@ class InventoryItem(Base):
     branch = relationship("Branch")
 
     __table_args__ = (
-        UniqueConstraint('item_code', name='uix_inventory_item_code'),
-        UniqueConstraint('barcode', name='uix_inventory_item_barcode'),
-        UniqueConstraint('name', name='uix_inventory_item_name'),
+        UniqueConstraint('item_code', 'branch_id', name='uix_inventory_item_code_branch'),
+        UniqueConstraint('barcode', 'branch_id', name='uix_inventory_item_barcode_branch'),
+        UniqueConstraint('name', 'branch_id', name='uix_inventory_item_name_branch'),
     )
     
     category = relationship("InventoryCategory", back_populates="items")

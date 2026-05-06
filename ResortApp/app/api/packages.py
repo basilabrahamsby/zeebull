@@ -12,7 +12,9 @@ from app.models.Package import Package, PackageBooking, PackageBookingRoom
 from app.utils.auth import get_db, get_current_user
 from app.utils.branch_scope import get_branch_id
 from app.utils.booking_id import parse_display_id, format_display_id
+from app.models.payment import Payment
 from app.schemas.packages import PackageBookingCreate, PackageOut, PackageBookingOut
+from app.schemas.booking import BookingConfirm
 from fastapi.responses import FileResponse
 from app.curd import packages as crud_package
 from app.curd import foodorder as crud_food_order
@@ -24,6 +26,55 @@ import uuid
 import json
 
 router = APIRouter(prefix="/packages", tags=["Packages"])
+
+@router.post("/booking/{booking_id}/confirm", response_model=PackageBookingOut)
+def confirm_package_booking(
+    booking_id: Union[str, int],
+    confirm_data: BookingConfirm,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    branch_id: int = Depends(get_branch_id)
+):
+    # Parse display ID (PK-000001) or accept numeric ID
+    numeric_id, _ = parse_display_id(str(booking_id))
+    if numeric_id is not None:
+        booking_id = numeric_id
+        
+    query = db.query(PackageBooking).filter(PackageBooking.id == booking_id)
+    if branch_id is not None:
+        query = query.filter(PackageBooking.branch_id == branch_id)
+    booking = query.first()
+    
+    if not booking:
+        raise HTTPException(status_code=404, detail="Package booking not found")
+    
+    booking.is_confirmed = True
+    booking.confirmed_at = get_ist_now()
+    
+    # Calculate total advance and create payment records
+    total_advance = 0.0
+    for p in confirm_data.payments:
+        payment = Payment(
+            package_booking_id=booking.id,
+            amount=p.amount,
+            method=p.method,
+            status="paid",
+            branch_id=branch_id or booking.branch_id
+        )
+        db.add(payment)
+        total_advance += p.amount
+        
+    booking.advance_deposit = total_advance
+    booking.confirmation_notes = confirm_data.notes
+    
+    # Ensure status is 'booked' (Confirmed) if it wasn't
+    if booking.status.lower() == "pending":
+        booking.status = "booked"
+    
+    db.commit()
+    db.refresh(booking)
+    
+    return booking
 
 UPLOAD_DIR = os.path.join(_UPLOAD_ROOT, "packages")
 CHECKIN_UPLOAD_DIR = os.path.join(_UPLOAD_ROOT, "checkin_proofs")

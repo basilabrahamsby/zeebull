@@ -7,7 +7,8 @@ class Payment(Base):
     __tablename__ = "payments"
 
     id = Column(Integer, primary_key=True, index=True)
-    booking_id = Column(Integer, ForeignKey("bookings.id"))
+    booking_id = Column(Integer, ForeignKey("bookings.id"), nullable=True)
+    package_booking_id = Column(Integer, ForeignKey("package_bookings.id"), nullable=True)
     amount = Column(Float)
     method = Column(String)  # upi, card, cash
     status = Column(String, default="paid")
@@ -16,8 +17,8 @@ class Payment(Base):
     
     branch = relationship("Branch")
 
-
     booking = relationship("Booking", back_populates="payments")
+    package_booking = relationship("PackageBooking", back_populates="payments")
 
 
 class Voucher(Base):

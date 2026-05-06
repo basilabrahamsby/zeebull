@@ -18,8 +18,9 @@ from app.models.user import User
 
 from app.models.room import Room
 from app.models.Package import Package, PackageBooking, PackageBookingRoom
-from app.schemas.booking import BookingCreate, BookingOut
+from app.schemas.booking import BookingCreate, BookingOut, BookingConfirm
 from app.models.checkout import Checkout
+from app.models.payment import Payment
 from app.schemas.room import RoomOut
 from fastapi.responses import FileResponse
 import shutil
@@ -44,6 +45,97 @@ class PaginatedBookingResponse(BaseModel):
     bookings: List[BookingOut]
 
 router = APIRouter(prefix="/bookings", tags=["Bookings"])
+
+@router.post("/{booking_id}/confirm", response_model=BookingOut)
+def confirm_booking(
+    booking_id: Union[str, int],
+    confirm_data: BookingConfirm,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    branch_id: int = Depends(get_branch_id)
+):
+    # Parse display ID (BK-000001) or accept numeric ID
+    numeric_id, _ = parse_display_id(str(booking_id))
+    if numeric_id is not None:
+        booking_id = numeric_id
+    
+    query = db.query(Booking).filter(Booking.id == booking_id)
+    if branch_id is not None:
+        query = query.filter(Booking.branch_id == branch_id)
+    booking = query.first()
+    
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    
+    booking.is_confirmed = True
+    booking.confirmed_at = get_ist_now()
+    
+    # Calculate total advance and create payment records
+    total_advance = 0.0
+    for p in confirm_data.payments:
+        payment = Payment(
+            booking_id=booking.id,
+            amount=p.amount,
+            method=p.method,
+            status="paid",
+            branch_id=branch_id or booking.branch_id
+        )
+        db.add(payment)
+        total_advance += p.amount
+        
+    booking.advance_deposit = total_advance
+    booking.confirmation_notes = confirm_data.notes
+    
+    # Ensure status is 'booked' (Confirmed) if it wasn't
+    if booking.status.lower() == "pending":
+        booking.status = "booked"
+    
+    db.commit()
+    db.refresh(booking)
+    
+    # Reload with relationships for response if needed, 
+    # but BookingOut should handle it.
+    return booking
+
+@router.get("/{booking_id}/receipt")
+def get_booking_receipt(
+    booking_id: Union[str, int],
+    is_package: bool = Query(False),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    branch_id: int = Depends(get_branch_id)
+):
+    numeric_id, _ = parse_display_id(str(booking_id))
+    if numeric_id is not None:
+        booking_id = numeric_id
+        
+    if is_package:
+        query = db.query(PackageBooking).filter(PackageBooking.id == booking_id)
+        if branch_id is not None:
+            query = query.filter(PackageBooking.branch_id == branch_id)
+        booking = query.first()
+        payments = db.query(Payment).filter(Payment.package_booking_id == booking_id).all()
+    else:
+        query = db.query(Booking).filter(Booking.id == booking_id)
+        if branch_id is not None:
+            query = query.filter(Booking.branch_id == branch_id)
+        booking = query.first()
+        payments = db.query(Payment).filter(Payment.booking_id == booking_id).all()
+        
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+        
+    # We allow downloading if confirmed OR if advance_deposit > 0
+    if not booking.is_confirmed and booking.advance_deposit <= 0:
+        raise HTTPException(status_code=400, detail="No advance payment found for this booking")
+
+    filename = f"receipt_{booking_id}.pdf"
+    output_path = os.path.join(_UPLOAD_ROOT, "receipts", filename)
+    
+    from app.utils.pdf_generator import generate_advance_payment_receipt_pdf
+    generate_advance_payment_receipt_pdf(booking, payments, output_path)
+    
+    return FileResponse(output_path, filename=filename, media_type="application/pdf")
 
 @router.get("", response_model=PaginatedBookingResponse)
 def get_bookings(
@@ -913,7 +1005,8 @@ def create_booking(
             user_id=guest_user_id,
             branch_id=branch_id,
             status="Booked",
-            num_rooms=booking.num_rooms or 1
+            num_rooms=booking.num_rooms or 1,
+            room_rate=booking.custom_room_rate or 0.0
         )
         
         db.add(db_booking)
@@ -971,7 +1064,8 @@ def create_booking(
             user_id=guest_user_id,
             branch_id=branch_id,
             status="Booked",
-            num_rooms=num_rooms
+            num_rooms=num_rooms,
+            room_rate=booking.custom_room_rate or 0.0
         )
         # Use first room's type as primary type if none provided
         if not db_booking.room_type_id and selected_rooms:
@@ -1000,11 +1094,14 @@ def create_booking(
         joinedload(Booking.user)
     ).filter(Booking.id == db_booking.id).first()
 
-    # Calculate amount (using prices from RoomType dynamically)
+    # Calculate amount (using custom price if provided, else prices from RoomType dynamically)
     total_amt = 0.0
     try:
-        room_count = len(booking_full.booking_rooms) or 1
-        if booking_full.room_type_id and booking_full.check_in and booking_full.check_out:
+        room_count = len(booking_full.booking_rooms) or booking_full.num_rooms or 1
+        if booking.custom_room_rate and booking.custom_room_rate > 0:
+            nights = max(1, (booking_full.check_out - booking_full.check_in).days)
+            total_amt = booking.custom_room_rate * nights * room_count
+        elif booking_full.room_type_id and booking_full.check_in and booking_full.check_out:
             total_amt = calculate_dynamic_booking_price(db, booking_full.room_type_id, booking_full.check_in, booking_full.check_out, room_count)
     except Exception as e:
         print(f"Error calculating dynamic price for booking {booking_full.id}: {e}")

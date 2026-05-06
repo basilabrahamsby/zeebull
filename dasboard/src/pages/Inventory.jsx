@@ -935,10 +935,10 @@ const Inventory = () => {
   // Initial load when Assets tab becomes active
   // Initial load when Assets tab becomes active
   useEffect(() => {
-    if (activeTab === "assets" && assetMappings.length === 0 && !loadingMoreAssets) {
+    if (activeTab === "assets" && (assetMappings.length === 0 || activeBranchId) && !loadingMoreAssets) {
       fetchAssetMappings(0, true);
     }
-  }, [activeTab]);
+  }, [activeTab, activeBranchId]);
 
   // Reset when filters change
   useEffect(() => {
@@ -1019,7 +1019,7 @@ const Inventory = () => {
     if (activeTab === "transactions") {
       fetchTransactions(0, true);
     }
-  }, [transactionFilters]);
+  }, [transactionFilters, activeBranchId]);
 
 
   // Form states
@@ -1299,13 +1299,13 @@ const Inventory = () => {
       }
     };
     fetchEssentialData();
-  }, []);
+  }, [activeBranchId]);
 
   // Optimized: Refresh tab-specific data when tab changes (optional, keeps data fresh)
 
   useEffect(() => {
     fetchData();
-  }, [activeTab]);
+  }, [activeTab, activeBranchId]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);

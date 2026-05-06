@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import DashboardLayout from "../layout/DashboardLayout";
 import api from "../services/api";
-import { Settings as SettingsIcon, FileText, Upload, Trash2, Download, Save, Globe, Calendar as CalendarIcon, Plus, Eye } from "lucide-react";
+import { Settings as SettingsIcon, FileText, Upload, Trash2, Download, Save, Globe, Calendar as CalendarIcon, Plus, Eye, Percent, Zap, ZapOff } from "lucide-react";
 import { formatDateIST } from "../utils/dateUtils";
 import { useBranch } from "../contexts/BranchContext";
 
@@ -15,6 +15,13 @@ export default function Settings() {
     // System Settings State
     const [settings, setSettings] = useState({
         timezone: "Asia/Kolkata",
+        gst_room_type: "SLAB",
+        room_gst_rate: "12",
+        food_gst_rate: "5",
+        service_gst_rate: "5",
+        gst_slab_rate_1: "5",
+        gst_slab_rate_2: "12",
+        gst_slab_rate_3: "18"
     });
     const [settingsLoading, setSettingsLoading] = useState(false);
 
@@ -71,6 +78,26 @@ export default function Settings() {
         } catch (error) {
             console.error("Error saving timezone:", error);
             alert("Failed to save Timezone");
+        }
+    };
+
+    // Save GST Settings
+    const handleSaveGstSettings = async (e) => {
+        e.preventDefault();
+        try {
+            const keys = ["gst_enabled", "room_gst_rate", "food_gst_rate", "service_gst_rate", "gst_room_type", "gst_slab_rate_1", "gst_slab_rate_2", "gst_slab_rate_3"];
+            await Promise.all(keys.map(key => 
+                api.post("settings/", {
+                    key: key,
+                    value: String(settings[key] || ""),
+                    description: `GST Setting: ${key}`
+                })
+            ));
+            alert("GST Configuration updated successfully");
+            fetchSettings();
+        } catch (error) {
+            console.error("Error saving GST settings:", error);
+            alert("Failed to update GST Configuration");
         }
     };
 
@@ -179,14 +206,14 @@ export default function Settings() {
 
     // Load data on tab change
     useEffect(() => {
-        if (activeTab === "system_settings") {
+        if (activeTab === "system_settings" || activeTab === "gst_config") {
             fetchSettings();
         } else if (activeTab === "legal_documents") {
             fetchLegalDocuments();
         } else if (activeTab === "pricing_calendar") {
             fetchCalendarEvents();
         }
-    }, [activeTab]);
+    }, [activeTab, activeBranchId]);
 
     return (
         <DashboardLayout>
@@ -202,10 +229,10 @@ export default function Settings() {
                 {/* Tab Navigation */}
                 <div className="bg-white rounded-lg shadow mb-6">
                     <div className="border-b border-gray-200">
-                        <div className="flex space-x-1 p-2">
+                        <div className="flex space-x-1 p-2 overflow-x-auto">
                             <button
                                 onClick={() => setActiveTab("system_settings")}
-                                className={`px-6 py-3 font-medium rounded-t-lg transition-colors ${activeTab === "system_settings"
+                                className={`px-6 py-3 font-medium rounded-t-lg transition-colors whitespace-nowrap ${activeTab === "system_settings"
                                     ? "bg-indigo-600 text-white"
                                     : "text-gray-600 hover:bg-gray-100"
                                     }`}
@@ -214,8 +241,18 @@ export default function Settings() {
                                 System Settings
                             </button>
                             <button
+                                onClick={() => setActiveTab("gst_config")}
+                                className={`px-6 py-3 font-medium rounded-t-lg transition-colors whitespace-nowrap ${activeTab === "gst_config"
+                                    ? "bg-indigo-600 text-white"
+                                    : "text-gray-600 hover:bg-gray-100"
+                                    }`}
+                            >
+                                <Percent className="inline mr-2" size={18} />
+                                GST Configuration
+                            </button>
+                            <button
                                 onClick={() => setActiveTab("legal_documents")}
-                                className={`px-6 py-3 font-medium rounded-t-lg transition-colors ${activeTab === "legal_documents"
+                                className={`px-6 py-3 font-medium rounded-t-lg transition-colors whitespace-nowrap ${activeTab === "legal_documents"
                                     ? "bg-indigo-600 text-white"
                                     : "text-gray-600 hover:bg-gray-100"
                                     }`}
@@ -225,7 +262,7 @@ export default function Settings() {
                             </button>
                             <button
                                 onClick={() => setActiveTab("pricing_calendar")}
-                                className={`px-6 py-3 font-medium rounded-t-lg transition-colors ${activeTab === "pricing_calendar"
+                                className={`px-6 py-3 font-medium rounded-t-lg transition-colors whitespace-nowrap ${activeTab === "pricing_calendar"
                                     ? "bg-indigo-600 text-white"
                                     : "text-gray-600 hover:bg-gray-100"
                                     }`}
@@ -278,8 +315,176 @@ export default function Settings() {
                                 </form>
                             )}
                         </div>
+                    </div>
+                )}
 
+                {/* GST Configuration Tab */}
+                {activeTab === "gst_config" && (
+                    <div className="space-y-6">
+                        <div className="bg-white rounded-lg shadow p-6">
+                            <div className="flex items-center justify-between mb-6">
+                                <h2 className="text-xl font-bold flex items-center gap-2">
+                                    <Percent className="text-indigo-600" size={20} />
+                                    GST & Taxation Rules
+                                </h2>
+                                <div className="flex items-center gap-3 bg-gray-50 px-4 py-2 rounded-xl border border-gray-100">
+                                    <span className="text-sm font-bold text-gray-600">GST Status:</span>
+                                    <button
+                                        onClick={() => setSettings({ ...settings, gst_enabled: settings.gst_enabled === "true" ? "false" : "true" })}
+                                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                                            settings.gst_enabled === "true" ? "bg-emerald-500" : "bg-gray-300"
+                                        }`}
+                                    >
+                                        <span
+                                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                                settings.gst_enabled === "true" ? "translate-x-6" : "translate-x-1"
+                                            }`}
+                                        />
+                                    </button>
+                                    <span className={`text-xs font-black uppercase tracking-wider ${settings.gst_enabled === "true" ? "text-emerald-600" : "text-gray-400"}`}>
+                                        {settings.gst_enabled === "true" ? "ENABLED" : "DISABLED"}
+                                    </span>
+                                </div>
+                            </div>
 
+                            {settingsLoading ? (
+                                <div className="text-center py-4">Loading GST Settings...</div>
+                            ) : (
+                                <form onSubmit={handleSaveGstSettings} className="space-y-8">
+                                    {/* Master Toggle Info */}
+                                    <div className={`p-4 rounded-xl border flex items-start gap-4 transition-colors ${
+                                        settings.gst_enabled === "true" ? "bg-emerald-50 border-emerald-100" : "bg-amber-50 border-amber-100"
+                                    }`}>
+                                        <div className={`p-2 rounded-lg ${settings.gst_enabled === "true" ? "bg-emerald-100 text-emerald-600" : "bg-amber-100 text-amber-600"}`}>
+                                            {settings.gst_enabled === "true" ? <Zap size={20} /> : <ZapOff size={20} />}
+                                        </div>
+                                        <div>
+                                            <h4 className={`font-bold ${settings.gst_enabled === "true" ? "text-emerald-800" : "text-amber-800"}`}>
+                                                {settings.gst_enabled === "true" ? "GST Calculations Active" : "GST Calculations Paused"}
+                                            </h4>
+                                            <p className={`text-sm ${settings.gst_enabled === "true" ? "text-emerald-700" : "text-amber-700"}`}>
+                                                {settings.gst_enabled === "true" 
+                                                    ? "Tax will be automatically added to all bookings, food orders, and services based on the rates defined below."
+                                                    : "GST will not be added to any transactions. All rates will be treated as tax-exclusive or tax-exempt."}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {/* GST Rates Grid */}
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                        <div className="space-y-4">
+                                            <div className="flex items-center justify-between">
+                                                <label className="block text-sm font-bold text-gray-700">Room GST Mode</label>
+                                                <div className="flex bg-gray-100 p-1 rounded-lg">
+                                                    <button 
+                                                        type="button"
+                                                        onClick={() => setSettings({ ...settings, gst_room_type: "SLAB" })}
+                                                        className={`px-3 py-1 text-[10px] font-bold rounded-md transition-all ${settings.gst_room_type !== "MANUAL" ? "bg-white shadow-sm text-indigo-600" : "text-gray-500 hover:text-gray-700"}`}
+                                                    >
+                                                        SLAB
+                                                    </button>
+                                                    <button 
+                                                        type="button"
+                                                        onClick={() => setSettings({ ...settings, gst_room_type: "MANUAL" })}
+                                                        className={`px-3 py-1 text-[10px] font-bold rounded-md transition-all ${settings.gst_room_type === "MANUAL" ? "bg-white shadow-sm text-indigo-600" : "text-gray-500 hover:text-gray-700"}`}
+                                                    >
+                                                        MANUAL
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            {settings.gst_room_type === "MANUAL" ? (
+                                                <div className="relative">
+                                                    <input
+                                                        type="number"
+                                                        value={settings.room_gst_rate}
+                                                        onChange={(e) => setSettings({ ...settings, room_gst_rate: e.target.value })}
+                                                        className="w-full border-2 border-gray-100 rounded-xl pl-4 pr-10 py-3 focus:border-indigo-500 focus:ring-0 transition-all outline-none"
+                                                        placeholder="12"
+                                                    />
+                                                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">%</span>
+                                                </div>
+                                            ) : (
+                                                <div className="bg-gray-50 border border-gray-100 rounded-xl p-3 space-y-3">
+                                                    <div className="grid grid-cols-3 gap-2">
+                                                        <div className="space-y-1">
+                                                            <label className="text-[10px] font-black text-gray-500 uppercase">{"< 5k (%)"}</label>
+                                                            <input 
+                                                                type="number"
+                                                                value={settings.gst_slab_rate_1}
+                                                                onChange={(e) => setSettings({ ...settings, gst_slab_rate_1: e.target.value })}
+                                                                className="w-full text-xs font-bold p-2 rounded border border-gray-200 focus:ring-1 focus:ring-indigo-500 outline-none"
+                                                            />
+                                                        </div>
+                                                        <div className="space-y-1">
+                                                            <label className="text-[10px] font-black text-gray-500 uppercase">{"5k-7.5k (%)"}</label>
+                                                            <input 
+                                                                type="number"
+                                                                value={settings.gst_slab_rate_2}
+                                                                onChange={(e) => setSettings({ ...settings, gst_slab_rate_2: e.target.value })}
+                                                                className="w-full text-xs font-bold p-2 rounded border border-gray-200 focus:ring-1 focus:ring-indigo-500 outline-none"
+                                                            />
+                                                        </div>
+                                                        <div className="space-y-1">
+                                                            <label className="text-[10px] font-black text-gray-500 uppercase">{">= 7.5k (%)"}</label>
+                                                            <input 
+                                                                type="number"
+                                                                value={settings.gst_slab_rate_3}
+                                                                onChange={(e) => setSettings({ ...settings, gst_slab_rate_3: e.target.value })}
+                                                                className="w-full text-xs font-bold p-2 rounded border border-gray-200 focus:ring-1 focus:ring-indigo-500 outline-none"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    <p className="text-[10px] text-gray-500 italic">
+                                                        Rates applied based on daily per-room price range.
+                                                    </p>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-bold text-gray-700">Food GST Rate (%)</label>
+                                            <div className="relative">
+                                                <input
+                                                    type="number"
+                                                    value={settings.food_gst_rate}
+                                                    onChange={(e) => setSettings({ ...settings, food_gst_rate: e.target.value })}
+                                                    className="w-full border-2 border-gray-100 rounded-xl pl-4 pr-10 py-3 focus:border-indigo-500 focus:ring-0 transition-all outline-none"
+                                                    placeholder="5"
+                                                />
+                                                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">%</span>
+                                            </div>
+                                            <p className="text-xs text-gray-500">Applied to restaurant and room service.</p>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <label className="block text-sm font-bold text-gray-700">Service GST Rate (%)</label>
+                                            <div className="relative">
+                                                <input
+                                                    type="number"
+                                                    value={settings.service_gst_rate}
+                                                    onChange={(e) => setSettings({ ...settings, service_gst_rate: e.target.value })}
+                                                    className="w-full border-2 border-gray-100 rounded-xl pl-4 pr-10 py-3 focus:border-indigo-500 focus:ring-0 transition-all outline-none"
+                                                    placeholder="18"
+                                                />
+                                                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">%</span>
+                                            </div>
+                                            <p className="text-xs text-gray-500">Applied to spa, laundry, and other services.</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="pt-4 border-t border-gray-100">
+                                        <button
+                                            type="submit"
+                                            className="px-8 py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 flex items-center gap-2 transition-all shadow-lg shadow-indigo-200"
+                                        >
+                                            <Save size={20} />
+                                            Update GST Configuration
+                                        </button>
+                                    </div>
+                                </form>
+                            )}
+                        </div>
                     </div>
                 )}
 

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Date, ForeignKey, DateTime
+from sqlalchemy import Column, Integer, String, Float, Date, ForeignKey, DateTime, Boolean
 from sqlalchemy.orm import relationship
 from datetime import timezone, datetime
 from app.database import Base
@@ -69,6 +69,11 @@ class PackageBooking(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc)) # Added for sorting
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False, index=True)
     
+    # Confirmation Fields
+    is_confirmed = Column(Boolean, default=False)
+    confirmed_at = Column(DateTime, nullable=True)
+    confirmation_notes = Column(String, nullable=True)
+    
     branch = relationship("Branch")
 
     food_preferences = Column(String, nullable=True)
@@ -85,6 +90,7 @@ class PackageBooking(Base):
         back_populates="package_booking",
         cascade="all, delete-orphan"
     )
+    payments = relationship("Payment", back_populates="package_booking")
 
 
 class PackageBookingRoom(Base):

@@ -41,6 +41,7 @@ class BookingCreate(BaseModel):
     children: int
     num_rooms: int = 1
     branch_id: Optional[int] = None
+    custom_room_rate: Optional[float] = None
 
     @validator('check_out')
     def validate_booking_duration(cls, v, values):
@@ -82,6 +83,10 @@ class BookingOut(BaseModel):
     room_rate: float = 0.0
     rate_plan_code: Optional[str] = None
     
+    is_confirmed: bool = False
+    confirmed_at: Optional[datetime] = None
+    confirmation_notes: Optional[str] = None
+    
     is_id_verified: bool = False
     digital_signature_url: Optional[str] = None
     special_requests: Optional[str] = None
@@ -103,3 +108,11 @@ class BookingOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+class PaymentEntry(BaseModel):
+    amount: float
+    method: str  # upi, card, cash
+
+class BookingConfirm(BaseModel):
+    payments: List[PaymentEntry] = []
+    notes: Optional[str] = None

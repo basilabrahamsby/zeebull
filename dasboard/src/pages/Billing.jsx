@@ -3,7 +3,7 @@ import DashboardLayout from "../layout/DashboardLayout";
 import BannerMessage from "../components/BannerMessage";
 import axios from "axios"; // We need axios to create the api service object
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { DollarSign, BedDouble, Users, Utensils, Package, Hash, Calendar, CreditCard, X, Search, Filter, XCircle, RefreshCw } from 'lucide-react';
+import { DollarSign, BedDouble, Users, Utensils, Package, Hash, Calendar, CreditCard, X, Search, Filter, XCircle, RefreshCw, Edit, Save } from 'lucide-react';
 import jsPDF from 'jspdf';
 import { useNavigate } from "react-router-dom";
 import autoTable from 'jspdf-autotable';
@@ -13,6 +13,7 @@ import logo from '../assets/logo.jpeg';
 import { formatCurrency } from '../utils/currency';
 import { getApiBaseUrl } from "../utils/env";
 import { formatDateIST, formatDateTimeIST } from "../utils/dateUtils";
+import { usePermissions } from "../hooks/usePermissions";
 
 
 // --- Placeholder for DashboardLayout ---
@@ -78,9 +79,11 @@ const KpiCard = React.memo(({ title, value, icon, color, prefix = '', suffix = '
 ));
 KpiCard.displayName = 'KpiCard';
 
-const CheckoutDetailModal = React.memo(({ checkout, onClose }) => {
+const CheckoutDetailModal = React.memo(({ checkout, onClose, onUpdateSuccess }) => {
   const [details, setDetails] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const { isSuperadmin } = usePermissions();
 
   useEffect(() => {
     if (checkout) {
@@ -207,9 +210,22 @@ const CheckoutDetailModal = React.memo(({ checkout, onClose }) => {
     doc.save(`bill-${details.id}.pdf`);
   };
 
+  const handleEditSuccess = (updatedCheckout) => {
+    setDetails(updatedCheckout);
+    setIsEditing(false);
+    if (onUpdateSuccess) onUpdateSuccess(updatedCheckout);
+  };
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4 overflow-y-auto">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] p-6 relative animate-fade-in-up overflow-y-auto">
+      {isEditing ? (
+        <EditCheckoutModal 
+          checkout={details} 
+          onClose={() => setIsEditing(false)} 
+          onSuccess={handleEditSuccess} 
+        />
+      ) : (
+        <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] p-6 relative animate-fade-in-up overflow-y-auto">
         <button onClick={onClose} className="absolute top-4 right-4 text-gray-500 hover:text-gray-800 z-10">
           <X size={24} />
         </button>
@@ -236,6 +252,15 @@ const CheckoutDetailModal = React.memo(({ checkout, onClose }) => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
                 </svg>
                 View Bill PDF
+              </button>
+            )}
+            {isSuperadmin && (
+              <button
+                onClick={() => setIsEditing(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors print:hidden"
+              >
+                <Edit size={18} />
+                Edit Bill
               </button>
             )}
           </div>
@@ -510,9 +535,231 @@ const CheckoutDetailModal = React.memo(({ checkout, onClose }) => {
           <div className="text-center py-8 text-gray-500">Failed to load details</div>
         )}
       </div>
+      )}
     </div>
   );
 });
+const EditCheckoutModal = ({ checkout, onClose, onSuccess }) => {
+  const [formData, setFormData] = useState({
+    guest_name: checkout?.guest_name || "",
+    room_number: checkout?.room_number || "",
+    payment_method: checkout?.payment_method || "",
+    payment_status: checkout?.payment_status || "Paid",
+    room_total: checkout?.room_total || 0,
+    food_total: checkout?.food_total || 0,
+    service_total: checkout?.service_total || 0,
+    package_total: checkout?.package_total || 0,
+    tax_amount: checkout?.tax_amount || 0,
+    discount_amount: checkout?.discount_amount || 0,
+    grand_total: checkout?.grand_total || 0,
+    notes: checkout?.notes || "",
+    invoice_number: checkout?.invoice_number || ""
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    const newFormData = { ...formData, [name]: value };
+    
+    // Auto-calculate grand total if numerical fields change
+    if (['room_total', 'food_total', 'service_total', 'package_total', 'tax_amount', 'discount_amount'].includes(name)) {
+      const rt = parseFloat(newFormData.room_total) || 0;
+      const ft = parseFloat(newFormData.food_total) || 0;
+      const st = parseFloat(newFormData.service_total) || 0;
+      const pt = parseFloat(newFormData.package_total) || 0;
+      const tax = parseFloat(newFormData.tax_amount) || 0;
+      const disc = parseFloat(newFormData.discount_amount) || 0;
+      newFormData.grand_total = (rt + ft + st + pt + tax) - disc;
+    }
+    
+    setFormData(newFormData);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    try {
+      const response = await api.put(`/bill/checkouts/${checkout.id}`, formData);
+      onSuccess(response.data);
+    } catch (err) {
+      console.error("Failed to update checkout:", err);
+      setError(err.response?.data?.detail || "Failed to update checkout record");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl p-6 relative animate-fade-in-up">
+      <button onClick={onClose} className="absolute top-4 right-4 text-gray-500 hover:text-gray-800">
+        <X size={24} />
+      </button>
+      <h2 className="text-2xl font-bold text-gray-800 mb-6">Edit Final Bill (ID: {checkout.id})</h2>
+      
+      {error && (
+        <div className="bg-red-50 text-red-600 p-3 rounded-lg mb-4 text-sm border border-red-100">
+          {error}
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Guest Name</label>
+            <input
+              type="text"
+              name="guest_name"
+              value={formData.guest_name}
+              onChange={handleChange}
+              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Room Number(s)</label>
+            <input
+              type="text"
+              name="room_number"
+              value={formData.room_number}
+              onChange={handleChange}
+              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
+            <select
+              name="payment_method"
+              value={formData.payment_method}
+              onChange={handleChange}
+              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+            >
+              <option value="Cash">Cash</option>
+              <option value="Card">Card</option>
+              <option value="UPI">UPI</option>
+              <option value="Bank Transfer">Bank Transfer</option>
+              <option value="Split">Split</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Invoice Number</label>
+            <input
+              type="text"
+              name="invoice_number"
+              value={formData.invoice_number}
+              onChange={handleChange}
+              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-4 p-4 bg-gray-50 rounded-xl border border-gray-100">
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Room Total</label>
+            <input
+              type="number"
+              name="room_total"
+              value={formData.room_total}
+              onChange={handleChange}
+              className="w-full px-3 py-2 border rounded-lg outline-none text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Food Total</label>
+            <input
+              type="number"
+              name="food_total"
+              value={formData.food_total}
+              onChange={handleChange}
+              className="w-full px-3 py-2 border rounded-lg outline-none text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Service Total</label>
+            <input
+              type="number"
+              name="service_total"
+              value={formData.service_total}
+              onChange={handleChange}
+              className="w-full px-3 py-2 border rounded-lg outline-none text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Package Total</label>
+            <input
+              type="number"
+              name="package_total"
+              value={formData.package_total}
+              onChange={handleChange}
+              className="w-full px-3 py-2 border rounded-lg outline-none text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Tax Amount</label>
+            <input
+              type="number"
+              name="tax_amount"
+              value={formData.tax_amount}
+              onChange={handleChange}
+              className="w-full px-3 py-2 border rounded-lg outline-none text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Discount</label>
+            <input
+              type="number"
+              name="discount_amount"
+              value={formData.discount_amount}
+              onChange={handleChange}
+              className="w-full px-3 py-2 border rounded-lg outline-none text-sm"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Grand Total (Auto-calculated)</label>
+          <input
+            type="number"
+            name="grand_total"
+            value={formData.grand_total}
+            readOnly
+            className="w-full px-4 py-3 bg-indigo-50 border-2 border-indigo-100 rounded-xl font-bold text-xl text-indigo-700 outline-none"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+          <textarea
+            name="notes"
+            value={formData.notes}
+            onChange={handleChange}
+            rows="2"
+            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
+            placeholder="Reason for adjustment..."
+          ></textarea>
+        </div>
+
+        <div className="flex justify-end gap-3 pt-4">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-6 py-2 border rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={loading}
+            className="flex items-center gap-2 px-8 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50"
+          >
+            {loading ? "Saving..." : <><Save size={18} /> Save Changes</>}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+};
+
 CheckoutDetailModal.displayName = 'CheckoutDetailModal';
 
 const CHART_COLORS = ['#4f46e5', '#10b981', '#f59e0b', '#3b82f6'];
@@ -2141,7 +2388,15 @@ const Billing = () => {
           )}
         </div>
 
-        <CheckoutDetailModal checkout={selectedCheckout} onClose={() => setSelectedCheckout(null)} />
+        {selectedCheckout && (
+          <CheckoutDetailModal 
+            checkout={selectedCheckout} 
+            onClose={() => setSelectedCheckout(null)} 
+            onUpdateSuccess={(updated) => {
+              setCheckouts(prev => prev.map(c => c.id === updated.id ? updated : c));
+            }}
+          />
+        )}
 
         {/* Inventory Verification Modal */}
         {checkoutInventoryModal && checkoutInventoryDetails && (

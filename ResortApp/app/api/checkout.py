@@ -23,7 +23,7 @@ from app.models.checkout import Checkout, CheckoutVerification, CheckoutPayment,
 from app.models.inventory import InventoryItem, StockIssue, StockIssueDetail, AssetMapping, AssetRegistry, WasteLog, LaundryLog, InventoryTransaction, LocationStock, Location
 from app.models.service_request import ServiceRequest
 from app.curd.inventory import generate_waste_log_number
-from app.schemas.checkout import BillSummary, BillBreakdown, CheckoutFull, CheckoutSuccess, CheckoutRequest, InventoryCheckRequest
+from app.schemas.checkout import BillSummary, BillBreakdown, CheckoutFull, CheckoutSuccess, CheckoutRequest, InventoryCheckRequest, CheckoutUpdate
 from app.utils.checkout_helpers import (
     calculate_late_checkout_fee, process_consumables_audit, process_asset_damage_check,
     deduct_room_consumables, trigger_linen_cycle, create_checkout_verification,
@@ -1844,6 +1844,38 @@ def get_all_checkouts(db: Session = Depends(get_db), current_user: User = Depend
     checkouts = query.order_by(Checkout.id.desc()).offset(skip).limit(limit).all()
     print(f"DEBUG: get_all_checkouts - Found {len(checkouts)} checkouts")
     return checkouts if checkouts else []
+    
+@router.put("/checkouts/{checkout_id}", response_model=CheckoutFull)
+def update_checkout(
+    checkout_id: int, 
+    checkout_update: CheckoutUpdate, 
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Updates a checkout record. Only allowed for superadmins.
+    """
+    if not current_user.is_superadmin:
+        raise HTTPException(status_code=403, detail="Only superadmins can edit final bills")
+    
+    checkout = db.query(Checkout).filter(Checkout.id == checkout_id).first()
+    if not checkout:
+        raise HTTPException(status_code=404, detail="Checkout record not found")
+    
+    update_data = checkout_update.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(checkout, key, value)
+    
+    # Clear old PDF path as it's now invalid
+    checkout.invoice_pdf_path = None
+    
+    try:
+        db.commit()
+        db.refresh(checkout)
+        return checkout
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to update checkout: {str(e)}")
 
 @router.post("/cleanup-orphaned-checkouts")
 def cleanup_orphaned_checkouts_endpoint(
@@ -3326,43 +3358,39 @@ def _calculate_bill_for_single_room(db: Session, room_number: str, branch_id: in
                 })
 
                 
-    # Room GST Logic (Standard Tiered as per User Requirement)
-    # Rules: < 5000: 5%, 5000-7499: 12%, >= 7500: 18%
-    daily_rate = (charges.room_charges or 0) / max(1, stay_nights if 'stay_nights' in locals() else stay_days)
+    # Calculate GST using dynamic helper
+    gst_breakdown = calculate_gst_breakdown(
+        db=db,
+        branch_id=branch_id,
+        room_charges=charges.room_charges or 0,
+        food_charges=charges.food_charges or 0,
+        package_charges=charges.package_charges or 0,
+        service_charges=charges.service_charges or 0,
+        consumables_charges=charges.consumables_charges or 0,
+        inventory_charges=charges.inventory_charges or 0,
+        nights=stay_days,
+        use_night_charges=True,
+        booking_id=booking.id if booking else None
+    )
     
-    room_gst_rate = 0.18
-    if daily_rate < 5000:
-        room_gst_rate = 0.05
-    elif daily_rate < 7500:
-        room_gst_rate = 0.12
+    # Update charges object
+    charges.room_gst = gst_breakdown["room_gst"]
+    charges.food_gst = gst_breakdown["food_gst"]
+    charges.package_gst = gst_breakdown["package_gst"]
+    charges.service_gst = gst_breakdown["service_gst"]
+    charges.consumables_gst = gst_breakdown["consumables_gst"]
+    charges.inventory_gst = gst_breakdown["inventory_gst"]
+    charges.total_gst = gst_breakdown["total_gst"]
     
-    charges.room_gst = (charges.room_charges or 0) * room_gst_rate
-    
-    # Package GST Logic (Tiered)
-    if is_package:
-        p_price = package.price if package else 0
-        p_rate = 0
-        if is_whole_property:
-             p_rate = p_price / max(1, stay_days)
-        else:
-             p_rate = p_price
-        
-        pkg_gst_rate = 0.18
-        if p_rate < 5000: pkg_gst_rate = 0.05
-        elif p_rate < 7500: pkg_gst_rate = 0.12
-        charges.package_gst = (charges.package_charges or 0) * pkg_gst_rate
-    else:
-        charges.package_gst = 0
-
-    charges.food_gst = (charges.food_charges or 0) * 0.05
-    charges.service_gst = (charges.service_charges or 0) * 0.05
-    charges.consumables_gst = (charges.consumables_charges or 0) * 0.05
-    charges.inventory_gst = (charges.inventory_charges or 0) * 0.05
-    charges.asset_damage_gst = 0.0 # Removed as per request (was 0.05)
-    
-    # Total calculation
-    charges.total_gst = sum([charges.room_gst or 0, charges.food_gst or 0, charges.service_gst or 0, charges.package_gst or 0, charges.consumables_gst or 0, charges.inventory_gst or 0, charges.asset_damage_gst or 0])
-    charges.total_due = sum([charges.room_charges or 0, charges.food_charges or 0, charges.service_charges or 0, charges.package_charges or 0, charges.consumables_charges or 0, charges.inventory_charges or 0, charges.asset_damage_charges or 0])
+    charges.total_due = sum([
+        charges.room_charges or 0, 
+        charges.food_charges or 0, 
+        charges.service_charges or 0, 
+        charges.package_charges or 0, 
+        charges.consumables_charges or 0, 
+        charges.inventory_charges or 0, 
+        charges.asset_damage_charges or 0
+    ])
 
     # Mobile Compatibility Mapping (Support for Modernized Flutter UI)
     charges.rent = (charges.room_charges or 0) + (charges.package_charges or 0)
@@ -4084,65 +4112,30 @@ def _calculate_bill_for_entire_booking(db: Session, room_number: str, branch_id:
     total_consumables_charges = charges.consumables_charges or 0
     total_inventory_charges = charges.inventory_charges or 0
 
-    # Calculate GST
-    # Room charges: Slab-based GST based on DAILY rate
-    charges.room_gst = 0.0
-    if not is_package:
-        for room in all_rooms:
-            # Match the single-room pricing logic for GST tiers
-            dynamic_rate = calculate_dynamic_booking_price(db, room.room_type_id, booking.check_in, effective_checkout_date, room_count=1)
-            room_cost = dynamic_rate or ((room.price or 0) * stay_days)
-            daily_rate = room_cost / max(1, stay_days)
-            
-            room_gst_rate = 0.18
-            if daily_rate < 5000:
-                room_gst_rate = 0.05
-            elif daily_rate < 7500:
-                room_gst_rate = 0.12
-            
-            charges.room_gst += room_cost * room_gst_rate
+    # Calculate GST using dynamic helper
+    total_room_nights = stay_days * len(all_rooms) if not is_package else stay_days
+    gst_breakdown = calculate_gst_breakdown(
+        db=db,
+        branch_id=branch_id,
+        room_charges=charges.room_charges or 0,
+        food_charges=charges.food_charges or 0,
+        package_charges=charges.package_charges or 0,
+        service_charges=charges.service_charges or 0,
+        consumables_charges=charges.consumables_charges or 0,
+        inventory_charges=charges.inventory_charges or 0,
+        nights=total_room_nights,
+        use_night_charges=True,
+        booking_id=booking.id if booking else None
+    )
     
-    # Package charges: Same rule as room charges
-    # Determine daily rate for package to find the slab
-    package_daily_rate = 0
-    if is_package:
-        package_daily = 0
-        if is_whole_property:
-            package_daily = (package.price if package else 0) / max(1, stay_days)
-        else:
-            package_daily = (package.price if package else 0)
-        
-        pkg_gst_rate = 0.18
-        if package_daily < 5000: pkg_gst_rate = 0.05
-        elif package_daily < 7500: pkg_gst_rate = 0.12
-        charges.package_gst = (charges.package_charges or 0) * pkg_gst_rate
-    
-    # Food charges: 5% GST always
-    food_charge_amount = charges.food_charges or 0
-    if food_charge_amount > 0:
-        charges.food_gst = food_charge_amount * 0.05
-        
-    # Service GST: Calculate based on individual service rates
-    charges.service_gst = 0.0
-    for ass in unbilled_services:
-        gst_rate = 0.05 # Fixed 5% for all services as per new rule
-        amount = ass.override_charges if ass.override_charges is not None else ass.service.charges
-        charges.service_gst += amount * gst_rate
-        
-    # Consumables GST: 5%
-    if charges.consumables_charges and charges.consumables_charges > 0:
-        charges.consumables_gst = charges.consumables_charges * 0.05
-    
-    # Inventory GST: 18% (default for most inventory items)
-    if charges.inventory_charges and charges.inventory_charges > 0:
-        charges.inventory_gst = charges.inventory_charges * 0.05
-
-    # Asset Damage GST: 0% (Removed as per request)
-    if charges.asset_damage_charges and charges.asset_damage_charges > 0:
-        charges.asset_damage_gst = 0.0
-    
-    # Total GST
-    charges.total_gst = (charges.room_gst or 0) + (charges.food_gst or 0) + (charges.service_gst or 0) + (charges.package_gst or 0) + (charges.consumables_gst or 0) + (charges.inventory_gst or 0) + (charges.asset_damage_gst or 0)
+    # Update charges object
+    charges.room_gst = gst_breakdown["room_gst"]
+    charges.food_gst = gst_breakdown["food_gst"]
+    charges.package_gst = gst_breakdown["package_gst"]
+    charges.service_gst = gst_breakdown["service_gst"]
+    charges.consumables_gst = gst_breakdown["consumables_gst"]
+    charges.inventory_gst = gst_breakdown["inventory_gst"]
+    charges.total_gst = gst_breakdown["total_gst"]
     
     charges.total_due = sum([
         charges.room_charges or 0, 

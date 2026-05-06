@@ -2,7 +2,7 @@
 Accounting Models for Resort Management System
 Chart of Accounts, Ledgers, and Journal Entries
 """
-from sqlalchemy import Column, Integer, String, Float, Boolean, Text, ForeignKey, DateTime, Enum as SQLEnum, JSON
+from sqlalchemy import Column, Integer, String, Float, Boolean, Text, ForeignKey, DateTime, Enum as SQLEnum, JSON, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from datetime import datetime
@@ -24,7 +24,7 @@ class AccountGroup(Base):
     __tablename__ = "account_groups"
     
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, nullable=False, unique=True)  # e.g., "Revenue Accounts", "Expense Accounts"
+    name = Column(String, nullable=False)  # e.g., "Revenue Accounts", "Expense Accounts"
     account_type = Column(SQLEnum(AccountType), nullable=False)
     description = Column(Text, nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
@@ -33,6 +33,10 @@ class AccountGroup(Base):
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False, index=True)
     
     branch = relationship("Branch")
+
+    __table_args__ = (
+        UniqueConstraint('name', 'branch_id', name='_name_branch_uc'),
+    )
 
     
     # Relationships
@@ -45,7 +49,7 @@ class AccountLedger(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)  # e.g., "Room Revenue (Taxable)", "Cash in Hand"
-    code = Column(String, nullable=True, unique=True)  # Optional account code for reference
+    code = Column(String, nullable=True)  # Optional account code for reference
     group_id = Column(Integer, ForeignKey("account_groups.id"), nullable=False)
     module = Column(String, nullable=True)  # e.g., "Booking", "Services", "Purchase"
     description = Column(Text, nullable=True)
@@ -70,6 +74,10 @@ class AccountLedger(Base):
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False, index=True)
     
     branch = relationship("Branch")
+
+    __table_args__ = (
+        UniqueConstraint('name', 'branch_id', name='_ledger_name_branch_uc'),
+    )
 
     
     # Relationships

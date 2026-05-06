@@ -32,6 +32,7 @@ import Inventory from "./pages/Inventory.jsx";
 import Settings from "./pages/Settings.jsx";
 import ActivityLogs from "./pages/ActivityLogs.jsx";
 import Laundry from "./pages/Laundry.jsx";
+import DayAudit from "./pages/DayAudit.jsx";
 
 const getRouterBasename = () => {
   if (typeof window === "undefined") {
@@ -228,6 +229,14 @@ function App() {
               element={
                 <ProtectedRoute requiredPermission="/inventory">
                   <Laundry />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/day-audit"
+              element={
+                <ProtectedRoute requiredPermission="/day-audit">
+                  <DayAudit />
                 </ProtectedRoute>
               }
             />
