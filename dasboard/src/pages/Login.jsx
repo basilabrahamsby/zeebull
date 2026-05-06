@@ -198,17 +198,17 @@ export default function LoginPage() {
       <div className="hidden lg:flex flex-1 relative bg-slate-900 overflow-hidden">
         {/* Animated Business Growth Image 1 */}
         <div 
-          className="absolute inset-0 bg-cover bg-center bg-no-repeat animate-slideshow-1 opacity-0 mix-blend-luminosity"
+          className="absolute inset-0 bg-cover bg-center bg-no-repeat animate-slideshow-1"
           style={{ backgroundImage: "url('/growth-bg1.png')" }}
         />
         {/* Animated Business Growth Image 2 */}
         <div 
-          className="absolute inset-0 bg-cover bg-center bg-no-repeat animate-slideshow-2 opacity-0 mix-blend-luminosity"
+          className="absolute inset-0 bg-cover bg-center bg-no-repeat animate-slideshow-2"
           style={{ backgroundImage: "url('/growth-bg2.png')" }}
         />
         
         {/* Modern Abstract Geometric Background overlays */}
-        <div className="absolute inset-0 opacity-40 mix-blend-color">
+        <div className="absolute inset-0 opacity-30">
             <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 blur-[120px]"></div>
             <div className="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] rounded-full bg-gradient-to-tl from-blue-500 to-teal-400 blur-[150px]"></div>
         </div>
@@ -280,13 +280,13 @@ export default function LoginPage() {
             100% { transform: scale(1) translate(0, 0); }
           }
           @keyframes fade1 {
-            0%, 45% { opacity: 0.6; }
+            0%, 45% { opacity: 0.8; }
             50%, 95% { opacity: 0; }
-            100% { opacity: 0.6; }
+            100% { opacity: 0.8; }
           }
           @keyframes fade2 {
             0%, 45% { opacity: 0; }
-            50%, 95% { opacity: 0.6; }
+            50%, 95% { opacity: 0.8; }
             100% { opacity: 0; }
           }
           .animate-slideshow-1 {
