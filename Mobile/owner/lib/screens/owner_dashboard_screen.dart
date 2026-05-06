@@ -95,7 +95,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
               child: DropdownButtonHideUnderline(
                 child: DropdownButton<String>(
                   value: branchProvider.activeBranchId,
-                  icon: const Icon(Icons.business, color: Colors.green),
+                  icon: const Icon(Icons.business, color: Color(0xFF4F46E5)),
                   onChanged: (String? newValue) {
                     if (newValue != null) {
                       branchProvider.switchBranch(newValue).then((_) => _refreshAllData());
@@ -104,7 +104,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                   items: [
                     const DropdownMenuItem<String>(
                       value: 'all',
-                      child: Text('Enterprise View', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.blue)),
+                      child: Text('Enterprise View', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF4F46E5))),
                     ),
                     ...branchProvider.branches.map<DropdownMenuItem<String>>((Branch branch) {
                       return DropdownMenuItem<String>(
@@ -133,9 +133,9 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                 margin: const EdgeInsets.only(bottom: 16),
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.blue.shade900,
+                  color: const Color(0xFF1E293B), // Slate 800
                   borderRadius: BorderRadius.circular(16),
-                  boxShadow: [BoxShadow(color: Colors.blue.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))]
+                  boxShadow: [BoxShadow(color: const Color(0xFF4F46E5).withOpacity(0.2), blurRadius: 12, offset: const Offset(0, 6))]
                 ),
                 child: Row(
                   children: [
@@ -143,10 +143,10 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text("Occupancy Rate", style: TextStyle(color: Colors.blue.shade100, fontSize: 12)),
+                            Text("Occupancy Rate", style: TextStyle(color: const Color(0xFF94A3B8), fontSize: 12)),
                             Text("${occupancyRate.toStringAsFixed(1)}%", style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)),
                             const SizedBox(height: 8),
-                            Text("Available: ${daily['available_rooms'] ?? roomStats['available'] ?? 0}  •  Occupied: ${roomStats['occupied'] ?? 0}", style: TextStyle(color: Colors.blue.shade200, fontSize: 12)),
+                            Text("Available: ${daily['available_rooms'] ?? roomStats['available'] ?? 0}  •  Occupied: ${roomStats['occupied'] ?? 0}", style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 12)),
                           ],
                         )
                     ),
@@ -156,11 +156,11 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                         sectionsSpace: 0, centerSpaceRadius: 0,
                         sections: totalRooms > 0 
                           ? [
-                              PieChartSectionData(color: Colors.white, value: occupiedRooms.toDouble(), radius: 35, showTitle: false),
-                              PieChartSectionData(color: Colors.blue.shade800, value: (totalRooms - occupiedRooms).toDouble(), radius: 30, showTitle: false),
+                              PieChartSectionData(color: const Color(0xFF4F46E5), value: occupiedRooms.toDouble(), radius: 35, showTitle: false),
+                              PieChartSectionData(color: const Color(0xFF334155), value: (totalRooms - occupiedRooms).toDouble(), radius: 30, showTitle: false),
                             ]
                           : [
-                              PieChartSectionData(color: Colors.blue.shade800.withOpacity(0.5), value: 1, radius: 30, showTitle: false),
+                              PieChartSectionData(color: const Color(0xFF334155).withOpacity(0.5), value: 1, radius: 30, showTitle: false),
                             ],
                       )),
                     )
@@ -434,7 +434,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
   Widget _buildSectionTitle(String title) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
+      child: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
     );
   }
 
