@@ -335,6 +335,7 @@ const RoomTypeModal = ({ onClose, type, isEditing, onSubmit, branches, isEnterpr
     long_weekend_price: type?.long_weekend_price || "",
     holiday_price: type?.holiday_price || "",
     total_inventory: type?.total_inventory || 0,
+    online_inventory: type?.online_inventory ?? "",
     capacity: type?.adults_capacity || 2,
     children_capacity: type?.children_capacity || 0,
     channel_manager_id: type?.channel_manager_id || "",
@@ -453,6 +454,9 @@ const RoomTypeModal = ({ onClose, type, isEditing, onSubmit, branches, isEnterpr
     if (formData.long_weekend_price) data.append("long_weekend_price", formData.long_weekend_price);
     if (formData.holiday_price) data.append("holiday_price", formData.holiday_price);
     data.append("total_inventory", formData.total_inventory || 0);
+    if (formData.online_inventory !== "" && formData.online_inventory !== null) {
+      data.append("online_inventory", formData.online_inventory);
+    }
     data.append("capacity", formData.capacity || 2);
     data.append("children_capacity", formData.children_capacity ?? 0);
     if (formData.channel_manager_id) data.append("channel_manager_id", formData.channel_manager_id);
@@ -599,19 +603,18 @@ const RoomTypeModal = ({ onClose, type, isEditing, onSubmit, branches, isEnterpr
                   </div>
 
                   <div>
-                     <label className="block text-[11px] font-black text-indigo-400 uppercase tracking-tighter mb-1.5 ml-1">Online Inventory <span className="text-red-500">*</span></label>
-                     <div className="relative group">
-                       <i className="fas fa-hotel absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-indigo-500 transition-colors"></i>
-                       <input 
-                        type="number" 
-                        name="total_inventory" 
-                        value={formData.total_inventory} 
-                        onChange={handleChange} 
-                        required 
-                        className="w-full pl-10 pr-4 py-3 border-2 border-gray-100 rounded-2xl focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all font-bold text-gray-800 bg-white/50 focus:bg-white" 
-                        placeholder="Room count" 
-                       />
-                     </div>
+                      <label className="block text-[11px] font-black text-indigo-400 uppercase tracking-tighter mb-1.5 ml-1">Online Inventory <span className="text-rose-500 font-bold ml-1">(OTA Quota)</span></label>
+                      <div className="relative group">
+                        <i className="fas fa-globe absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-indigo-500 transition-colors"></i>
+                        <input 
+                         type="number" 
+                         name="online_inventory" 
+                         value={formData.online_inventory} 
+                         onChange={handleChange} 
+                         className="w-full pl-10 pr-4 py-3 border-2 border-gray-100 rounded-2xl focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all font-bold text-gray-800 bg-white/50 focus:bg-white" 
+                         placeholder="Leave empty for unlimited" 
+                        />
+                      </div>
                      <p className="text-[10px] text-gray-500 mt-2 font-medium flex items-center gap-1">
                        <i className="fas fa-circle-exclamation text-indigo-400 text-[8px]"></i> Visible on booking engine.
                      </p>

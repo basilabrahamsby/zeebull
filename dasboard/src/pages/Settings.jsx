@@ -177,6 +177,10 @@ export default function Settings() {
     // Handle Add Calendar Event
     const handleAddCalendarEvent = async (e) => {
         e.preventDefault();
+        if (calendarForm.start_date && calendarForm.end_date && calendarForm.start_date > calendarForm.end_date) {
+            alert("End Date cannot be before Start Date");
+            return;
+        }
         try {
             await api.post("calendar/", calendarForm);
             alert("Date added to Pricing Calendar successfully");
@@ -671,6 +675,7 @@ export default function Settings() {
                                     <input
                                         type="date"
                                         value={calendarForm.end_date}
+                                        min={calendarForm.start_date}
                                         onChange={(e) => setCalendarForm({ ...calendarForm, end_date: e.target.value })}
                                         className="w-full border-2 border-white rounded-xl px-4 py-2.5 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none shadow-sm transition-all"
                                         required

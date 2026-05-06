@@ -46,6 +46,7 @@ async def aiosell_webhook(
     """
     verify_webhook_auth(request)
     
+    print(f"[AIOSELL WEBHOOK] FULL PAYLOAD: {payload}")
     logger.info(f"[AIOSELL WEBHOOK] Received payload: {payload}")
     
     reservation_id = payload.get("bookingID") or payload.get("bookingId")
@@ -70,82 +71,178 @@ async def aiosell_webhook(
         return {"success": True, "message": f"Ignored action {action}"}
 
 
-def _map_room_type(db: Session, room_code: str, branch_id: int):
-    """Helper to map Aiosell roomCode to Zeebull RoomType"""
+def _map_room_type(db: Session, room_code: str, branch_id: int = None):
+    """Helper to map Aiosell roomCode to Zeebull RoomType, optionally searching across all branches"""
     if not room_code:
         return None
         
-    # 1. Direct ID/CM ID match
-    room_type = db.query(RoomType).filter(
-        RoomType.channel_manager_id == room_code, 
-        RoomType.branch_id == branch_id
-    ).first()
+    clean_code = str(room_code).strip().lower()
     
-    # 2. Case-insensitive name match if CM ID fails
-    if not room_type:
+    # 1. Try with the specific branch first
+    if branch_id:
         room_type = db.query(RoomType).filter(
-            RoomType.name.ilike(room_code.replace("-", " ")),
+            RoomType.channel_manager_id == room_code, 
             RoomType.branch_id == branch_id
         ).first()
         
-    # 3. Fuzzy fallback
+        if not room_type:
+            room_type = db.query(RoomType).filter(
+                RoomType.name.ilike(clean_code.replace("-", " ")),
+                RoomType.branch_id == branch_id
+            ).first()
+            
+        if room_type:
+            return room_type
+
+    # 2. Global search if no specific branch match
+    # Try exact CM ID first globally
+    room_type = db.query(RoomType).filter(RoomType.channel_manager_id == room_code).first()
+    
+    # Try exact name match globally
     if not room_type:
-        room_type = db.query(RoomType).filter(
-            RoomType.name.ilike(f"%{room_code}%"),
-            RoomType.branch_id == branch_id
-        ).first()
+        room_type = db.query(RoomType).filter(RoomType.name.ilike(clean_code.replace("-", " "))).first()
+        
+    # Try fuzzy match globally
+    if not room_type:
+        room_type = db.query(RoomType).filter(RoomType.name.ilike(f"%{clean_code}%")).first()
+        
+    if not room_type:
+        logger.warning(f"[AIOSELL WEBHOOK] Failed to map roomCode '{room_code}' to any internal RoomType globally")
+    else:
+        logger.info(f"[AIOSELL WEBHOOK] Mapped roomCode '{room_code}' to RoomType ID {room_type.id} in Branch {room_type.branch_id}")
         
     return room_type
 
 def _extract_amount(payload: dict) -> float:
-    """Helper to extract total amount from various Aiosell payload formats"""
-    # Try root level first
-    amt = payload.get("totalAmount")
-    if amt is not None:
-        return float(amt)
+    """Helper to extract total amount from various Aiosell/OTA payload formats"""
+    # Try multiple root level keys
+    keys = ["totalAmount", "total_amount", "amount", "total", "grandTotal", "total_price"]
+    for k in keys:
+        val = payload.get(k)
+        if val is not None and not isinstance(val, dict):
+            try:
+                amt = float(val)
+                print(f"[DEBUG-AIOSELL] Found total amount {amt} via key '{k}'")
+                return amt
+            except:
+                continue
         
     # Try nested amount object
     amount_obj = payload.get("amount", {})
-    amt = amount_obj.get("amountAfterTax") or amount_obj.get("amount")
-    if amt is not None:
-        return float(amt)
+    if isinstance(amount_obj, dict):
+        amt = (
+            amount_obj.get("amountAfterTax") or 
+            amount_obj.get("amount") or 
+            amount_obj.get("total") or
+            amount_obj.get("value")
+        )
+        if amt is not None:
+            try:
+                amt_val = float(amt)
+                print(f"[DEBUG-AIOSELL] Found total amount {amt_val} via nested amount object")
+                return amt_val
+            except:
+                pass
         
+    print(f"[DEBUG-AIOSELL] Total amount not found in payload keys: {list(payload.keys())}")
     return 0.0
     
 def _extract_channel(payload: dict) -> str:
     """Helper to extract channel name from various Aiosell/OTA formats"""
-    return (
+    channel = (
         payload.get("channel") or 
         payload.get("channelName") or 
         payload.get("source") or 
         payload.get("segment") or 
         "OTA"
     )
+    # Standardize common values
+    if str(channel).lower() == "direct":
+        return "Direct"
+    return channel
+
+def _extract_room_rate(room_data: dict) -> float:
+    """Helper to extract rate from a room object in the payload"""
+    # 1. Try sellingPrice at room level
+    for k in ["sellingPrice", "sellRate", "rate", "price", "amount"]:
+        if k in room_data and not isinstance(room_data[k], (dict, list)):
+            try:
+                rate = float(room_data[k])
+                print(f"[DEBUG-AIOSELL] Found room rate {rate} via key '{k}'")
+                return rate
+            except:
+                continue
+                
+    # 2. Try prices array
+    prices = room_data.get("prices", [])
+    if prices and isinstance(prices, list):
+        first_price = prices[0]
+        if isinstance(first_price, dict):
+            val = first_price.get("sellRate") or first_price.get("price") or first_price.get("amount")
+            if val is not None:
+                try:
+                    rate = float(val)
+                    print(f"[DEBUG-AIOSELL] Found room rate {rate} via prices array")
+                    return rate
+                except:
+                    pass
+                    
+    print(f"[DEBUG-AIOSELL] Room rate not found in room_data keys: {list(room_data.keys())}")
+    return 0.0
 
 def _handle_new_booking(payload: dict, db: Session, branch_id: int):
     # Check if we already have it
     res_id = payload.get("bookingID") or payload.get("bookingId")
     existing = db.query(Booking).filter(Booking.external_id == res_id).first()
-    if existing:
-        # If it exists, redirect to modify logic to ensure it's up to date
-        return _handle_modify_booking(payload, db)
-        
-    guest = payload.get("guest", {})
-    first_name = str(guest.get("firstName") or "").replace("None", "").strip()
-    last_name = str(guest.get("lastName") or "").replace("None", "").strip()
-    name = f"{first_name} {last_name}".strip() or "Aiosell Guest"
-    email = guest.get("email") or payload.get("email")
+    # Best-effort guest info extraction across multiple possible objects
+    guest_objs = [
+        payload.get("guest"), 
+        payload.get("customer"), 
+        payload.get("primaryGuest"), 
+        payload.get("traveller"), 
+        payload.get("primary_guest"),
+        payload.get("reservation", {}).get("guest"), # Some legacy formats
+    ]
     
-    # Robust phone number extraction
-    phone = (
-        guest.get("phone") or 
-        guest.get("mobile") or 
-        guest.get("mobileNumber") or 
-        guest.get("contactNumber") or
-        payload.get("phone") or 
-        payload.get("mobile") or
-        payload.get("contactNumber")
-    )
+    print(f"[DEBUG-AIOSELL] ROOT KEYS: {list(payload.keys())}")
+    
+    name = "Aiosell Guest"
+    email = None
+    phone = None
+    
+    for i, obj in enumerate(guest_objs):
+        if not obj or not isinstance(obj, dict):
+            continue
+            
+        print(f"[DEBUG-AIOSELL] OBJ {i} KEYS: {list(obj.keys())}")
+        print(f"[DEBUG-AIOSELL] OBJ {i} CONTENT: {obj}")
+            
+        # Try to get name if we don't have a good one yet
+        f_name = str(obj.get("firstName") or obj.get("first_name") or obj.get("givenName") or "").replace("None", "").strip()
+        l_name = str(obj.get("lastName") or obj.get("last_name") or obj.get("surname") or "").replace("None", "").strip()
+        if (f_name or l_name) and name == "Aiosell Guest":
+            name = f"{f_name} {l_name}".strip()
+            
+        # Try to get email if missing
+        if not email:
+            email = obj.get("email") or obj.get("email_address") or obj.get("emailAddress")
+            
+        # Try to get phone if missing
+        if not phone:
+            phone = (
+                obj.get("phone") or 
+                obj.get("mobile") or 
+                obj.get("mobileNumber") or 
+                obj.get("contactNumber") or
+                obj.get("phoneNumber") or
+                obj.get("contact_number")
+            )
+            
+    # Fallback to root level keys if still missing
+    email = email or payload.get("email")
+    phone = phone or payload.get("phone") or payload.get("mobile") or payload.get("contactNumber") or payload.get("phoneNumber")
+    
+    print(f"[DEBUG-AIOSELL] BEST-EFFORT INFO: Name={name}, Email={email}, Phone={phone}")
     
     rooms = payload.get("rooms", [])
     room_type_id = None
@@ -155,6 +252,8 @@ def _handle_new_booking(payload: dict, db: Session, branch_id: int):
         room_type = _map_room_type(db, room_code, branch_id)
         if room_type:
             room_type_id = room_type.id
+            # Override branch_id based on where the room type is found
+            branch_id = room_type.branch_id
             
     # Extract Rate Plan and Price Details
     rate_plan_code = None
@@ -162,13 +261,7 @@ def _handle_new_booking(payload: dict, db: Session, branch_id: int):
     if rooms:
         primary = rooms[0]
         rate_plan_code = primary.get("rateplanCode")
-        
-        # Try to get sellRate from prices array
-        prices = primary.get("prices", [])
-        if prices and isinstance(prices, list):
-            room_rate = float(prices[0].get("sellRate", 0))
-        elif "sellingPrice" in primary:
-            room_rate = float(primary.get("sellingPrice", 0))
+        room_rate = _extract_room_rate(primary)
             
     special_requests = payload.get("specialRequests") or payload.get("notes")
              
@@ -236,10 +329,53 @@ def _handle_modify_booking(payload: dict, db: Session):
     res_id = payload.get("bookingID") or payload.get("bookingId")
     booking = db.query(Booking).filter(Booking.external_id == res_id).first()
     
-    if not booking:
-        # Fallback to creation if branch_id is available (defaulting to 1 for now)
-        logger.warning(f"[AIOSELL WEBHOOK] Modify for non-existent booking {res_id}. Attempting to create.")
-        return _handle_new_booking(payload, db, 1)
+    # Best-effort update Guest Info
+    guest_objs = [
+        payload.get("guest"), 
+        payload.get("customer"), 
+        payload.get("primaryGuest"), 
+        payload.get("traveller"), 
+        payload.get("primary_guest")
+    ]
+    
+    new_email = None
+    new_phone = None
+    new_name = None
+    
+    for obj in guest_objs:
+        if not obj or not isinstance(obj, dict):
+            continue
+            
+        f_name = str(obj.get("firstName") or obj.get("first_name") or obj.get("givenName") or "").replace("None", "").strip()
+        l_name = str(obj.get("lastName") or obj.get("last_name") or obj.get("surname") or "").replace("None", "").strip()
+        if (f_name or l_name) and not new_name:
+            new_name = f"{f_name} {l_name}".strip()
+            
+        if not new_email:
+            new_email = obj.get("email") or obj.get("email_address") or obj.get("emailAddress")
+            
+        if not new_phone:
+            new_phone = (
+                obj.get("phone") or 
+                obj.get("mobile") or 
+                obj.get("mobileNumber") or 
+                obj.get("contactNumber") or
+                obj.get("phoneNumber") or
+                obj.get("contact_number")
+            )
+
+    if new_name:
+        booking.guest_name = new_name
+    
+    booking.guest_email = new_email or payload.get("email") or booking.guest_email
+    booking.guest_mobile = (
+        new_phone or 
+        payload.get("phone") or 
+        payload.get("mobile") or 
+        booking.guest_mobile
+    )
+    
+    print(f"[DEBUG-AIOSELL-MODIFY] BEST-EFFORT UPDATED INFO: Name={booking.guest_name}, Email={booking.guest_email}, Phone={booking.guest_mobile}")
         
     # Apply modifications
     rooms = payload.get("rooms", [])
@@ -257,14 +393,12 @@ def _handle_modify_booking(payload: dict, db: Session):
             room_type = _map_room_type(db, room_code, booking.branch_id)
             if room_type:
                 booking.room_type_id = room_type.id
+                # Update branch if needed (though usually modification stays in branch)
+                booking.branch_id = room_type.branch_id
                 
             # UPDATE RATE AND PRICE
             booking.rate_plan_code = primary.get("rateplanCode")
-            prices = primary.get("prices", [])
-            if prices and isinstance(prices, list):
-                booking.room_rate = float(prices[0].get("sellRate", 0))
-            elif "sellingPrice" in primary:
-                booking.room_rate = float(primary.get("sellingPrice", 0))
+            booking.room_rate = _extract_room_rate(primary)
                 
             booking.special_requests = payload.get("specialRequests") or payload.get("notes")
         except Exception as e:
@@ -275,11 +409,7 @@ def _handle_modify_booking(payload: dict, db: Session):
     booking.source = _extract_channel(payload)
     
     db.commit()
-    logger.info(f"[AIOSELL WEBHOOK] Modified Booking {booking.display_id} from {res_id}")
-    return {"success": True, "message": "Modified"}
-    
-    db.commit()
-    logger.info(f"[AIOSELL WEBHOOK] Modified Booking {booking.display_id} from {res_id}")
+    logger.info(f"[AIOSELL WEBHOOK] Modified Booking {booking.display_id} (External: {res_id}, RoomType: {booking.room_type_id}, Rate: {booking.room_rate})")
     return {"success": True, "message": "Modified"}
 
 def _handle_cancel_booking(payload: dict, db: Session):

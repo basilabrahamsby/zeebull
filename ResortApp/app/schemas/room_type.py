@@ -13,6 +13,7 @@ class RoomTypeBase(BaseModel):
     adults_capacity: int = 2
     children_capacity: int = 0
     channel_manager_id: Optional[str] = None
+    online_inventory: Optional[int] = None
     
     # Images
     image_url: Optional[str] = None
@@ -61,6 +62,7 @@ class RoomTypeUpdate(BaseModel):
     adults_capacity: Optional[int] = None
     children_capacity: Optional[int] = None
     channel_manager_id: Optional[str] = None
+    online_inventory: Optional[int] = None
     
     # Amenities
     air_conditioning: Optional[bool] = None

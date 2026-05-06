@@ -199,10 +199,23 @@ const BookingCalendar = ({ rooms, bookings, roomTypeObjects }) => {
                     <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Total Rooms:</span>
                     <span className="text-xs font-black text-gray-700">{group.totalRooms}</span>
                   </div>
-                  {roomTypeObjects.find(rt => rt.name === group.name)?.total_inventory > 0 && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider">Online:</span>
-                      <span className="text-xs font-black text-emerald-600">{roomTypeObjects.find(rt => rt.name === group.name).total_inventory}</span>
+                  {roomTypeObjects.find(rt => rt.name === group.name) && (
+                    <div className="flex flex-col gap-1">
+                      {/* New OTA Quota field */}
+                      {(roomTypeObjects.find(rt => rt.name === group.name).online_inventory !== null && roomTypeObjects.find(rt => rt.name === group.name).online_inventory !== undefined) ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-bold text-rose-500 uppercase tracking-wider">OTA Quota:</span>
+                          <span className="text-xs font-black text-rose-600">{roomTypeObjects.find(rt => rt.name === group.name).online_inventory}</span>
+                        </div>
+                      ) : (
+                        /* Fallback to legacy total_inventory field if it was being used as quota */
+                        roomTypeObjects.find(rt => rt.name === group.name).total_inventory > 0 && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider">Online:</span>
+                            <span className="text-xs font-black text-emerald-600">{roomTypeObjects.find(rt => rt.name === group.name).total_inventory}</span>
+                          </div>
+                        )
+                      )}
                     </div>
                   )}
                 </div>
@@ -210,8 +223,19 @@ const BookingCalendar = ({ rooms, bookings, roomTypeObjects }) => {
                 {/* Availability Cells */}
                 <div className="flex">
                   {dateRange.map((date, idx) => {
+                    const rtObj = roomTypeObjects.find(rt => rt.name === group.name);
+                    const quota = (rtObj?.online_inventory !== null && rtObj?.online_inventory !== undefined) 
+                                   ? Number(rtObj.online_inventory) 
+                                   : (rtObj?.total_inventory > 0 ? Number(rtObj.total_inventory) : null);
+                    
                     const occupancy = getOccupancyOnDate(group, date);
-                    const availability = group.totalRooms - occupancy;
+                    const physicalAvailable = group.totalRooms - occupancy;
+                    
+                    // Availability is capped by the quota if set
+                    const availability = (quota !== null) 
+                                         ? Math.max(0, Math.min(quota - occupancy, physicalAvailable))
+                                         : physicalAvailable;
+
                     const isSoldOut = availability <= 0;
                     
                     return (
