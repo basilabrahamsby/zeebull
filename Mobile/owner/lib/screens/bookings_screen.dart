@@ -360,7 +360,7 @@ class _BookingsScreenState extends State<BookingsScreen> with SingleTickerProvid
                   // Room Box
                   Container(
                     width: 60,
-                    height: 60,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
                     decoration: BoxDecoration(
                       color: Colors.blueGrey[50],
                       borderRadius: BorderRadius.circular(8),
@@ -380,32 +380,56 @@ class _BookingsScreenState extends State<BookingsScreen> with SingleTickerProvid
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(booking.guestName, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                        const SizedBox(height: 4),
-                        Row(
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 12,
+                          runSpacing: 4,
+                          crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
-                             Icon(Icons.king_bed, size: 14, color: Colors.grey[600]),
-                             const SizedBox(width: 4),
-                             Text(booking.roomType, style: TextStyle(fontSize: 13, color: Colors.grey[800])),
-                             const SizedBox(width: 12),
-                             Icon(Icons.calendar_today, size: 14, color: Colors.grey[600]),
-                             const SizedBox(width: 4),
-                             Text('${_formatDate(booking.checkInDate)} -> ${_formatDate(booking.checkOutDate)}', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.king_bed, size: 14, color: Colors.grey[600]),
+                                const SizedBox(width: 4),
+                                Text(booking.roomType, style: TextStyle(fontSize: 13, color: Colors.grey[800])),
+                              ],
+                            ),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.calendar_today, size: 14, color: Colors.grey[600]),
+                                const SizedBox(width: 4),
+                                Text('${_formatDate(booking.checkInDate)} -> ${_formatDate(booking.checkOutDate)}', style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+                              ],
+                            ),
                           ],
                         ),
-                        const SizedBox(height: 4),
-                         Row(
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 12,
+                          runSpacing: 4,
+                          crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
-                             Icon(Icons.person, size: 14, color: Colors.grey[600]),
-                             const SizedBox(width: 4),
-                             Text('${booking.adults} Adt, ${booking.children} Chd', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-                             const SizedBox(width: 12),
-                             if (booking.isPackage) ...[
-                                const Icon(Icons.redeem, size: 14, color: Colors.purple),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.person, size: 14, color: Colors.grey[600]),
                                 const SizedBox(width: 4),
-                                Text(booking.packageName.isNotEmpty ? booking.packageName : 'Package', 
-                                    style: const TextStyle(fontSize: 12, color: Colors.purple, fontWeight: FontWeight.bold)
-                                ),
-                             ],
+                                Text('${booking.adults} Adt, ${booking.children} Chd', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                              ],
+                            ),
+                            if (booking.isPackage)
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.redeem, size: 14, color: Colors.purple),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    booking.packageName.isNotEmpty ? booking.packageName : 'Package',
+                                    style: const TextStyle(fontSize: 12, color: Colors.purple, fontWeight: FontWeight.bold),
+                                  ),
+                                ],
+                              ),
                           ],
                         ),
                       ],
