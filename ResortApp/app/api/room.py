@@ -63,6 +63,7 @@ def create_room_type(
     children_capacity: int = Form(0),
     extra_bed_price: float = Form(0.0),
     channel_manager_id: Optional[str] = Form(None),
+    online_inventory: Optional[int] = Form(None),
     description: Optional[str] = Form(None),
     air_conditioning: bool = Form(False),
     wifi: bool = Form(False),
@@ -130,6 +131,7 @@ def create_room_type(
         adults_capacity=capacity,
         children_capacity=children_capacity,
         channel_manager_id=channel_manager_id,
+        online_inventory=online_inventory,
         air_conditioning=air_conditioning,
         wifi=wifi,
         bathroom=bathroom,
@@ -209,6 +211,7 @@ def update_room_type(
     children_capacity: Optional[int] = Form(None),
     extra_bed_price: Optional[float] = Form(None),
     channel_manager_id: Optional[str] = Form(None),
+    online_inventory: Optional[int] = Form(None),
     description: Optional[str] = Form(None),
     air_conditioning: Optional[bool] = Form(None),
     wifi: Optional[bool] = Form(None),
@@ -259,6 +262,7 @@ def update_room_type(
     if capacity is not None: db_room_type.adults_capacity = capacity
     if children_capacity is not None: db_room_type.children_capacity = children_capacity
     if channel_manager_id is not None and channel_manager_id != "": db_room_type.channel_manager_id = channel_manager_id
+    if online_inventory is not None: db_room_type.online_inventory = online_inventory
     if air_conditioning is not None: db_room_type.air_conditioning = air_conditioning
     if wifi is not None: db_room_type.wifi = wifi
     if bathroom is not None: db_room_type.bathroom = bathroom
