@@ -196,10 +196,15 @@ export default function LoginPage() {
 
       {/* RIGHT PANEL - Brand Image Area */}
       <div className="hidden lg:flex flex-1 relative bg-slate-900 overflow-hidden">
-        {/* Animated Resort Image Background */}
+        {/* Animated Business Growth Image 1 */}
         <div 
-          className="absolute inset-0 bg-cover bg-center bg-no-repeat animate-kenburns opacity-60 mix-blend-luminosity"
-          style={{ backgroundImage: "url('/login-bg.png')" }}
+          className="absolute inset-0 bg-cover bg-center bg-no-repeat animate-slideshow-1 opacity-0 mix-blend-luminosity"
+          style={{ backgroundImage: "url('/growth-bg1.png')" }}
+        />
+        {/* Animated Business Growth Image 2 */}
+        <div 
+          className="absolute inset-0 bg-cover bg-center bg-no-repeat animate-slideshow-2 opacity-0 mix-blend-luminosity"
+          style={{ backgroundImage: "url('/growth-bg2.png')" }}
         />
         
         {/* Modern Abstract Geometric Background overlays */}
@@ -218,15 +223,15 @@ export default function LoginPage() {
           <div className="max-w-xl">
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-sm font-medium mb-6">
               <Sparkles size={16} className="text-indigo-400" />
-              <span className="text-slate-200">Premium Property Management</span>
+              <span className="text-slate-200">Business Growth & Analytics</span>
             </div>
             
             <h2 className="text-5xl font-bold leading-tight mb-6 text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-300">
-              Elevate Your <br /> Guest Experience
+              Unlock Your <br /> Property's Potential
             </h2>
             
             <p className="text-lg text-slate-300 leading-relaxed font-light border-l-2 border-indigo-500 pl-4 shadow-sm">
-              A comprehensive, intelligent platform designed to streamline operations, maximize revenue, and deliver unforgettable stays.
+              Actionable insights, dynamic reporting, and robust tools to drive revenue, streamline operations, and accelerate business growth.
             </p>
 
             <div className="flex items-center gap-8 mt-12 pt-12 border-t border-white/10">
@@ -274,8 +279,21 @@ export default function LoginPage() {
             50% { transform: scale(1.05) translate(-1%, -1%); }
             100% { transform: scale(1) translate(0, 0); }
           }
-          .animate-kenburns {
-            animation: kenburns 30s ease-in-out infinite;
+          @keyframes fade1 {
+            0%, 45% { opacity: 0.6; }
+            50%, 95% { opacity: 0; }
+            100% { opacity: 0.6; }
+          }
+          @keyframes fade2 {
+            0%, 45% { opacity: 0; }
+            50%, 95% { opacity: 0.6; }
+            100% { opacity: 0; }
+          }
+          .animate-slideshow-1 {
+            animation: kenburns 40s ease-in-out infinite, fade1 40s ease-in-out infinite;
+          }
+          .animate-slideshow-2 {
+            animation: kenburns 40s ease-in-out infinite, fade2 40s ease-in-out infinite;
           }
         `}
       </style>
