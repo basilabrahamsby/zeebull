@@ -444,14 +444,22 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
   Widget _buildAlertCard(String title, String count, IconData icon, Color color, VoidCallback onTap) {
     return InkWell(
       onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
       child: Container(
         padding: const EdgeInsets.all(16),
         width: 150,
-        height: 100,
+        height: 110,
         decoration: BoxDecoration(
-          color: color.withOpacity(0.05),
+          color: Colors.white,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: color.withOpacity(0.1)),
+          border: Border.all(color: Colors.grey.shade100, width: 1.5),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.015),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            )
+          ]
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -459,14 +467,22 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
           children: [
             Row(
               children: [
-                Icon(icon, size: 16, color: color),
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(icon, size: 16, color: color),
+                ),
                 const Spacer(),
-                const Icon(Icons.arrow_outward, size: 12, color: Colors.grey),
+                const Icon(Icons.arrow_outward_rounded, size: 14, color: Color(0xFF94A3B8)),
               ],
             ),
             const Spacer(),
-            Text(count, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: color)),
-            Text(title, style: TextStyle(fontSize: 11, color: Colors.grey.shade700)),
+            Text(count, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: color)),
+            const SizedBox(height: 2),
+            Text(title, style: const TextStyle(fontSize: 11, color: Color(0xFF64748B), fontWeight: FontWeight.w500)),
           ],
         ),
       ),
