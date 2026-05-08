@@ -602,7 +602,22 @@ const RoomTypeModal = ({ onClose, type, isEditing, onSubmit, branches, isEnterpr
                     </div>
                   </div>
 
-                  <div>
+                  <div className="grid grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-[11px] font-black text-gray-400 uppercase tracking-tighter mb-1.5 ml-1">Physical Capacity <span className="text-gray-300 font-normal">(Total Rooms)</span></label>
+                      <div className="relative group">
+                        <i className="fas fa-bed absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-indigo-500 transition-colors"></i>
+                        <input 
+                          type="number" 
+                          name="total_inventory" 
+                          value={formData.total_inventory} 
+                          onChange={handleChange} 
+                          className="w-full pl-10 pr-4 py-3 border-2 border-gray-100 rounded-2xl focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all font-bold text-gray-800 bg-white/50 focus:bg-white" 
+                          placeholder="e.g. 10"
+                        />
+                      </div>
+                    </div>
+                    <div>
                       <label className="block text-[11px] font-black text-indigo-400 uppercase tracking-tighter mb-1.5 ml-1">Online Inventory <span className="text-rose-500 font-bold ml-1">(OTA Quota)</span></label>
                       <div className="relative group">
                         <i className="fas fa-globe absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-indigo-500 transition-colors"></i>
@@ -618,7 +633,8 @@ const RoomTypeModal = ({ onClose, type, isEditing, onSubmit, branches, isEnterpr
                      <p className="text-[10px] text-gray-500 mt-2 font-medium flex items-center gap-1">
                        <i className="fas fa-circle-exclamation text-indigo-400 text-[8px]"></i> Visible on booking engine.
                      </p>
-                  </div>
+                      </div>
+                    </div>
 
                   <div>
                     <label className="block text-[11px] font-black text-indigo-400 uppercase tracking-tighter mb-1.5 ml-1">Channel Manager Code (Aiosell)</label>

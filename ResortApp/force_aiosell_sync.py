@@ -8,7 +8,7 @@ load_dotenv(dotenv_path=env_path)
 
 from app.database import SessionLocal
 from app.models.room import RoomType
-from app.core.aiosell_triggers import trigger_rates_push
+from app.core.aiosell_triggers import trigger_rates_push, trigger_inventory_push
 import logging
 
 # Set up logging to console
@@ -33,6 +33,7 @@ def force_sync_all():
                 logger.info(f"Syncing {rt.name} (ID: {rt.id})...")
                 # Push for 180 days to be safe
                 trigger_rates_push(rt.id, days=180)
+                trigger_inventory_push(rt.id, days=180)
             except Exception as e:
                 logger.error(f"Failed to sync {rt.name}: {e}")
         
