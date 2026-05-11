@@ -886,7 +886,7 @@ const Services = () => {
   };
 
   const [statusChangeTimes, setStatusChangeTimes] = useState({});
-  const [completingBillingStatus, setCompletingBillingStatus] = useState(null); // New State
+
   const [paymentModalReturnsChecked, setPaymentModalReturnsChecked] = useState(false); // New State for Modal Checkbox
 
   const handleStatusChange = async (id, newStatus, skipOrRequestId = false, billingStatus = null, forceReturn = false, paymentMode = null) => {
