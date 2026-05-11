@@ -608,8 +608,8 @@ class CompleteServiceDialog extends StatefulWidget {
   final String requestId;
   final String roomNumber;
   final List<dynamic> refillItems;
-  final Function(List<Map<String, dynamic>> items, int? destId, String? billingStatus) onReturn;
-  final Function(String? billingStatus) onJustComplete;
+  final Function(List<Map<String, dynamic>> items, int? destId, String? billingStatus, String? paymentMode) onReturn;
+  final Function(String? billingStatus, String? paymentMode) onJustComplete;
   final bool isFoodService;
   final String currentBillingStatus;
 
@@ -640,6 +640,8 @@ class _CompleteServiceDialogState extends State<CompleteServiceDialog> {
   List<Map<String, dynamic>> _itemsToReturn = [];
   int? _selectedDestId;
   String? _selectedBillingStatus;
+  String _selectedPaymentMode = 'Cash';
+  final List<String> _paymentModes = ['Cash', 'UPI', 'Card', 'Other'];
 
   @override
   void initState() {
@@ -745,7 +747,7 @@ class _CompleteServiceDialogState extends State<CompleteServiceDialog> {
     final locations = invProvider.locations;
 
     return _PremiumDialogBase(
-      title: "Complete Service",
+      title: widget.isFoodService ? "Complete Food Order" : "Complete Service",
       icon: Icons.check_circle_outline,
       baseColor: const Color(0xFF2E7D32),
       content: SingleChildScrollView(
@@ -838,6 +840,28 @@ class _CompleteServiceDialogState extends State<CompleteServiceDialog> {
                       onChanged: (val) => setState(() => _selectedBillingStatus = val),
                       dense: true,
                     ),
+                    if (_selectedBillingStatus == 'paid')
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text("Mode of Payment *", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
+                            const SizedBox(height: 4),
+                            DropdownButtonFormField<String>(
+                              value: _selectedPaymentMode,
+                              decoration: InputDecoration(
+                                isDense: true,
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                fillColor: Colors.white,
+                                filled: true,
+                              ),
+                              items: _paymentModes.map((mode) => DropdownMenuItem(value: mode, child: Text(mode, style: const TextStyle(fontSize: 13)))).toList(),
+                              onChanged: (val) => setState(() => _selectedPaymentMode = val ?? 'Cash'),
+                            ),
+                          ],
+                        ),
+                      ),
                     RadioListTile<String>(
                       title: const Text("Charge to Room (Unpaid)", style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
                       secondary: const Icon(Icons.receipt_long_outlined, color: Colors.orange, size: 20),
@@ -947,7 +971,7 @@ class _CompleteServiceDialogState extends State<CompleteServiceDialog> {
                   return;
                }
               Navigator.pop(context);
-              widget.onJustComplete(_selectedBillingStatus);
+              widget.onJustComplete(_selectedBillingStatus, _selectedBillingStatus == 'paid' ? _selectedPaymentMode : null);
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.blueGrey, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
             child: const Text("Partial Done"),
@@ -963,10 +987,10 @@ class _CompleteServiceDialogState extends State<CompleteServiceDialog> {
                if (_selectedDestId == null) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Select location"))); return; }
                if (_itemsToReturn.isEmpty) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Add items to return"))); return; }
                Navigator.pop(context);
-               widget.onReturn(_itemsToReturn, _selectedDestId, _selectedBillingStatus);
+               widget.onReturn(_itemsToReturn, _selectedDestId, _selectedBillingStatus, _selectedBillingStatus == 'paid' ? _selectedPaymentMode : null);
             } else {
                Navigator.pop(context);
-               widget.onJustComplete(_selectedBillingStatus);
+               widget.onJustComplete(_selectedBillingStatus, _selectedBillingStatus == 'paid' ? _selectedPaymentMode : null);
             }
           },
           style: ElevatedButton.styleFrom(backgroundColor: Colors.green[700], foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12)),

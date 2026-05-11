@@ -356,9 +356,14 @@ def update_service_request(db: Session, request_id: int, update_data: ServiceReq
         if request.food_order_id:
             food_order = db.query(FoodOrder).filter(FoodOrder.id == request.food_order_id, FoodOrder.branch_id == branch_id).first()
             if food_order:
-                if is_completing:
+                # Only mark as completed if the task is specifically delivery or similar delivery task
+                is_delivery_task = request.request_type in ["food_delivery", "delivery", "room_service"]
+                
+                if is_completing and is_delivery_task:
                     # Mark food order as completed
                     food_order.status = "completed"
+                    
+                    was_paid = food_order.billing_status == "paid"
                     
                     # Use billing_status from update_data if provided, otherwise default to unpaid
                     if update_data.billing_status:
@@ -366,7 +371,30 @@ def update_service_request(db: Session, request_id: int, update_data: ServiceReq
                     elif food_order.billing_status != "paid":
                         food_order.billing_status = "unpaid"
                     
-                    print(f"[INFO] Food order {food_order.id} marked as completed (billing: {food_order.billing_status}) due to delivery service completion")
+                    if update_data.payment_mode:
+                        food_order.payment_method = update_data.payment_mode
+                    
+                    # If order is now paid but wasn't before, record accounting entry
+                    if food_order.billing_status == "paid" and not was_paid:
+                        try:
+                            from app.utils.accounting_helpers import create_food_order_journal_entry
+                            from app.models.room import Room
+                            room = db.query(Room).get(food_order.room_id)
+                            
+                            create_food_order_journal_entry(
+                                db=db,
+                                food_order_id=food_order.id,
+                                amount=food_order.total_with_gst or food_order.amount,
+                                room_number=room.number if room else "Unknown",
+                                branch_id=branch_id,
+                                gst_rate=5.0,
+                                payment_method=update_data.payment_mode or food_order.payment_method
+                            )
+                            print(f"[INFO] Created journal entry for food order {food_order.id} marked as paid via service completion")
+                        except Exception as e:
+                            print(f"[ERROR] Failed to create journal entry for food order {food_order.id}: {e}")
+                    
+                    print(f"[INFO] Food order {food_order.id} marked as completed (billing: {food_order.billing_status}, mode: {update_data.payment_mode}) due to delivery service completion")
                 elif update_data.status == "cancelled":
                     # Mark food order as cancelled
                     food_order.status = "cancelled"

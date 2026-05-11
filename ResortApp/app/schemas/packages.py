@@ -2,6 +2,7 @@ from pydantic import BaseModel, Field, model_validator
 from datetime import date, datetime
 from typing import List, Optional, Union
 from .checkout import CheckoutFull
+from .payment import PaymentOut
 
 
 class PackageImageOut(BaseModel):
@@ -108,6 +109,7 @@ class PackageBookingOut(PackageBookingBase):
     confirmed_at: Optional[datetime] = None
     confirmation_notes: Optional[str] = None
     rooms: List[PackageBookingRoomOut] = Field(default_factory=list)
+    payments: List[PaymentOut] = []
     package: Optional[PackageOut]
     checkout: Optional[CheckoutFull] = None # Support detailed checkout info
     room_type_id: Optional[Union[int, str]] = None

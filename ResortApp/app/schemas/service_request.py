@@ -16,6 +16,7 @@ class ServiceRequestUpdate(BaseModel):
     employee_id: Optional[int] = None
     description: Optional[str] = None
     billing_status: Optional[str] = None
+    payment_mode: Optional[str] = None
     return_location_id: Optional[int] = None
     pickup_location_id: Optional[int] = None
 

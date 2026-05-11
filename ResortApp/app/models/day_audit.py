@@ -24,12 +24,17 @@ class DayAudit(Base):
     opened_at = Column(DateTime(timezone=True), nullable=True)
     opened_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     opening_cash_balance = Column(Float, default=0.0)
+    opening_account_balance = Column(Float, default=0.0)
     opening_notes = Column(Text, nullable=True)
 
     # Day Closing
     closed_at = Column(DateTime(timezone=True), nullable=True)
     closed_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     closing_cash_balance = Column(Float, default=0.0)
+    closing_account_balance = Column(Float, default=0.0)
+    system_expected_cash = Column(Float, default=0.0)
+    system_expected_account = Column(Float, default=0.0)
+    override_reason = Column(Text, nullable=True)
     closing_notes = Column(Text, nullable=True)
 
     # Night Audit Summary — populated automatically at close
@@ -39,6 +44,7 @@ class DayAudit(Base):
     total_gst_collected = Column(Float, default=0.0)
     total_payments_received = Column(Float, default=0.0)
     total_expenses = Column(Float, default=0.0)
+    total_purchases = Column(Float, default=0.0)
     rooms_occupied = Column(Integer, default=0)      # In-house count at close
     new_checkins = Column(Integer, default=0)
     new_checkouts = Column(Integer, default=0)

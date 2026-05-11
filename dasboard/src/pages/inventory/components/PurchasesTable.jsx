@@ -26,6 +26,9 @@ const PurchasesTable = ({ purchases, onPurchaseClick }) => {
                             Payment
                         </th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                            Mode
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                             Total
                         </th>
                     </tr>
@@ -33,7 +36,7 @@ const PurchasesTable = ({ purchases, onPurchaseClick }) => {
                 <tbody className="bg-white divide-y divide-gray-200">
                     {purchases.length === 0 ? (
                         <tr>
-                            <td colSpan="6" className="px-4 py-8 text-center text-gray-500">
+                            <td colSpan="7" className="px-4 py-8 text-center text-gray-500">
                                 No purchases found
                             </td>
                         </tr>
@@ -81,6 +84,11 @@ const PurchasesTable = ({ purchases, onPurchaseClick }) => {
                                             }`}
                                     >
                                         {purchase.payment_status}
+                                    </span>
+                                </td>
+                                <td className="px-4 py-3 text-sm">
+                                    <span className="px-2 py-1 text-xs font-semibold rounded-full bg-indigo-50 text-indigo-700">
+                                        {purchase.payment_method || "Cash"}
                                     </span>
                                 </td>
                                 <td className="px-4 py-3 text-sm font-medium text-gray-900">

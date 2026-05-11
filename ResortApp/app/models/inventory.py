@@ -190,6 +190,7 @@ class PurchaseMaster(Base):
     payment_terms = Column(String, nullable=True)
     payment_status = Column(String, default="pending", nullable=False)  # pending, partial, paid
     payment_method = Column(String, nullable=True)  # Cash, Bank Transfer, UPI, Cheque, etc.
+    payment_date = Column(Date, nullable=True)  # Added missing field for payment tracking
     sub_total = Column(Numeric(10, 2), default=0.0, nullable=False)
     cgst = Column(Numeric(10, 2), default=0.0, nullable=False)  # Central GST
     sgst = Column(Numeric(10, 2), default=0.0, nullable=False)  # State GST

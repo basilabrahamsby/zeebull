@@ -5,7 +5,7 @@ import api from "../services/api";
 import API from "../services/api";
 import { Bar, Line } from "react-chartjs-2";
 import "chart.js/auto";
-import { ChefHat, X, Package, Home, UtensilsCrossed, Truck, CreditCard, CheckCircle, XCircle, Clock, TrendingUp, Plus, Trash2, ShoppingCart } from "lucide-react";
+import { ChefHat, X, Package, Home, UtensilsCrossed, Truck, CreditCard, CheckCircle, XCircle, Clock, TrendingUp, Plus, Trash2, ShoppingCart, Printer } from "lucide-react";
 import CountUp from "react-countup";
 import { toast } from "react-hot-toast";
 import { getImageUrl } from "../utils/imageUtils";
@@ -101,8 +101,10 @@ export default function FoodOrders() {
   const [showDeliveryRequestModal, setShowDeliveryRequestModal] = useState(null);
   const [deliveryRequestText, setDeliveryRequestText] = useState("");
   const [showCompleteModal, setShowCompleteModal] = useState(null);
+  const [showRequestCompleteModal, setShowRequestCompleteModal] = useState(null);
   const [viewingFoodItemDetails, setViewingFoodItemDetails] = useState(null);
   const [paymentStatus, setPaymentStatus] = useState("unpaid");
+  const [paymentMode, setPaymentMode] = useState("Cash");
   const [paymentFilter, setPaymentFilter] = useState("");
 
   // Food Management states (from FoodCategory.jsx)
@@ -696,24 +698,58 @@ export default function FoodOrders() {
 
   // Update request status
   const handleUpdateRequestStatus = async (requestId, newStatus) => {
-    try {
-      let billingStatus = null;
-      if (newStatus === "completed") {
-        const choice = window.prompt("Is this order Paid or Unpaid? (Type 'paid' or 'unpaid')", "unpaid");
-        if (choice === null) return; // Cancelled
-        billingStatus = choice.toLowerCase() === "paid" ? "paid" : "unpaid";
-      }
+    // Use loose comparison for IDs to avoid string/number mismatch
+    const request = foodOrderRequests.find(r => String(r.id) === String(requestId));
 
+    if (!request) {
+      console.error("Could not find request with ID:", requestId);
+      return;
+    }
+
+    // If completing a request that has a linked food order (object or ID), always show the modal 
+    // so the user can verify/set payment status and mode.
+    if (newStatus === "completed" && (request.food_order_id || request.food_order)) {
+      const order = request.food_order || {};
+      setPaymentStatus(order.billing_status === "paid" ? "paid" : "unpaid");
+      setPaymentMode(order.payment_method || "Cash");
+      setShowRequestCompleteModal(request);
+      return;
+    }
+
+    try {
       await api.put(`/service-requests/${requestId}`, {
-        status: newStatus,
-        billing_status: billingStatus
+        status: newStatus
       });
-      toast.success(`Request status updated to ${newStatus}${billingStatus ? ` (${billingStatus})` : ""} successfully!`);
+      toast.success(`Status updated to ${newStatus}`);
       fetchFoodOrderRequests();
       fetchAll();
     } catch (error) {
-      console.error("Failed to update request status:", error);
-      toast.error("Failed to update request status.");
+      console.error("Failed to update status:", error);
+      toast.error("Failed to update status");
+    }
+  };
+
+  // Add handler for completing requests via modal
+  const handleCompleteRequest = async () => {
+    if (!showRequestCompleteModal) return;
+
+    const request = showRequestCompleteModal;
+    try {
+      await api.put(`/service-requests/${request.id}`, {
+        status: "completed",
+        billing_status: paymentStatus,
+        payment_mode: paymentStatus === "paid" ? paymentMode : null
+      });
+
+      toast.success(`Request marked as completed (${paymentStatus})`);
+      setShowRequestCompleteModal(null);
+      setPaymentStatus("unpaid");
+      setPaymentMode("Cash");
+      fetchFoodOrderRequests();
+      fetchAll();
+    } catch (error) {
+      console.error("Failed to complete request:", error);
+      toast.error("Failed to complete request.");
     }
   };
 
@@ -1335,12 +1371,15 @@ export default function FoodOrders() {
     // Optimistic update
     setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: "completed", billing_status: paymentStatus } : o));
     setShowCompleteModal(null);
+    const mode = paymentMode; // Capture current mode before reset
     setPaymentStatus("unpaid");
+    setPaymentMode("Cash");
 
     try {
       await api.put(`/food-orders/${orderId}`, {
         status: "completed",
-        billing_status: paymentStatus
+        billing_status: paymentStatus,
+        payment_method: paymentStatus === "paid" ? mode : null
       });
 
       toast.success("Order completed successfully!");
@@ -1358,14 +1397,23 @@ export default function FoodOrders() {
 
   const handleTogglePaymentStatus = async (order) => {
     const newBillingStatus = order.billing_status === "paid" ? "unpaid" : "paid";
+
+    if (newBillingStatus === "paid") {
+      // If marking as paid, open the modal to select payment mode
+      setPaymentStatus("paid");
+      setPaymentMode("Cash");
+      setShowCompleteModal(order);
+      return;
+    }
+
     try {
-      // Optimistic update
-      setOrders(prev => prev.map(o => o.id === order.id ? { ...o, billing_status: newBillingStatus } : o));
+      // Optimistic update for unpaying
+      setOrders(prev => prev.map(o => o.id === order.id ? { ...o, billing_status: "unpaid" } : o));
 
       await api.put(`/food-orders/${order.id}`, {
-        billing_status: newBillingStatus
+        billing_status: "unpaid"
       });
-      toast.success(`Order marked as ${newBillingStatus}`);
+      toast.success(`Order marked as unpaid`);
       fetchOrders();
       if (activeTab === "dashboard") {
         fetchAllOrdersForDashboard();
@@ -1375,6 +1423,98 @@ export default function FoodOrders() {
       toast.error("Failed to update billing status.");
       fetchOrders(); // Revert
     }
+  };
+
+  const handlePrintOrder = (order) => {
+    const roomData = rooms.find((r) => r.id === order.room_id);
+    const roomNumber = roomData?.number || roomData?.room_number || order.room_number || order.room_id;
+    const printWindow = window.open("", "_blank", "width=800,height=600");
+
+    const itemsHtml = (order.items || []).map(item => `
+      <tr>
+        <td style="padding: 8px; border-bottom: 1px solid #eee;">${item.food_item_name}</td>
+        <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: center;">${item.quantity}</td>
+        <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">₹${(item.price || 0).toLocaleString()}</td>
+        <td style="padding: 8px; border-bottom: 1px solid #eee; text-align: right;">₹${(item.subtotal || 0).toLocaleString()}</td>
+      </tr>
+    `).join("");
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Invoice - Order #${order.id}</title>
+          <style>
+            body { font-family: sans-serif; padding: 40px; color: #333; }
+            .header { text-align: center; border-bottom: 2px solid #4f46e5; padding-bottom: 20px; margin-bottom: 30px; }
+            .resort-name { font-size: 24px; font-bold; color: #4f46e5; margin-bottom: 5px; }
+            .details { display: flex; justify-content: space-between; margin-bottom: 30px; }
+            table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+            th { background-color: #f9fafb; padding: 12px 8px; text-align: left; border-bottom: 2px solid #eee; }
+            .total-section { text-align: right; border-top: 2px solid #eee; padding-top: 20px; }
+            .total-row { display: flex; justify-content: flex-end; gap: 40px; margin-bottom: 10px; }
+            .grand-total { font-size: 20px; font-weight: bold; color: #4f46e5; }
+            @media print { .no-print { display: none; } }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="resort-name">ORCHID RESORT</div>
+            <div>FOOD & BEVERAGE INVOICE</div>
+          </div>
+          
+          <div class="details">
+            <div>
+              <p><strong>Order ID:</strong> #${order.id}</p>
+              <p><strong>Room:</strong> ${roomNumber}</p>
+              <p><strong>Guest:</strong> ${order.guest_name || 'N/A'}</p>
+            </div>
+            <div style="text-align: right;">
+              <p><strong>Date:</strong> ${formatDateIST(order.created_at)}</p>
+              <p><strong>Status:</strong> ${order.billing_status.toUpperCase()}</p>
+              <p><strong>Payment Mode:</strong> ${order.payment_method || 'Cash'}</p>
+            </div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th style="text-align: center;">Qty</th>
+                <th style="text-align: right;">Price</th>
+                <th style="text-align: right;">Subtotal</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${itemsHtml}
+            </tbody>
+          </table>
+
+          <div class="total-section">
+            <div class="total-row">
+              <span>Subtotal:</span>
+              <span>₹${(order.amount || 0).toLocaleString()}</span>
+            </div>
+            <div class="total-row">
+              <span>GST (5%):</span>
+              <span>₹${(order.gst_amount || 0).toLocaleString()}</span>
+            </div>
+            <div class="total-row grand-total">
+              <span>Grand Total:</span>
+              <span>₹${(order.total_with_gst || order.amount).toLocaleString()}</span>
+            </div>
+          </div>
+
+          <div style="margin-top: 50px; text-align: center; font-size: 12px; color: #999;">
+            <p>Thank you for dining with us!</p>
+          </div>
+
+          <div class="no-print" style="margin-top: 30px; text-align: center;">
+            <button onclick="window.print()" style="padding: 10px 20px; background: #4f46e5; color: white; border: none; rounded: 5px; cursor: pointer;">Print Invoice</button>
+          </div>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
   };
 
   const handleRaiseDeliveryRequest = (order) => {
@@ -2520,15 +2660,22 @@ export default function FoodOrders() {
                               {order.order_type === "room_service" ? "Room Service" : "Dine In"}
                             </span>
                             {normalizedStatus !== "cancelled" && (
-                              <span
-                                className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-1 shadow-sm border ${order.billing_status === "paid"
-                                  ? "bg-emerald-500 text-white border-emerald-600"
-                                  : "bg-red-600 text-white border-red-700"
-                                  }`}
-                              >
-                                {order.billing_status === "paid" ? <CheckCircle size={10} /> : <XCircle size={10} />}
-                                {order.billing_status === "paid" ? "PAID" : "UNPAID"}
-                              </span>
+                              <div className="flex items-center gap-1.5">
+                                <span
+                                  className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-1 shadow-sm border ${order.billing_status === "paid"
+                                    ? "bg-emerald-500 text-white border-emerald-600"
+                                    : "bg-red-600 text-white border-red-700"
+                                    }`}
+                                >
+                                  {order.billing_status === "paid" ? <CheckCircle size={10} /> : <XCircle size={10} />}
+                                  {order.billing_status === "paid" ? "PAID" : "UNPAID"}
+                                </span>
+                                {order.billing_status === "paid" && (
+                                  <span className="px-2 py-1 bg-white text-emerald-700 rounded-full text-[10px] font-black border border-emerald-200 shadow-sm uppercase">
+                                    {order.payment_method || 'Cash'}
+                                  </span>
+                                )}
+                              </div>
                             )}
                             <span
                               className={`px-2.5 py-1 rounded-full text-xs font-semibold ${statusColors[normalizedStatus] || "bg-gray-100 text-gray-800"
@@ -2610,10 +2757,9 @@ export default function FoodOrders() {
                             <div className="flex flex-col">
                               <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">Order Total</span>
                               <span className={`text-[10px] font-black uppercase ${order.billing_status === 'paid' ? 'text-emerald-600' : 'text-red-600'}`}>
-                                {order.billing_status === 'paid' ? 'Settled' : 'Unpaid - Due'}
-                              </span>
-                            </div>
-                            <span className="text-xl font-bold text-indigo-600">₹{parseFloat(order.amount || 0).toLocaleString('en-IN')}</span>
+                               {order.billing_status === 'paid' ? `Settled - ${order.payment_method || 'Cash'}` : 'Unpaid - Due'}
+                              </span>                            </div>
+                            <span className="text-xl font-bold text-indigo-600">₹{parseFloat(order.total_with_gst || order.amount || 0).toLocaleString('en-IN')}</span>
                           </div>
                         </div>
                         {/* Cost and Profit (Estimated Cost for all orders) */}
@@ -2655,13 +2801,22 @@ export default function FoodOrders() {
 
                         {/* Actions */}
                         <div className="space-y-2">
-                          <button
-                            onClick={() => handleViewIngredients(order)}
-                            className="w-full bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-sm font-medium px-3 py-2 rounded-lg transition-colors flex items-center justify-center gap-2"
-                          >
-                            <ChefHat size={16} />
-                            View Ingredients
-                          </button>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleViewIngredients(order)}
+                              className="flex-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-sm font-medium px-3 py-2 rounded-lg transition-colors flex items-center justify-center gap-2 border border-indigo-100"
+                            >
+                              <ChefHat size={16} />
+                              Ingredients
+                            </button>
+                            <button
+                              onClick={() => handlePrintOrder(order)}
+                              className="flex-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-sm font-medium px-3 py-2 rounded-lg transition-colors flex items-center justify-center gap-2 border border-emerald-100"
+                            >
+                              <Printer size={16} />
+                              Print Bill
+                            </button>
+                          </div>
 
                           {normalizedStatus === "completed" && (
                             <button
@@ -2915,80 +3070,6 @@ export default function FoodOrders() {
           );
         })()}
 
-        {/* Complete Order Modal */}
-        {showCompleteModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full">
-              <div className="bg-indigo-600 text-white p-6 rounded-t-2xl">
-                <h3 className="text-xl font-bold">Complete Food Order</h3>
-                <p className="text-indigo-100 mt-1">
-                  Order #{showCompleteModal.id} | Room: {rooms.find(r => r.id === showCompleteModal.room_id)?.number || showCompleteModal.room_id}
-                </p>
-              </div>
-              <div className="p-6 space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Payment Status *
-                  </label>
-                  {parseFloat(showCompleteModal.amount || 0) > 0 ? (
-                    <div className="grid grid-cols-2 gap-3">
-                      <button
-                        type="button"
-                        onClick={() => setPaymentStatus("paid")}
-                        className={`p-3 border-2 rounded-xl transition-all ${paymentStatus === "paid"
-                          ? "border-green-500 bg-green-50 text-green-700"
-                          : "border-gray-300 hover:border-green-300 text-gray-700"
-                          }`}
-                      >
-                        <span className="font-semibold">Paid</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setPaymentStatus("unpaid")}
-                        className={`p-3 border-2 rounded-xl transition-all ${paymentStatus === "unpaid"
-                          ? "border-red-500 bg-red-50 text-red-700"
-                          : "border-gray-300 hover:border-red-300 text-gray-700"
-                          }`}
-                      >
-                        <span className="font-semibold">Unpaid</span>
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="p-3 bg-green-50 border border-green-200 rounded-xl text-center">
-                      <span className="font-semibold text-green-700">Complimentary / Package Included</span>
-                      <p className="text-xs text-green-600 mt-1">No payment required.</p>
-                    </div>
-                  )}
-                </div>
-                {showCompleteModal.order_type === "room_service" && (
-                  <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
-                    <p className="text-sm text-purple-700">
-                      <strong>Note:</strong> A delivery service request will be automatically created for this room service order.
-                    </p>
-                  </div>
-                )}
-                <div className="flex gap-3 pt-2">
-                  <button
-                    onClick={() => {
-                      setShowCompleteModal(null);
-                      setPaymentStatus("unpaid");
-                    }}
-                    className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold px-4 py-2 rounded-lg transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleCompleteOrder}
-                    className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-4 py-2 rounded-lg transition-colors"
-                  >
-                    Complete Order
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Requested Orders Tab */}
         {activeTab === "requests" && (
           <div className="space-y-6">
@@ -3167,6 +3248,14 @@ export default function FoodOrders() {
                                   className="bg-purple-500 hover:bg-purple-600 text-white text-xs py-1 px-3 rounded transition-colors"
                                 >
                                   Complete
+                                </button>
+                              )}
+                              {request.status === "completed" && request.food_order?.billing_status === "unpaid" && (
+                                <button
+                                  onClick={() => handleTogglePaymentStatus(request.food_order)}
+                                  className="bg-emerald-500 hover:bg-emerald-600 text-white text-xs py-1 px-3 rounded transition-colors"
+                                >
+                                  Mark as Paid
                                 </button>
                               )}
                               {!request.employee_id && request.status !== "pending" && (
@@ -4156,6 +4245,227 @@ export default function FoodOrders() {
             </div>
           </div>
         )}
+
+        {/* --- Global Modals (Rendered outside tabs) --- */}
+
+        {/* Complete Order Modal (from orders list) */}
+        {showCompleteModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full animate-in fade-in zoom-in-95 duration-200 overflow-hidden">
+              <div className="bg-indigo-600 text-white p-6">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h3 className="text-xl font-bold">Complete Food Order</h3>
+                    <p className="text-indigo-100 mt-1 text-sm font-medium">
+                      Order #{showCompleteModal.id} | Room: {rooms.find(r => r.id === showCompleteModal.room_id)?.number || showCompleteModal.room_id}
+                    </p>
+                    <p className="text-indigo-200 text-[10px] mt-1 uppercase tracking-wider font-bold">
+                      Created: {showCompleteModal.created_at ? formatDateTimeIST(showCompleteModal.created_at) : new Date().toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-xs font-bold text-indigo-200 block uppercase">Total Amount</span>
+                    <span className="text-2xl font-black">₹{parseFloat(showCompleteModal.total_with_gst || showCompleteModal.amount || 0).toLocaleString('en-IN')}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="p-6 space-y-4">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-3">
+                    Payment Status *
+                  </label>
+                  {parseFloat(showCompleteModal.total_with_gst || showCompleteModal.amount || 0) > 0 ? (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-2 gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setPaymentStatus("paid")}
+                          className={`p-3 border-2 rounded-xl transition-all ${paymentStatus === "paid"
+                            ? "border-green-500 bg-green-50 text-green-700 shadow-sm"
+                            : "border-gray-200 hover:border-green-200 text-gray-600"
+                            }`}
+                        >
+                          <span className="font-bold">Paid</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPaymentStatus("unpaid")}
+                          className={`p-3 border-2 rounded-xl transition-all ${paymentStatus === "unpaid"
+                            ? "border-red-500 bg-red-50 text-red-700 shadow-sm"
+                            : "border-gray-200 hover:border-red-200 text-gray-600"
+                            }`}
+                        >
+                          <span className="font-bold">Unpaid</span>
+                        </button>
+                      </div>
+
+                      {paymentStatus === "paid" && (
+                        <div className="animate-in slide-in-from-top-2 duration-300">
+                          <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">
+                            Mode of Payment
+                          </label>
+                          <div className="grid grid-cols-2 gap-2">
+                            {["Cash", "UPI", "Card", "Other"].map((mode) => (
+                              <button
+                                key={mode}
+                                type="button"
+                                onClick={() => setPaymentMode(mode)}
+                                className={`py-2 px-3 border rounded-xl text-sm font-bold transition-all ${paymentMode === mode
+                                  ? "bg-indigo-600 text-white border-indigo-600 shadow-md"
+                                  : "bg-white text-gray-500 border-gray-100 hover:bg-gray-50"
+                                  }`}
+                              >
+                                {mode}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="p-4 bg-green-50 border border-green-100 rounded-xl text-center shadow-sm">
+                      <span className="font-black text-green-700 text-xs uppercase tracking-wider">Free / Package Order</span>
+                      <p className="text-xs text-green-600 mt-1 font-medium">No payment required for this service.</p>
+                    </div>
+                  )}
+                </div>
+                {showCompleteModal.order_type === "room_service" && (
+                  <div className="bg-purple-50 border border-purple-100 rounded-xl p-3 flex gap-3 items-center">
+                    <div className="bg-white p-2 rounded-lg shadow-sm text-purple-600">
+                      <Truck size={16} />
+                    </div>
+                    <p className="text-[10px] text-purple-700 font-medium leading-tight">
+                      A delivery service request will be automatically created.
+                    </p>
+                  </div>
+                )}
+                <div className="flex gap-3 pt-2">
+                  <button
+                    onClick={() => {
+                      setShowCompleteModal(null);
+                      setPaymentStatus("unpaid");
+                    }}
+                    className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold py-3 rounded-xl transition-colors text-sm"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleCompleteOrder}
+                    className="flex-[2] bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl shadow-lg shadow-indigo-100 transition-all text-sm"
+                  >
+                    Confirm & Complete
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Complete Request Modal (from Food Order Requests table) */}
+        {showRequestCompleteModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full animate-in fade-in zoom-in-95 duration-200 overflow-hidden">
+              <div className="bg-purple-600 text-white p-6">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h3 className="text-xl font-bold">Complete Food Request</h3>
+                    <p className="text-purple-100 mt-1 text-sm font-medium">
+                      Request #{showRequestCompleteModal.id} | Room: {showRequestCompleteModal.room_number || showRequestCompleteModal.room?.number || "N/A"}
+                    </p>
+                    <p className="text-purple-200 text-[10px] mt-1 uppercase tracking-wider font-bold">
+                      Created: {showRequestCompleteModal.created_at ? formatDateTimeIST(showRequestCompleteModal.created_at) : new Date().toLocaleString()}
+                    </p>
+                  </div>
+                  {showRequestCompleteModal.food_order && (
+                    <div className="text-right">
+                      <span className="text-xs font-bold text-purple-200 block uppercase">Order Total</span>
+                      <span className="text-2xl font-black">₹{parseFloat(showRequestCompleteModal.food_order.total_with_gst || showRequestCompleteModal.food_order.amount || 0).toLocaleString('en-IN')}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="p-6 space-y-4">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-3">
+                    Update Payment Status
+                  </label>
+                  {(showRequestCompleteModal.food_order_id || showRequestCompleteModal.food_order) ? (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-2 gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setPaymentStatus("paid")}
+                          className={`p-3 border-2 rounded-xl transition-all ${paymentStatus === "paid"
+                            ? "border-green-500 bg-green-50 text-green-700 shadow-sm"
+                            : "border-gray-200 hover:border-green-200 text-gray-600"
+                            }`}
+                        >
+                          <span className="font-bold">Paid</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPaymentStatus("unpaid")}
+                          className={`p-3 border-2 rounded-xl transition-all ${paymentStatus === "unpaid"
+                            ? "border-red-500 bg-red-50 text-red-700 shadow-sm"
+                            : "border-gray-200 hover:border-red-200 text-gray-600"
+                            }`}
+                        >
+                          <span className="font-bold">Unpaid</span>
+                        </button>
+                      </div>
+
+                      {paymentStatus === "paid" && (
+                        <div className="animate-in slide-in-from-top-2 duration-300">
+                          <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">
+                            Mode of Payment
+                          </label>
+                          <div className="grid grid-cols-2 gap-2">
+                            {["Cash", "UPI", "Card", "Other"].map((mode) => (
+                              <button
+                                key={mode}
+                                type="button"
+                                onClick={() => setPaymentMode(mode)}
+                                className={`py-2 px-3 border rounded-xl text-sm font-bold transition-all ${paymentMode === mode
+                                  ? "bg-purple-600 text-white border-purple-600 shadow-md"
+                                  : "bg-white text-gray-500 border-gray-100 hover:bg-gray-50"
+                                  }`}
+                              >
+                                {mode}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="p-4 bg-gray-50 border border-gray-100 rounded-xl text-center">
+                      <p className="text-xs text-gray-500 font-medium">This request is not linked to a specific billable order.</p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    onClick={() => {
+                      setShowRequestCompleteModal(null);
+                      setPaymentStatus("unpaid");
+                    }}
+                    className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold py-3 rounded-xl transition-colors text-sm"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleCompleteRequest}
+                    className="flex-[2] bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 rounded-xl shadow-lg shadow-purple-100 transition-all text-sm"
+                  >
+                    Confirm & Complete
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
       </div>
     </DashboardLayout >
   );

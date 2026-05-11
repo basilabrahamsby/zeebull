@@ -303,6 +303,8 @@ class PurchaseMasterBase(BaseModel):
     gst_number: Optional[str] = None
     payment_terms: Optional[str] = None
     payment_status: str = "pending"
+    payment_method: Optional[str] = None
+    payment_date: Optional[date] = None  # Added missing field
     destination_location_id: Optional[int] = None
     notes: Optional[str] = None
     status: str = "draft"
@@ -322,7 +324,8 @@ class PurchaseMasterUpdate(BaseModel):
     gst_number: Optional[str] = None
     payment_terms: Optional[str] = None
     payment_status: Optional[str] = None
-    payment_method: Optional[str] = None  # Added missing field
+    payment_method: Optional[str] = None
+    payment_date: Optional[date] = None  # Added missing field
     status: Optional[str] = None
     destination_location_id: Optional[int] = None
     notes: Optional[str] = None
@@ -590,6 +593,13 @@ class LocationUpdate(BaseModel):
     is_inventory_point: Optional[bool] = None
     description: Optional[str] = None
     is_active: Optional[bool] = None
+
+    @field_validator('parent_location_id', mode='before')
+    @classmethod
+    def empty_str_to_none(cls, v):
+        if v == '' or v is None:
+            return None
+        return int(v)
 
 
 class LocationOut(LocationBase):

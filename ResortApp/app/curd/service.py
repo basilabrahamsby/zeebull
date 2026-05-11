@@ -1047,9 +1047,36 @@ def update_assigned_service_status(db: Session, assigned_id: int, update_data: A
                                 # Update order status to completed if service is completed
                                 if new_status == "completed":
                                     food_order.status = "completed"
+                                
+                                was_paid = food_order.billing_status == "paid"
+                                
                                 # Update billing status
                                 food_order.billing_status = current_billing
-                                print(f"[INFO] Auto-updated FoodOrder {food_order.id} status/billing based on sync")
+                                
+                                if update_data.payment_mode:
+                                    food_order.payment_method = update_data.payment_mode
+                                    
+                                # If order is now paid but wasn't before, record accounting entry
+                                if food_order.billing_status == "paid" and not was_paid:
+                                    try:
+                                        from app.utils.accounting_helpers import create_food_order_journal_entry
+                                        from app.models.room import Room
+                                        room = db.query(Room).get(food_order.room_id)
+                                        
+                                        create_food_order_journal_entry(
+                                            db=db,
+                                            food_order_id=food_order.id,
+                                            amount=food_order.total_with_gst or food_order.amount,
+                                            room_number=room.number if room else "Unknown",
+                                            branch_id=assigned.branch_id,
+                                            gst_rate=5.0,
+                                            payment_method=update_data.payment_mode or food_order.payment_method
+                                        )
+                                        print(f"[INFO] Created journal entry for food order {food_order.id} marked as paid via assigned sync")
+                                    except Exception as e:
+                                        print(f"[ERROR] Failed to create journal entry for food order {food_order.id}: {e}")
+                                    
+                                print(f"[INFO] Auto-updated FoodOrder {food_order.id} status/billing/mode based on sync")
                         except Exception as fo_err:
                             print(f"[WARNING] Failed to update linked FoodOrder: {fo_err}")
             

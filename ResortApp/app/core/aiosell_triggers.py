@@ -7,6 +7,7 @@ from app.models.room import RoomType, Room
 from app.models.booking import Booking, BookingRoom
 from app.models.booking import Booking, BookingRoom
 from app.core.aiosell_client import push_inventory, push_rate, batch_push_inventory, batch_push_rates
+from app.utils.aiosell_config import is_aiosell_active
 
 logger = logging.getLogger(__name__)
 
@@ -37,8 +38,9 @@ def _calculate_availability_for_date(db: Session, room_type_id: int, target_date
         Room.status != "Deleted"
     ).count()
 
-    # Internal capacity: prefer total_inventory field, else count physical rooms
-    capacity = room_type.total_inventory if (room_type.total_inventory and room_type.total_inventory > 0) else total_physical
+    # Internal capacity: use the actual physical room count (non-deleted)
+    # This ensures that inventory pushed to Aiosell matches the actual rooms defined in the system.
+    capacity = total_physical
 
     # Active booking statuses — match exact DB values (case-sensitive)
     ACTIVE_STATUSES = ["Booked", "booked", "checked-in", "Checked-in", "Confirmed", "confirmed", "Occupied", "occupied"]
@@ -88,6 +90,9 @@ def trigger_inventory_push(room_type_id: int, days: int = 180):
     Calculates availability and PUSHES directly to Aiosell.
     Designed to be run as a BackgroundTask.
     """
+    if not is_aiosell_active():
+        return
+
     db = SessionLocal()
     try:
         room_type = db.query(RoomType).filter(RoomType.id == room_type_id).first()
@@ -151,6 +156,9 @@ def trigger_rates_push(room_type_id: int, days: int = 90):
     2. Weekend Price (Fri/Sat nights)
     3. Holiday/Long Weekend overrides from Pricing Calendar
     """
+    if not is_aiosell_active():
+        return
+
     db = SessionLocal()
     try:
         from app.models.room import RatePlan
@@ -273,6 +281,9 @@ def trigger_restrictions_push(room_type_id: int, stop_sell: bool = False, min_st
     Pushes Stop Sell and other restrictions directly to Aiosell.
     Designed to be run as a BackgroundTask.
     """
+    if not is_aiosell_active():
+        return
+
     db = SessionLocal()
     try:
         room_type = db.query(RoomType).filter(RoomType.id == room_type_id).first()

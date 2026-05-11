@@ -45,6 +45,167 @@ Card.displayName = 'Card';
 
 const COLORS = ["#4F46E5", "#6366F1", "#A78BFA", "#F472B6"];
 
+// Utility for currency formatting
+const formatCurrency = (amount) => {
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    maximumFractionDigits: 2
+  }).format(amount || 0);
+};
+
+// --- Missing Component Re-implementation ---
+const InventoryRecoveryModal = ({ assignedServiceId, requestId, onClose, onComplete }) => {
+  const [inventory, setInventory] = useState([]);
+  const [returnQtys, setReturnQuantities] = useState({});
+  const [damageQtys, setDamageQuantities] = useState({});
+  const [returnLocs, setReturnLocations] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [locations, setLocations] = useState([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        // Fetch specific service details to get current assignments
+        const res = await api.get(`/services/assigned?skip=0&limit=100`);
+        const service = (res.data || []).find(s => s.id === assignedServiceId);
+        
+        const items = service?.debug_items || service?.inventory_items_used || [];
+        setInventory(items);
+        
+        // Fetch locations for return selection
+        const locRes = await api.get("/inventory/locations?limit=100");
+        const invLocs = (locRes.data || []).filter(l => l.is_inventory_point);
+        setLocations(invLocs);
+        
+        // Initialize return locations with default warehouse
+        const defaultLoc = invLocs.find(l => l.location_type === 'WAREHOUSE' || l.location_type === 'CENTRAL_WAREHOUSE');
+        const initialLocs = {};
+        items.forEach(item => {
+          if (defaultLoc) initialLocs[item.id] = defaultLoc.id;
+        });
+        setReturnLocations(initialLocs);
+        
+      } catch (err) {
+        console.error("Failed to fetch recovery data", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, [assignedServiceId]);
+
+  const handleSubmit = async () => {
+    try {
+      const returns = inventory.map(item => ({
+        assignment_id: item.id,
+        quantity_returned: returnQtys[item.id] || 0,
+        quantity_damaged: damageQtys[item.id] || 0,
+        return_location_id: returnLocs[item.id] || null,
+        notes: "Verified via dashboard"
+      }));
+
+      await api.patch(`/services/assigned/${assignedServiceId}`, {
+        status: "completed",
+        inventory_returns: returns
+      });
+
+      toast.success("Inventory recovery completed");
+      onComplete();
+    } catch (err) {
+      console.error("Failed to submit returns", err);
+      toast.error("Failed to complete inventory recovery");
+    }
+  };
+
+  if (!loading && inventory.length === 0) {
+    // Auto-complete if no inventory to recover
+    handleSubmit();
+    return null;
+  }
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
+      <div className="bg-white rounded-[2.5rem] shadow-2xl max-w-2xl w-full overflow-hidden border border-slate-100 animate-in fade-in zoom-in-95 duration-300">
+        <div className="p-8 bg-slate-50/50 border-b border-slate-100 flex justify-between items-center">
+          <div>
+            <h2 className="text-2xl font-black text-slate-800 tracking-tight">Inventory Verification</h2>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Finalize equipment and stock returns</p>
+          </div>
+          <button onClick={onClose} className="p-3 hover:bg-white hover:shadow-md rounded-2xl transition-all text-slate-400 hover:text-slate-900">
+            <X size={20} />
+          </button>
+        </div>
+
+        <div className="p-8 max-h-[60vh] overflow-y-auto">
+          {loading ? (
+             <div className="flex flex-col items-center py-20 opacity-20">
+                <Activity size={48} className="animate-spin mb-4" />
+                <p className="font-black text-xs uppercase tracking-widest">Processing Data...</p>
+             </div>
+          ) : (
+            <div className="space-y-6">
+              {inventory.map((item, idx) => (
+                <div key={idx} className="p-6 bg-slate-50/30 rounded-3xl border border-slate-100 group hover:border-indigo-100 transition-colors">
+                   <div className="flex justify-between items-start mb-4">
+                      <div>
+                        <h4 className="font-black text-slate-800 text-sm uppercase tracking-tight">{item.item?.name || item.name}</h4>
+                        <p className="text-[10px] font-bold text-slate-400 mt-0.5">Assigned: {item.issued_quantity || item.quantity} {item.item?.unit || item.unit}</p>
+                      </div>
+                   </div>
+                   <div className="grid grid-cols-3 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Return</label>
+                        <input 
+                          type="number" 
+                          className="w-full bg-white border-none ring-1 ring-slate-200 rounded-xl px-3 py-2 text-xs font-black focus:ring-2 focus:ring-indigo-500 transition-all"
+                          value={returnQtys[item.id] || ''}
+                          onChange={(e) => setReturnQuantities({...returnQtys, [item.id]: e.target.value})}
+                          placeholder="0"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[9px] font-black text-rose-300 uppercase tracking-widest ml-1">Damage</label>
+                        <input 
+                          type="number" 
+                          className="w-full bg-white border-none ring-1 ring-rose-100 rounded-xl px-3 py-2 text-xs font-black text-rose-600 focus:ring-2 focus:ring-rose-500 transition-all"
+                          value={damageQtys[item.id] || ''}
+                          onChange={(e) => setDamageQuantities({...damageQtys, [item.id]: e.target.value})}
+                          placeholder="0"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Location</label>
+                        <select 
+                          className="w-full bg-white border-none ring-1 ring-slate-200 rounded-xl px-3 py-2 text-[10px] font-black focus:ring-2 focus:ring-indigo-500 transition-all"
+                          value={returnLocs[item.id] || ''}
+                          onChange={(e) => setReturnLocations({...returnLocs, [item.id]: e.target.value})}
+                        >
+                          <option value="">Select...</option>
+                          {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                        </select>
+                      </div>
+                   </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="p-8 bg-slate-50/50 border-t border-slate-100 flex gap-4">
+          <button onClick={onClose} className="flex-1 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-900 transition-all">
+            Dismiss
+          </button>
+          <button onClick={handleSubmit} className="flex-[2] py-4 bg-slate-900 hover:bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.3em] shadow-xl shadow-slate-200 transition-all active:scale-95">
+            Confirm & Complete Cycle
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const Services = () => {
   const [services, setServices] = useState([]);
   const [assignedServices, setAssignedServices] = useState([]);
@@ -93,6 +254,8 @@ const Services = () => {
   const [viewingAssignedService, setViewingAssignedService] = useState(null);
   const [completingServiceId, setCompletingServiceId] = useState(null);
   const [completingRequestId, setCompletingRequestId] = useState(null);
+  const [completingBillingStatus, setCompletingBillingStatus] = useState(null);
+  const [completingPaymentMode, setCompletingPaymentMode] = useState(null); // NEW: Persistent mode for completion
   const [inventoryAssignments, setInventoryAssignments] = useState([]);
   const [returnQuantities, setReturnQuantities] = useState({});
   const [usedQuantities, setUsedQuantities] = useState({}); // Track used quantities for each assignment
@@ -117,8 +280,18 @@ const Services = () => {
   const [activeTab, setActiveTab] = useState("dashboard"); // "dashboard", "create", "assign", "assigned", "requests", "report"
   const [serviceRequests, setServiceRequests] = useState([]);
   const [paymentModal, setPaymentModal] = useState(null); // { orderId, amount }
+  const [paymentMode, setPaymentMode] = useState("Cash"); // NEW: Default payment mode
+  const [isSelectingPaymentMode, setIsSelectingPaymentMode] = useState(false); // NEW: Step control
   const [selectedActivity, setSelectedActivity] = useState(null);
   const [returnRequestModal, setReturnRequestModal] = useState(null); // { requestId, items }
+
+  useEffect(() => {
+    if (paymentModal) {
+      setIsSelectingPaymentMode(false);
+      setPaymentMode("Cash");
+    }
+  }, [paymentModal]);
+
   const [bannerMessage, setBannerMessage] = useState({ type: null, text: "" });
   const showBannerMessage = (type, text) => setBannerMessage({ type, text });
   const closeBannerMessage = () => setBannerMessage({ type: null, text: "" });
@@ -716,7 +889,7 @@ const Services = () => {
   const [completingBillingStatus, setCompletingBillingStatus] = useState(null); // New State
   const [paymentModalReturnsChecked, setPaymentModalReturnsChecked] = useState(false); // New State for Modal Checkbox
 
-  const handleStatusChange = async (id, newStatus, skipOrRequestId = false, billingStatus = null, forceReturn = false) => {
+  const handleStatusChange = async (id, newStatus, skipOrRequestId = false, billingStatus = null, forceReturn = false, paymentMode = null) => {
     const skipInventory = skipOrRequestId === true;
     const triggeringRequestId = typeof skipOrRequestId === "number" ? skipOrRequestId : null;
 
@@ -947,6 +1120,10 @@ const Services = () => {
         billing_status: billingStatus
       };
 
+      if (paymentMode) {
+        payload.payment_mode = paymentMode;
+      }
+
       // If we have inline return data (from PaymentModal) and forceReturn is true, include it in the payload
       const hasInlineReturns = forceReturn && Object.keys(returnQuantities).length > 0;
 
@@ -1153,6 +1330,9 @@ const Services = () => {
       };
       if (completingBillingStatus) {
         payload.billing_status = completingBillingStatus;
+      }
+      if (completingPaymentMode) {
+        payload.payment_mode = completingPaymentMode;
       }
       await api.patch(`/services/assigned/${completingServiceId}`, payload);
 
@@ -1538,26 +1718,24 @@ const Services = () => {
   };
 
   // Service Request Handlers
-  const handleUpdateRequestStatus = async (requestId, newStatus, billingStatus = null, forceReturn = false) => {
+  const handleUpdateRequestStatus = async (requestId, newStatus, billingStatus = null, forceReturn = false, paymentModeParam = null) => {
     const numericId = parseInt(requestId);
     // If it's an AssignedService (encoded in ID offset), redirect to handleStatusChange
     if (numericId >= 2000000) {
       setPaymentModal(null);
-      return handleStatusChange(numericId - 2000000, newStatus, numericId, billingStatus, forceReturn);
+      setIsSelectingPaymentMode(false);
+      return handleStatusChange(numericId - 2000000, newStatus, numericId, billingStatus, forceReturn, paymentModeParam);
     }
 
     const request = serviceRequests.find(r => r.id === requestId);
 
     // For regular requests being completed, check if they have a linked assignment to trigger the modal
     if (newStatus === "completed" && request) {
-      // Find ANY matching assignment for this room/employee, even if already marked completed 
-      // (to allow late returns or verification)
       const linkedAssigned = assignedServices.find(as =>
         as.room?.id === request.room_id &&
         (as.employee_id === request.employee_id || !as.employee_id)
       );
 
-      // If it's a food/delivery/milk order, prioritize payment modal
       const descLower = (request.description || "").toLowerCase();
       const isFoodRequest = request.food_order_id ||
         request.request_type === "delivery" ||
@@ -1573,26 +1751,22 @@ const Services = () => {
         descLower.includes("room service");
 
       if (isFoodRequest && (billingStatus === null || billingStatus === undefined || billingStatus === "")) {
-        // ALWAYS show payment modal for food requests if status is not provided
         setPaymentModal({ requestId, newStatus });
         return;
       }
 
       if (linkedAssigned) {
-        // Pass requestId to handleStatusChange so it can be completed after modal confirmation
         setPaymentModal(null);
-        return handleStatusChange(linkedAssigned.id, newStatus, requestId, billingStatus, forceReturn);
+        setIsSelectingPaymentMode(false);
+        return handleStatusChange(linkedAssigned.id, newStatus, requestId, billingStatus, forceReturn, paymentModeParam);
       }
     }
 
-    // If completing a delivery request (not caught by linked assignment logic), show payment modal
     if (newStatus === "completed" && (billingStatus === null || billingStatus === undefined || billingStatus === "")) {
       if (request && request.food_order_id) {
         setPaymentModal({ requestId, newStatus });
         return;
       }
-
-      // NEW: Special handling for return_items service requests
       if (request && request.request_type === "return_items") {
         setReturnRequestModal({
           requestId,
@@ -1603,28 +1777,27 @@ const Services = () => {
       }
     }
 
-    // Optimistically update UI immediately
     setServiceRequests(prev =>
       prev.map(r => r.id === requestId ? { ...r, status: newStatus } : r)
     );
 
     try {
       const payload = { status: newStatus };
-      if (billingStatus) {
-        payload.billing_status = billingStatus;
-      }
+      if (billingStatus) payload.billing_status = billingStatus;
+      if (paymentModeParam) payload.payment_mode = paymentModeParam;
+      
       await api.put(`/service-requests/${requestId}`, payload);
-      // Fetch to confirm and get any server-side updates
       await fetchServiceRequests();
       setPaymentModal(null);
+      setIsSelectingPaymentMode(false);
     } catch (error) {
       console.error("Failed to update request status:", error);
       const msg = error.response?.data?.detail || error.message || "Unknown error";
       alert(`Failed to update request status: ${msg}`);
-      // Revert optimistic update on error
       await fetchServiceRequests();
     }
   };
+
 
   const handleAssignEmployeeToRequest = async (requestId, employeeId, pickupLocationId = null) => {
     try {
@@ -5211,40 +5384,63 @@ const Services = () => {
                 </div>
 
                 <div className="flex flex-col gap-3">
-                  <button
-                    onClick={() => {
-                      // Pass TRUE for forceReturn to skip the second modal, since we handled it here!
-                      // But wait, handleUpdateRequestStatus expects 'forceReturn' to mean "show the modal".
-                      // We need a way to say "I have data, just save it".
-                      // Update: handleUpdateRequestStatus calls handleStatusChange.
-                      // We should probably just call handleStatusChange directly if we have data, OR update handleUpdateRequestStatus to accept data.
-                      // For now, let's keep the existing flow but pass data if possible? 
-                      // Actually, simpler: Use the existing "Paid & Verify" button to open the full modal (which now pre-populates),
-                      // OR if the user entered data here, we might want to save it directly.
-                      // Given the request "option to return items... include return qty", doing it INLINE is best.
+                  {!isSelectingPaymentMode ? (
+                    <>
+                      <button
+                        onClick={() => {
+                          setIsSelectingPaymentMode(true);
+                        }}
+                        className="w-full px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors shadow-sm flex items-center justify-center gap-2"
+                      >
+                        <span>✓</span> Confirm Payment & Inventory
+                      </button>
 
-                      // Let's modify handleUpdateRequestStatus to accept 'inventoryData'
-                      // Since we don't have that signature, we stick to the plan:
-                      // 1. Mark Paid
-                      // 2. Open Verify Modal (which will retain the state we just set in returnQuantities!)
-                      handleUpdateRequestStatus(paymentModal.requestId, paymentModal.newStatus, "paid", true);
-                    }}
-                    className="w-full px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors shadow-sm flex items-center justify-center gap-2"
-                  >
-                    <span>✓</span> Confirm Payment & Inventory
-                  </button>
-
-                  <button
-                    onClick={() => handleUpdateRequestStatus(paymentModal.requestId, paymentModal.newStatus, "unpaid", true)}
-                    className="w-full px-4 py-3 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium transition-colors shadow-sm"
-                  >
-                    Confirm Unpaid & Inventory
-                  </button>
+                      <button
+                        onClick={() => handleUpdateRequestStatus(paymentModal.requestId, paymentModal.newStatus, "unpaid", true)}
+                        className="w-full px-4 py-3 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium transition-colors shadow-sm"
+                      >
+                        Confirm Unpaid & Inventory
+                      </button>
+                    </>
+                  ) : (
+                    <div className="animate-in slide-in-from-top-2 duration-300 space-y-4">
+                      <div className="p-4 bg-green-50 border border-green-100 rounded-xl">
+                        <label className="block text-xs font-black text-green-700 uppercase tracking-widest mb-3 text-center">
+                          Select Mode of Payment
+                        </label>
+                        <div className="grid grid-cols-2 gap-2">
+                          {["Cash", "UPI", "Card", "Other"].map((mode) => (
+                            <button
+                              key={mode}
+                              type="button"
+                              onClick={() => {
+                                setPaymentMode(mode);
+                                handleUpdateRequestStatus(paymentModal.requestId, paymentModal.newStatus, "paid", true, mode);
+                              }}
+                              className={`py-3 px-4 border-2 rounded-xl text-sm font-bold transition-all ${paymentMode === mode
+                                ? "bg-green-600 text-white border-green-600 shadow-md"
+                                : "bg-white text-gray-600 border-gray-200 hover:border-green-300"
+                                }`}
+                            >
+                              {mode}
+                            </button>
+                          ))}
+                        </div>
+                        <button
+                          onClick={() => setIsSelectingPaymentMode(false)}
+                          className="w-full mt-4 text-xs text-gray-500 hover:text-gray-700 font-medium text-center underline"
+                        >
+                          Go Back
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   <button
                     onClick={() => {
                       setPaymentModal(null);
                       setPaymentModalReturnsChecked(false);
+                      setIsSelectingPaymentMode(false);
                     }}
                     className="w-full px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium transition-colors"
                   >

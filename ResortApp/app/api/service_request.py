@@ -542,6 +542,7 @@ def update_service_request(
             status=update.status,
             employee_id=update.employee_id,
             billing_status=update.billing_status,
+            payment_mode=update.payment_mode,
             return_location_id=update.return_location_id
         )
         

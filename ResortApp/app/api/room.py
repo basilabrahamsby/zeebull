@@ -44,7 +44,20 @@ def get_room_types(db: Session = Depends(get_db), branch_id: int = Depends(get_b
     query = db.query(RoomType)
     if branch_id:
         query = query.filter(RoomType.branch_id == branch_id)
-    return query.all()
+    room_types = query.all()
+    
+    # Calculate room count for each type
+    for rt in room_types:
+        rt.room_count = db.query(Room).filter(Room.room_type_id == rt.id, Room.status != "Deleted").count()
+        # Ensure total_inventory matches the physical room count if that's the source of truth
+        if rt.total_inventory != rt.room_count:
+            rt.total_inventory = rt.room_count
+            db.add(rt)
+    
+    if any(rt.room_count != rt.total_inventory for rt in room_types):
+        db.commit() # Save the synchronized inventory counts
+        
+    return room_types
 
 @router.get("/types/all", response_model=List[RoomTypeOut])
 def get_room_types_all(db: Session = Depends(get_db), branch_id: int = Depends(get_branch_id)):

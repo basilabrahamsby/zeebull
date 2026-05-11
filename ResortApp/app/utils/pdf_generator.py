@@ -305,7 +305,7 @@ def generate_advance_payment_receipt_pdf(booking, payments, output_path):
     booking_total = getattr(booking, 'total_amount', 0)
     balance_due = booking_total - total_paid
     payment_data.append(['', '', 'TOTAL BOOKING VALUE', f'Rs.{booking_total:,.2f}'])
-    payment_data.append(['', '', 'BALANCE DUE', f'Rs.{max(0, balance_due):,.2f}'])
+    payment_data.append(['', '', 'BALANCE DUE', f'Rs.{balance_due:,.2f}'])
     
     payment_table = Table(payment_data, colWidths=[0.5*inch, 2.5*inch, 2*inch, 2*inch])
     payment_table.setStyle(TableStyle([

@@ -31,7 +31,7 @@ from app.schemas.inventory import (
     StockRequisitionCreate, StockRequisitionOut, StockRequisitionUpdate,
     StockIssueCreate, StockIssueOut,
     WasteLogCreate, WasteLogOut,
-    LocationCreate, LocationOut,
+    LocationCreate, LocationOut, LocationUpdate,
     AssetMappingCreate, AssetMappingOut, AssetMappingUpdate,
     AssetRegistryCreate, AssetRegistryOut, AssetRegistryUpdate,
     StockAdjustmentCreate,
@@ -877,14 +877,42 @@ def create_purchase(
         created.status = "draft"
         db.commit()
         
-        created = inventory_crud.update_purchase_status(db, created.id, "received", current_user_id=current_user.id)
-    elif target_status in ["confirmed", "cancelled"]:
-        # Ensure we transition properly
-        if created.status != "draft":
-            created.status = "draft"
-            db.commit()
         created = inventory_crud.update_purchase_status(db, created.id, target_status, current_user_id=current_user.id)
     
+    # Handle immediate payment journal entry if created as 'paid'
+    if purchase.payment_status == "paid":
+        from app.utils.accounting_helpers import create_purchase_payment_journal_entry
+        vendor = inventory_crud.get_vendor_by_id(db, created.vendor_id)
+        vendor_name = (vendor.legal_name or vendor.name) if vendor else "Unknown"
+        
+        p_date = None
+        if created.payment_date:
+            if isinstance(created.payment_date, date) and not isinstance(created.payment_date, datetime):
+                from datetime import datetime as dt, timezone as tz
+                now = dt.now(tz.utc)
+                if created.payment_date == now.date():
+                    p_date = now
+                else:
+                    p_date = dt.combine(created.payment_date, dt.min.time()).replace(tzinfo=tz.utc)
+            else:
+                p_date = created.payment_date
+
+        try:
+            create_purchase_payment_journal_entry(
+                db=db,
+                purchase_id=created.id,
+                amount=float(created.total_amount or 0),
+                payment_method=created.payment_method or "Cash",
+                vendor_name=vendor_name,
+                branch_id=branch_id,
+                created_by=current_user.id,
+                payment_date=p_date
+            )
+            print(f"[INFO] Immediate payment journal entry created for purchase {created.id}")
+        except Exception as e:
+            import traceback
+            print(f"[WARNING] Could not create immediate payment journal entry: {str(e)}\n{traceback.format_exc()}")
+
     # Optimized: Batch load items to avoid N+1 queries
     from sqlalchemy.orm import joinedload
     db.refresh(created, ["details"])
@@ -1056,6 +1084,61 @@ def update_purchase(
         # Call centralized logic
         updated = inventory_crud.update_purchase_status(db, updated.id, target_status, current_user_id=current_user.id)
     
+    # CASE 2: Sync Journal Entry Date if payment_date is updated
+    if purchase_update.payment_date is not None:
+        from app.models.account import JournalEntry
+        # Find the journal entry for this purchase payment
+        journal_entry = db.query(JournalEntry).filter(
+            JournalEntry.reference_type == "purchase_payment",
+            JournalEntry.reference_id == purchase_id,
+            JournalEntry.branch_id == branch_id
+        ).first()
+
+        if journal_entry:
+            # Sync the entry_date with the new payment_date
+            new_date = datetime.combine(purchase_update.payment_date, datetime.min.time())
+            journal_entry.entry_date = new_date
+            db.commit()
+            print(f"[INFO] Synced JournalEntry {journal_entry.id} to new payment date: {purchase_update.payment_date}")
+
+    # CASE 3: Sync Journal Entry if payment_status changed to 'paid'
+    if purchase_update.payment_status == "paid":
+        from app.models.account import JournalEntry
+        from app.utils.accounting_helpers import create_purchase_payment_journal_entry
+        
+        # Check if entry already exists to avoid duplicates
+        existing_entry = db.query(JournalEntry).filter(
+            JournalEntry.reference_type == "purchase_payment",
+            JournalEntry.reference_id == purchase_id,
+            JournalEntry.branch_id == branch_id
+        ).first()
+
+        if not existing_entry:
+            vendor = inventory_crud.get_vendor_by_id(db, updated.vendor_id)
+            vendor_name = (vendor.legal_name or vendor.name) if vendor else "Unknown"
+            
+            p_date = None
+            if isinstance(updated.payment_date, date) and not isinstance(updated.payment_date, datetime):
+                from datetime import datetime as dt, timezone as tz
+                now = dt.now(tz.utc)
+                if updated.payment_date == now.date():
+                    p_date = now
+                else:
+                    p_date = dt.combine(updated.payment_date, dt.min.time()).replace(tzinfo=tz.utc)
+            else:
+                p_date = updated.payment_date
+
+            create_purchase_payment_journal_entry(
+                db=db,
+                purchase_id=updated.id,
+                amount=float(updated.total_amount or 0),
+                payment_method=updated.payment_method or "Cash",
+                vendor_name=vendor_name,
+                branch_id=branch_id,
+                created_by=current_user.id,
+                payment_date=p_date
+            )
+
     db.commit()
     return get_purchase(purchase_id, db, current_user, branch_id=branch_id)
 
@@ -1667,18 +1750,6 @@ def create_issue(
         raise HTTPException(status_code=500, detail=f"Error creating issue: {str(e)}")
 
 
-@router.get("/locations", response_model=List[LocationOut])
-def get_locations(
-    skip: int = 0,
-    limit: int = 100,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-    branch_id: Optional[int] = Depends(get_branch_id)
-):
-    locations = inventory_crud.get_all_locations(db, branch_id=branch_id, skip=skip, limit=limit)
-    return locations
-
-
 @router.get("/issues", response_model=List[StockIssueOut])
 def get_issues(
     skip: int = 0,
@@ -2077,6 +2148,32 @@ def get_locations(
     return result
 
 
+@router.put("/locations/{location_id}", response_model=LocationOut)
+def update_location(
+    location_id: int,
+    location_update: LocationUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    branch_id: Optional[int] = Depends(get_branch_id)
+):
+    from app.models.inventory import Location
+    
+    # Check if location exists and belongs to the branch (if branch_id is set)
+    query = db.query(Location).filter(Location.id == location_id)
+    if branch_id is not None:
+        query = query.filter(Location.branch_id == branch_id)
+    
+    db_loc = query.first()
+    if not db_loc:
+        raise HTTPException(status_code=404, detail="Location not found")
+        
+    updated = inventory_crud.update_location(db, location_id, location_update.model_dump(exclude_unset=True))
+    if not updated:
+        raise HTTPException(status_code=404, detail="Location not found")
+        
+    return updated
+
+
 @router.get("/locations/{location_id}/items")
 def get_location_items(
     location_id: int,
@@ -2155,7 +2252,9 @@ def get_location_items(
 
     
     # 1. Get items from LocationStock (Primary Source for bulk items)
-    location_stocks_query = db.query(LocationStock).filter(
+    location_stocks_query = db.query(LocationStock).options(
+        joinedload(LocationStock.item).joinedload(InventoryItem.category)
+    ).filter(
         LocationStock.location_id == location_id
     )
     if branch_id is not None:
@@ -2325,6 +2424,13 @@ def get_location_items(
                     price_groups[group_key]["qty"] += attributed
                     rem -= attributed
 
+                # If there's still quantity left (e.g. no issues matching, or stock manually added), assign it to a default free/standard group
+                if rem > 0:
+                    group_key = (0.0, False)
+                    if group_key not in price_groups:
+                        price_groups[group_key] = {"qty": 0.0, "is_payable": False}
+                    price_groups[group_key]["qty"] += rem
+
                 for (price, is_pay), group_data in price_groups.items():
                     g_qty = group_data["qty"]
                     
@@ -2426,33 +2532,32 @@ def get_location_items(
     for mapping in asset_mappings:
         item = inventory_crud.get_item_by_id(db, mapping.item_id)
         if item:
-            stock_key = f"item_{item.id}"
+            # Check if this item was already added via LocationStock (Robust lookup)
+            existing_key = next((k for k in items_dict if items_dict[k].get('item_id') == item.id), None)
             
             # Check if this mapping is reported as damaged in notes
             is_dam = "Reported Damaged" in (mapping.notes or "")
             
-            # Check if this item was already added via LocationStock
-            if stock_key in items_dict:
+            if existing_key:
                 # MERGE: Update the existing entry to ensure it's treated as a Fixed Asset
                 # Do NOT increment count here, LocationStock is primary source of physical quantity
-                items_dict[stock_key].update({
+                items_dict[existing_key].update({
                     "type": "asset",           # Force type to asset
                     "is_fixed_asset": True,    # Force fixed asset flag
                     "is_rentable": False,      # Force not rentable
-                    "source": items_dict[stock_key]["source"] + ", Asset Mapping" # Update source
+                    "source": items_dict[existing_key]["source"] + ", Asset Mapping" # Update source
                 })
                 # Add serial number if available
                 if mapping.serial_number:
-                    existing_sn = items_dict[stock_key].get("serial_number", "")
-                    if mapping.serial_number not in existing_sn:
-                        items_dict[stock_key]["serial_number"] = (existing_sn + ", " + mapping.serial_number) if existing_sn else mapping.serial_number
+                    existing_sn = items_dict[existing_key].get("serial_number", "")
+                    if mapping.serial_number not in str(existing_sn):
+                        items_dict[existing_key]["serial_number"] = (str(existing_sn) + ", " + mapping.serial_number) if existing_sn else mapping.serial_number
 
-                if is_dam and "(Damaged)" not in items_dict[stock_key]["item_name"]:
-                    items_dict[stock_key]["item_name"] += " (Damaged)"
-                    items_dict[stock_key]["is_damaged"] = True
+                if is_dam and "(Damaged)" not in items_dict[existing_key]["item_name"]:
+                    items_dict[existing_key]["item_name"] += " (Damaged)"
+                    items_dict[existing_key]["is_damaged"] = True
             else:
                 # Add as new entry if not in LocationStock
-                # Use standard key format to ensure consistency
                 key = f"asset_mapped_{item.id}"
                 
                 category = inventory_crud.get_category_by_id(db, item.category_id)
@@ -2484,22 +2589,15 @@ def get_location_items(
     for asset in asset_registry:
         item = asset.item
         if item:
-            # Check for existing stock-based keys
-            stock_key = f"item_{item.id}"
-            rented_key = f"item_{item.id}_rented"
-            
-            target_key = None
-            if stock_key in items_dict:
-                target_key = stock_key
-            elif rented_key in items_dict:
-                target_key = rented_key
+            # Robust lookup for any existing entry for this item ID
+            target_key = next((k for k in items_dict if items_dict[k].get('item_id') == item.id), None)
             
             if target_key:
                 # MERGE details into the existing row
                 agg = items_dict[target_key]
-                if not agg.get("serial_number"):
+                if not agg.get("serial_number") and asset.serial_number:
                     agg["serial_number"] = asset.serial_number
-                if not agg.get("asset_tag"):
+                if not agg.get("asset_tag") and asset.asset_tag_id:
                     agg["asset_tag"] = asset.asset_tag_id
                 
                 # Append source info
@@ -2539,7 +2637,7 @@ def get_location_items(
                     "asset_tag": asset.asset_tag_id,
                     "status": asset.status,
                     "type": "asset",
-                    "is_asset_fixed": True # Registry items are usually fixed
+                    "is_asset_fixed": True 
                 }
     
     # 4. Get History (Stock Issues & Waste Logs)

@@ -68,7 +68,6 @@ const getRouterBasename = () => {
 
 function App() {
   const basename = getRouterBasename();
-  console.log("App component initializing with basename:", basename);
   return (
     <Router basename={basename}>
       <BranchProvider>

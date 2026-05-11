@@ -53,6 +53,8 @@ def confirm_package_booking(
     
     # Calculate total advance and create payment records
     total_advance = 0.0
+    from app.utils.accounting_helpers import create_advance_payment_journal_entry
+
     for p in confirm_data.payments:
         payment = Payment(
             package_booking_id=booking.id,
@@ -64,7 +66,19 @@ def confirm_package_booking(
         db.add(payment)
         total_advance += p.amount
         
-    booking.advance_deposit = total_advance
+        # Accounting Sync
+        create_advance_payment_journal_entry(
+            db=db,
+            booking_id=booking.id,
+            amount=p.amount,
+            payment_method=p.method,
+            guest_name=booking.guest_name,
+            branch_id=branch_id or booking.branch_id,
+            created_by=current_user.id,
+            is_package=True
+        )
+        
+    booking.advance_deposit = (booking.advance_deposit or 0.0) + total_advance
     booking.confirmation_notes = confirm_data.notes
     
     # Ensure status is 'booked' (Confirmed) if it wasn't
@@ -567,7 +581,8 @@ def get_bookings(
         query = db.query(PackageBooking).options(
             joinedload(PackageBooking.package),
             joinedload(PackageBooking.checkout),
-            joinedload(PackageBooking.rooms).joinedload(PackageBookingRoom.room)
+            joinedload(PackageBooking.rooms).joinedload(PackageBookingRoom.room),
+            joinedload(PackageBooking.payments)
         ).filter(PackageBooking.package_id.is_not(None))
         
         if branch_id is not None:

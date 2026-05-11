@@ -97,6 +97,7 @@ class RoomTypeUpdate(BaseModel):
 class RoomType(RoomTypeBase):
     id: int
     branch_id: int
+    room_count: int = 0
     rate_plans: List[RatePlanOut] = []
 
     class Config:

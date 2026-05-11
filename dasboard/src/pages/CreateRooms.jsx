@@ -604,18 +604,21 @@ const RoomTypeModal = ({ onClose, type, isEditing, onSubmit, branches, isEnterpr
 
                   <div className="grid grid-cols-2 gap-6">
                     <div>
-                      <label className="block text-[11px] font-black text-gray-400 uppercase tracking-tighter mb-1.5 ml-1">Physical Capacity <span className="text-gray-300 font-normal">(Total Rooms)</span></label>
+                      <label className="block text-[11px] font-black text-gray-400 uppercase tracking-tighter mb-1.5 ml-1">Physical Capacity <span className="text-indigo-400 font-bold ml-1">(Derived from Rooms)</span></label>
                       <div className="relative group">
-                        <i className="fas fa-bed absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-indigo-500 transition-colors"></i>
+                        <i className="fas fa-bed absolute left-3.5 top-1/2 -translate-y-1/2 text-indigo-500 transition-colors"></i>
                         <input 
                           type="number" 
                           name="total_inventory" 
-                          value={formData.total_inventory} 
-                          onChange={handleChange} 
-                          className="w-full pl-10 pr-4 py-3 border-2 border-gray-100 rounded-2xl focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all font-bold text-gray-800 bg-white/50 focus:bg-white" 
-                          placeholder="e.g. 10"
+                          value={isEditing ? (type?.room_count || 0) : formData.total_inventory} 
+                          readOnly
+                          className="w-full pl-10 pr-4 py-3 border-2 border-indigo-50 rounded-2xl bg-indigo-50/30 font-black text-indigo-600 outline-none cursor-not-allowed" 
+                          placeholder="Calculated automatically"
                         />
                       </div>
+                      <p className="text-[9px] text-gray-400 mt-1.5 ml-1 flex items-center gap-1">
+                        <i className="fas fa-info-circle text-[8px]"></i> This is the total number of physical rooms created for this type.
+                      </p>
                     </div>
                     <div>
                       <label className="block text-[11px] font-black text-indigo-400 uppercase tracking-tighter mb-1.5 ml-1">Online Inventory <span className="text-rose-500 font-bold ml-1">(OTA Quota)</span></label>

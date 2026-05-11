@@ -316,8 +316,26 @@ def create_food_order(db: Session, order_data: FoodOrderCreate, branch_id: int):
 
         room_number = room.number if room else "Unknown"
         notify_food_order_created(db, room_number, order.id, branch_id=branch_id)
+        
+        # If order is created as PAID immediately, record accounting entry
+        if order.billing_status == "paid":
+            try:
+                from app.utils.accounting_helpers import create_food_order_journal_entry
+                create_food_order_journal_entry(
+                    db=db,
+                    food_order_id=order.id,
+                    amount=order.total_with_gst or order.amount,
+                    room_number=room_number,
+                    branch_id=branch_id,
+                    gst_rate=5.0, # Default
+                    payment_method=order.payment_method or "Cash" # Default to Cash if paid but method missing
+                )
+                print(f"[INFO] Created journal entry for food order {order.id} created as PAID")
+            except Exception as je_err:
+                print(f"[ERROR] Failed to create journal entry for new paid order: {je_err}")
+                
     except Exception as e:
-        print(f"Notification error: {e}")
+        print(f"Post-creation logic error: {e}")
     
     
     # Reload order with relationships to ensure response has all data (especially food_item_name)
@@ -532,7 +550,29 @@ def update_food_order(db: Session, order_id: int, update_data: FoodOrderUpdate, 
 
     # Update other fields
     if update_data.billing_status is not None:
+        was_paid = order.billing_status == "paid"
         order.billing_status = update_data.billing_status
+        
+        # If order is now paid but wasn't before, record accounting entry
+        if order.billing_status == "paid" and not was_paid:
+            try:
+                from app.utils.accounting_helpers import create_food_order_journal_entry
+                from app.models.room import Room
+                room = db.query(Room).get(order.room_id)
+                
+                create_food_order_journal_entry(
+                    db=db,
+                    food_order_id=order.id,
+                    amount=order.total_with_gst or order.amount,
+                    room_number=room.number if room else "Unknown",
+                    branch_id=branch_id,
+                    gst_rate=5.0, # Default
+                    payment_method=update_data.payment_method or order.payment_method
+                )
+                print(f"[INFO] Created journal entry for food order {order.id} marked as paid via update")
+            except Exception as e:
+                print(f"[ERROR] Failed to create journal entry for food order {order.id}: {e}")
+
     if update_data.payment_method is not None:
         order.payment_method = update_data.payment_method
     if update_data.delivery_request is not None:

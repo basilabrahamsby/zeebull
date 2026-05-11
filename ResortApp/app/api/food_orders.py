@@ -210,7 +210,8 @@ def mark_order_paid(
             room_number=room_number,
             gst_rate=gst_rate,
             branch_id=branch_id,
-            created_by=current_user.id
+            created_by=current_user.id,
+            payment_method=payment_method
         )
 
     except Exception as e:

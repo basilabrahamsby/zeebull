@@ -64,7 +64,7 @@ class ServiceRequestProvider with ChangeNotifier {
     }
   }
 
-  Future<bool> updateRequestStatus(String id, String status, {String? billingStatus, int? employeeId}) async {
+  Future<bool> updateRequestStatus(String id, String status, {String? billingStatus, int? employeeId, String? paymentMode}) async {
     try {
       final parsedId = int.tryParse(id);
       if (parsedId != null && parsedId > 2000000) {
@@ -77,6 +77,7 @@ class ServiceRequestProvider with ChangeNotifier {
             'status': status,
             if (billingStatus != null) 'billing_status': billingStatus,
             if (employeeId != null) 'employee_id': employeeId,
+            if (paymentMode != null) 'payment_mode': paymentMode,
           },
         );
         
@@ -97,6 +98,7 @@ class ServiceRequestProvider with ChangeNotifier {
         final Map<String, dynamic> payload = {'status': status};
         if (billingStatus != null) payload['billing_status'] = billingStatus;
         if (employeeId != null) payload['employee_id'] = employeeId;
+        if (paymentMode != null) payload['payment_mode'] = paymentMode;
 
         final response = await _apiService.dio.put(
           '${ApiConstants.serviceRequests}/$id',

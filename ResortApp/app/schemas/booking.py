@@ -3,6 +3,7 @@ from typing import List, Optional, Union
 from datetime import date, datetime
 from .user import UserOut
 from .checkout import CheckoutFull
+from .payment import PaymentOut
 
 # This schema is used for displaying Room details within a Booking
 class RoomOut(BaseModel):
@@ -98,6 +99,7 @@ class BookingOut(BaseModel):
     food_orders: List[object] = []
     service_requests: List[object] = []
     inventory_usage: List[object] = []
+    payments: List[PaymentOut] = []
     
     @model_validator(mode='after')
     def set_display_id(self):

@@ -72,6 +72,8 @@ def confirm_booking(
     
     # Calculate total advance and create payment records
     total_advance = 0.0
+    from app.utils.accounting_helpers import create_advance_payment_journal_entry
+
     for p in confirm_data.payments:
         payment = Payment(
             booking_id=booking.id,
@@ -83,7 +85,19 @@ def confirm_booking(
         db.add(payment)
         total_advance += p.amount
         
-    booking.advance_deposit = total_advance
+        # Accounting Sync
+        create_advance_payment_journal_entry(
+            db=db,
+            booking_id=booking.id,
+            amount=p.amount,
+            payment_method=p.method,
+            guest_name=booking.guest_name,
+            branch_id=branch_id or booking.branch_id,
+            created_by=current_user.id
+        )
+        
+    # INCREMENT advance deposit instead of overwriting
+    booking.advance_deposit = (booking.advance_deposit or 0.0) + total_advance
     booking.confirmation_notes = confirm_data.notes
     
     # Ensure status is 'booked' (Confirmed) if it wasn't
@@ -210,6 +224,21 @@ def get_bookings(
                 if br.room_id and br.room_id in rooms_map:
                     booking_rooms_map[br.booking_id].append(rooms_map[br.room_id])
         
+        # Pre-load all payments for all bookings to avoid N+1
+        payments_map = {}
+        if booking_ids:
+            all_payments = db.query(Payment).filter(
+                or_(
+                    Payment.booking_id.in_(booking_ids),
+                    Payment.package_booking_id.in_(booking_ids) # Just in case, though this loop is for regular
+                )
+            ).all()
+            for p in all_payments:
+                bid = p.booking_id or p.package_booking_id
+                if bid not in payments_map:
+                    payments_map[bid] = []
+                payments_map[bid].append(p)
+
         # Pre-load all room types for name resolution (avoids N+1)
         from app.models.room import RoomType
         all_room_types = db.query(RoomType.id, RoomType.name).all()
@@ -297,6 +326,7 @@ def get_bookings(
                 source=getattr(booking, 'source', 'Direct'),
                 branch_id=getattr(booking, 'branch_id', None),
                 display_id=getattr(booking, 'display_id', None),
+                payments=payments_map.get(booking.id, [])
             )
             
             # Fallback: Calculate total amount if 0 (for legacy data)
@@ -597,7 +627,8 @@ def get_booking_details(booking_id: Union[str, int], is_package: bool, db: Sessi
                 joinedload(PackageBooking.rooms).joinedload(PackageBookingRoom.room),
                 joinedload(PackageBooking.user),
                 joinedload(PackageBooking.package),
-                joinedload(PackageBooking.checkout)
+                joinedload(PackageBooking.checkout),
+                joinedload(PackageBooking.payments)
             ).filter(PackageBooking.id == booking_id)
             
             if branch_id is not None:
@@ -644,14 +675,16 @@ def get_booking_details(booking_id: Union[str, int], is_package: bool, db: Sessi
                 rooms=[pbr.room for pbr in booking.rooms if pbr.room],
                 food_orders=_fetch_extras(db, room_ids, start_filter, booking.check_out),
                 service_requests=_fetch_services(db, room_ids, start_filter, booking.check_out),
-                inventory_usage=_fetch_inventory(db, room_ids, start_filter, booking.check_out, booking_id=booking.id, branch_id=booking.branch_id)
+                inventory_usage=_fetch_inventory(db, room_ids, start_filter, booking.check_out, booking_id=booking.id, branch_id=booking.branch_id),
+                payments=booking.payments
             )
         else: # Regular booking
             query = db.query(Booking).options(
                 joinedload(Booking.booking_rooms).joinedload(BookingRoom.room),
                 joinedload(Booking.user).joinedload(User.role),
                 joinedload(Booking.checkout),
-                joinedload(Booking.room_type)
+                joinedload(Booking.room_type),
+                joinedload(Booking.payments)
             ).filter(Booking.id == booking_id)
             
             if branch_id is not None:
@@ -743,7 +776,8 @@ def get_booking_details(booking_id: Union[str, int], is_package: bool, db: Sessi
                 rooms=[br.room for br in booking.booking_rooms if br.room],
                 food_orders=_fetch_extras(db, room_ids, start_filter, end_filter),
                 service_requests=_fetch_services(db, room_ids, start_filter, end_filter),
-                inventory_usage=_fetch_inventory(db, room_ids, start_filter, end_filter, booking_id=booking.id, branch_id=booking.branch_id)
+                inventory_usage=_fetch_inventory(db, room_ids, start_filter, end_filter, booking_id=booking.id, branch_id=booking.branch_id),
+                payments=booking.payments
             )
     except Exception as e:
         print(f"Error getting booking details: {e}")
@@ -1203,7 +1237,10 @@ def check_in_booking(
                         if conflict:
                             raise HTTPException(status_code=400, detail=f"Room {target_room.number} is already booked for these dates.")
 
-                        new_br = BookingRoom(booking_id=booking.id, room_id=r_id, branch_id=branch_id)
+                        # Resolve branch_id from room if in enterprise mode
+                        effective_branch_id = branch_id if branch_id is not None else target_room.branch_id
+                        
+                        new_br = BookingRoom(booking_id=booking.id, room_id=r_id, branch_id=effective_branch_id)
                         db.add(new_br)
                 
                 db.flush()

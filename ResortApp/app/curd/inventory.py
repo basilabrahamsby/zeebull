@@ -443,8 +443,8 @@ def update_purchase_master(db: Session, purchase_id: int, data: PurchaseMasterUp
     # Only allow updates if status is not received or cancelled
     if purchase.status in ["received", "cancelled"] and data.status != "cancelled":
         # If trying to update other fields but not cancelling, restrict it
-        # But if just updating payment status, allow it
-        allowed_fields = ["payment_status", "payment_terms", "notes"]
+        # But if just updating payment status, method or date, allow it
+        allowed_fields = ["payment_status", "payment_method", "payment_date", "payment_terms", "notes"]
         update_data = data.model_dump(exclude_unset=True)
         if any(field not in allowed_fields for field in update_data.keys()):
              return None # Or raise error in API

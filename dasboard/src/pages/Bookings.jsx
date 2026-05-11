@@ -230,10 +230,10 @@ const BookingDetailsModal = ({
             <div>
               <h2 className="text-xl sm:text-2xl font-bold text-slate-800 tracking-tight leading-none mb-1">Booking Details</h2>
               <div className="flex items-center gap-2">
-                <BookingStatusBadge 
-                  status={booking.status || "Pending"} 
-                  isPackage={booking.is_package} 
-                  packageName={booking.package?.title} 
+                <BookingStatusBadge
+                  status={booking.status || "Pending"}
+                  isPackage={booking.is_package}
+                  packageName={booking.package?.title}
                   isConfirmed={booking.is_confirmed}
                   advanceDeposit={booking.advance_deposit}
                 />
@@ -294,6 +294,10 @@ const BookingDetailsModal = ({
               <div className="bg-slate-50/80 rounded-2xl p-4 border border-slate-100">
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Units (Manifest)</p>
                 <p className="font-bold text-slate-700 leading-tight">{roomInfo}</p>
+              </div>
+              <div className="bg-slate-50/80 rounded-2xl p-4 border border-slate-100">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Quantity (Rooms)</p>
+                <p className="font-bold text-indigo-600 leading-tight">{booking.num_rooms || 1} Room(s)</p>
               </div>
               <div className="bg-slate-50/80 rounded-2xl p-4 border border-slate-100">
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Group Quota</p>
@@ -432,13 +436,108 @@ const BookingDetailsModal = ({
               </div>
             </section>
           )}
+
+          {/* Payment History Protocol */}
+          <div className="bg-white/40 backdrop-blur-xl rounded-[2.5rem] border border-slate-100/50 overflow-hidden shadow-2xl shadow-slate-200/20 relative">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full blur-3xl -mr-16 -mt-16"></div>
+            
+            <div className="px-8 py-6 bg-slate-50/50 border-b border-slate-100 flex items-center justify-between relative z-10">
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center border border-emerald-200 shadow-sm">
+                  <Receipt className="w-5 h-5 text-emerald-600" />
+                </div>
+                <div>
+                  <h3 className="text-xs font-bold text-slate-800 uppercase tracking-widest leading-none mb-1">Financial Transactions</h3>
+                  <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">Full receipt audit trail</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="px-3 py-1 bg-white rounded-full border border-slate-100 text-[9px] font-bold text-emerald-600 uppercase tracking-widest shadow-sm">
+                  {booking.payments?.length || 0} Records
+                </span>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto relative z-10">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-slate-50/20">
+                    <th className="px-8 py-4 text-left text-[9px] font-bold text-slate-400 uppercase tracking-widest">Receipt</th>
+                    <th className="px-8 py-4 text-left text-[9px] font-bold text-slate-400 uppercase tracking-widest">Temporal Log</th>
+                    <th className="px-8 py-4 text-left text-[9px] font-bold text-slate-400 uppercase tracking-widest">Payment Mode</th>
+                    <th className="px-8 py-4 text-right text-[9px] font-bold text-slate-400 uppercase tracking-widest">Fiscal Value</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {booking.payments && booking.payments.length > 0 ? (
+                    booking.payments.map((p, idx) => {
+                      const methodConfig = {
+                        cash: { icon: "💵", label: "Hard Cash", color: "text-emerald-600 bg-emerald-50 border-emerald-100" },
+                        upi: { icon: "📱", label: "UPI Digital", color: "text-indigo-600 bg-indigo-50 border-indigo-100" },
+                        card: { icon: "💳", label: "Card Swiped", color: "text-blue-600 bg-blue-50 border-blue-100" },
+                        bank_transfer: { icon: "🏦", label: "Bank Wire", color: "text-amber-600 bg-amber-50 border-amber-100" }
+                      };
+                      const config = methodConfig[p.method?.toLowerCase()] || { icon: "💰", label: p.method, color: "text-slate-600 bg-slate-50 border-slate-100" };
+                      
+                      return (
+                        <tr key={idx} className="group hover:bg-slate-50/80 transition-all duration-300">
+                          <td className="px-8 py-5">
+                            <div className="flex flex-col">
+                              <span className="text-[10px] font-bold text-slate-800 tracking-tight">RCP-{p.id || 'EXT'}</span>
+                              <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">System Ref</span>
+                            </div>
+                          </td>
+                          <td className="px-8 py-5">
+                            <div className="flex flex-col">
+                              <span className="text-[10px] font-bold text-slate-600">{new Date(p.created_at).toLocaleDateString()}</span>
+                              <span className="text-[8px] font-bold text-slate-400">{new Date(p.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                            </div>
+                          </td>
+                          <td className="px-8 py-5">
+                            <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border ${config.color} shadow-sm group-hover:scale-105 transition-transform`}>
+                              <span className="text-xs">{config.icon}</span>
+                              <span className="text-[9px] font-bold uppercase tracking-wider">{config.label}</span>
+                            </div>
+                          </td>
+                          <td className="px-8 py-5 text-right">
+                            <span className="text-sm font-bold text-slate-800 tracking-tight">{formatCurrency(p.amount)}</span>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan="4" className="px-8 py-16 text-center">
+                        <div className="flex flex-col items-center gap-3">
+                          <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center border border-slate-100">
+                            <ClipboardList className="w-6 h-6 text-slate-200" />
+                          </div>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest italic">No financial movements identified</p>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
 
         {/* Action Center Footer */}
-        <div className="px-8 py-6 bg-slate-50/50 border-t border-slate-100 flex flex-wrap gap-4 items-center justify-between z-10">
-          <div className="flex-1">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-1">Consolidated Value</p>
-            <p className="text-2xl font-bold text-slate-800 tracking-tight">{formatCurrency(booking.is_package ? booking.package_rate : booking.room_rate)}</p>
+        <div className="px-8 py-6 bg-slate-50 border-t border-slate-100 flex flex-wrap gap-8 items-center justify-between z-10">
+          <div className="flex-1 flex flex-wrap gap-8">
+            <div>
+              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-1.5">Booking Value</p>
+              <p className="text-xl font-bold text-slate-800 tracking-tight">{formatCurrency(booking.total_amount || 0)}</p>
+            </div>
+            <div>
+              <p className="text-[9px] font-bold text-emerald-500 uppercase tracking-widest leading-none mb-1.5">Advance Paid</p>
+              <p className="text-xl font-bold text-emerald-600 tracking-tight">{formatCurrency(booking.advance_deposit || 0)}</p>
+            </div>
+            <div>
+              <p className="text-[9px] font-bold text-indigo-500 uppercase tracking-widest leading-none mb-1.5">Balance Due</p>
+              <p className="text-xl font-bold text-indigo-600 tracking-tight">{formatCurrency((booking.total_amount || 0) - (booking.advance_deposit || 0))}</p>
+            </div>
           </div>
           <div className="flex gap-3">
             <button
@@ -457,14 +556,14 @@ const BookingDetailsModal = ({
               </button>
             )}
             {!isCheckedIn && booking.status?.toLowerCase().replace(/[-_]/g, "") === "booked" && !booking.is_confirmed && onConfirm && (
-               <button
-                 onClick={() => onConfirm(booking)}
-                 className="px-8 py-3.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-2xl font-bold uppercase tracking-wider text-[10px] hover:shadow-2xl hover:shadow-emerald-500/20 transition-all flex items-center gap-2 active:scale-95"
-               >
-                 <CheckCircle2 className="w-4 h-4" />
-                 Confirm & Record Advance
-               </button>
-             )}
+              <button
+                onClick={() => onConfirm(booking)}
+                className="px-8 py-3.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-2xl font-bold uppercase tracking-wider text-[10px] hover:shadow-2xl hover:shadow-emerald-500/20 transition-all flex items-center gap-2 active:scale-95"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                Confirm & Record Advance
+              </button>
+            )}
             {(booking.is_confirmed || booking.advance_deposit > 0) && (
               <button
                 onClick={() => onDownloadReceipt(booking.id, booking.is_package)}
@@ -1097,11 +1196,10 @@ const AddExtraAllocationModal = ({
               <button
                 key={idx}
                 onClick={() => setSelectedRoomIndex(idx)}
-                className={`px-5 py-2.5 rounded-2xl text-[10px] uppercase tracking-wider font-bold transition-all shadow-sm whitespace-nowrap ${
-                  selectedRoomIndex === idx
+                className={`px-5 py-2.5 rounded-2xl text-[10px] uppercase tracking-wider font-bold transition-all shadow-sm whitespace-nowrap ${selectedRoomIndex === idx
                     ? "bg-indigo-600 text-white shadow-indigo-200 border border-indigo-700"
                     : "bg-white text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 border border-slate-200"
-                }`}
+                  }`}
               >
                 Room {room.number || room.room?.number || `Room ${idx + 1}`}
               </button>
@@ -1203,11 +1301,10 @@ const AddExtraAllocationModal = ({
               <div className="flex border-b border-slate-100">
                 <button
                   onClick={() => setActiveTab("current")}
-                  className={`flex-1 py-4 text-[10px] font-bold uppercase tracking-[0.2em] transition-all relative ${
-                    activeTab === "current"
+                  className={`flex-1 py-4 text-[10px] font-bold uppercase tracking-[0.2em] transition-all relative ${activeTab === "current"
                       ? "text-indigo-600"
                       : "text-slate-400 hover:text-slate-600 bg-slate-50/50"
-                  }`}
+                    }`}
                 >
                   Current Items
                   {activeTab === "current" && (
@@ -1219,11 +1316,10 @@ const AddExtraAllocationModal = ({
                 </button>
                 <button
                   onClick={() => setActiveTab("add")}
-                  className={`flex-1 py-4 text-[10px] font-bold uppercase tracking-[0.2em] transition-all relative ${
-                    activeTab === "add"
+                  className={`flex-1 py-4 text-[10px] font-bold uppercase tracking-[0.2em] transition-all relative ${activeTab === "add"
                       ? "text-indigo-600"
                       : "text-slate-400 hover:text-slate-600 bg-slate-50/50"
-                  }`}
+                    }`}
                 >
                   Add Items
                   {activeTab === "add" && (
@@ -1467,7 +1563,7 @@ const AddExtraAllocationModal = ({
                                     )}
                                   </td>
                                   <td className="px-8 py-6">
-                                      <button onClick={() => { const up = [...currentRoomItems]; up[actualIndex].is_present = !item.is_present; setCurrentRoomItems(up); }} className={`p-2.5 rounded-2xl shadow-sm transition-all ${item.is_present !== false ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-300 opacity-40'}`}><CheckCircle className="w-4 h-4" /></button>
+                                    <button onClick={() => { const up = [...currentRoomItems]; up[actualIndex].is_present = !item.is_present; setCurrentRoomItems(up); }} className={`p-2.5 rounded-2xl shadow-sm transition-all ${item.is_present !== false ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-300 opacity-40'}`}><CheckCircle className="w-4 h-4" /></button>
                                   </td>
                                   <td className="px-8 py-6">
                                     <div className="relative flex justify-center">
@@ -1964,36 +2060,44 @@ const ConfirmBookingModal = ({
         </div>
 
         <div className="px-12 pb-12 space-y-8 relative z-10 overflow-y-auto max-h-[60vh] custom-scrollbar">
-           <div className="bg-slate-50/50 rounded-[2rem] p-8 border-2 border-slate-100 shadow-sm grid grid-cols-2 gap-8">
-              <div className="col-span-2 flex items-center justify-between border-b border-slate-100 pb-6 mb-2">
-                <div>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-2 px-1">Guest Identification</p>
-                  <div className="flex items-center gap-2 px-1">
-                    <User className="w-4 h-4 text-indigo-400" />
-                    <p className="font-bold text-slate-700 text-xl tracking-tight">{booking.guest_name}</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-2 px-1">Booking Value</p>
-                  <p className="font-bold text-slate-800 text-xl tracking-tight">{formatCurrency(booking.total_amount || 0)}</p>
+          <div className="bg-slate-50/50 rounded-[2rem] p-8 border-2 border-slate-100 shadow-sm space-y-8">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-6">
+              <div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-2 px-1">Guest Identification</p>
+                <div className="flex items-center gap-2 px-1">
+                  <User className="w-4 h-4 text-indigo-400" />
+                  <p className="font-bold text-slate-700 text-xl tracking-tight">{booking.guest_name}</p>
                 </div>
               </div>
+              <div className="text-right">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-2 px-1">Booking Value</p>
+                <p className="font-bold text-slate-800 text-xl tracking-tight">{formatCurrency(booking.total_amount || 0)}</p>
+              </div>
+            </div>
 
+            <div className="grid grid-cols-3 gap-8">
               <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-2 px-1">Total Advance</p>
-                <p className="font-bold text-emerald-600 text-2xl tracking-tighter">{formatCurrency(totalAmount)}</p>
+                <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-wide mb-2 px-1">Previous Advance</p>
+                <p className="font-bold text-emerald-500 text-2xl tracking-tighter">{formatCurrency(booking.advance_deposit || 0)}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-wide mb-2 px-1">New Payment</p>
+                <p className="font-bold text-indigo-600 text-2xl tracking-tighter">{formatCurrency(totalAmount)}</p>
               </div>
               <div className="text-right">
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-2 px-1">Balance Due</p>
-                <p className="font-bold text-indigo-600 text-2xl tracking-tighter">{formatCurrency((booking.total_amount || 0) - totalAmount)}</p>
+                <p className="font-bold text-slate-800 text-2xl tracking-tighter">
+                  {formatCurrency((booking.total_amount || 0) - (booking.advance_deposit || 0) - totalAmount)}
+                </p>
               </div>
             </div>
+          </div>
 
           {/* Payments List */}
           <div className="space-y-4">
             <div className="flex items-center justify-between px-2">
               <h3 className="font-bold text-slate-800 uppercase tracking-wide text-[10px]">Payment Breakdown</h3>
-              <button 
+              <button
                 onClick={addPaymentRow}
                 className="flex items-center gap-2 text-[10px] font-bold text-indigo-600 hover:text-indigo-700 uppercase tracking-widest bg-indigo-50 px-4 py-2 rounded-xl border border-indigo-100 transition-all active:scale-95"
               >
@@ -2030,7 +2134,7 @@ const ConfirmBookingModal = ({
                     </select>
                   </div>
                   {payments.length > 1 && (
-                    <button 
+                    <button
                       onClick={() => removePaymentRow(idx)}
                       className="p-4 bg-rose-50 text-rose-500 rounded-2xl hover:bg-rose-500 hover:text-white transition-all active:scale-95"
                     >
@@ -2042,15 +2146,62 @@ const ConfirmBookingModal = ({
             </div>
           </div>
 
+          {/* Previous Transaction Audit */}
+          <div className="bg-slate-50/50 rounded-[2rem] border-2 border-slate-100 overflow-hidden shadow-sm">
+            <div className="px-8 py-4 bg-slate-50/50 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Receipt className="w-4 h-4 text-emerald-500" />
+                <h3 className="text-[10px] font-bold text-slate-800 uppercase tracking-wider">Payment History Protocol</h3>
+              </div>
+              <span className="px-3 py-1 bg-white rounded-full border border-slate-100 text-[8px] font-bold text-slate-400 uppercase tracking-widest">
+                {booking.payments?.length || 0} Transactions
+              </span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="bg-slate-50/30">
+                    <th className="px-8 py-3 text-left text-[8px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100">Receipt ID</th>
+                    <th className="px-8 py-3 text-left text-[8px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100">Date/Time</th>
+                    <th className="px-8 py-3 text-left text-[8px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100">Method</th>
+                    <th className="px-8 py-3 text-right text-[8px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100">Amount</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {booking.payments && booking.payments.length > 0 ? (
+                    booking.payments.map((p, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
+                        <td className="px-8 py-4 text-[10px] font-bold text-slate-800 uppercase">RCP-{p.id || 'N/A'}</td>
+                        <td className="px-8 py-4 text-[10px] font-semibold text-slate-500">{new Date(p.created_at).toLocaleDateString()}</td>
+                        <td className="px-8 py-4 uppercase">
+                          <span className="px-2 py-1 bg-white border border-slate-100 rounded-lg text-[8px] font-bold text-slate-600">
+                            {p.method}
+                          </span>
+                        </td>
+                        <td className="px-8 py-4 text-right text-[10px] font-bold text-emerald-600">{formatCurrency(p.amount)}</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan="4" className="px-8 py-10 text-center">
+                        <p className="text-[10px] font-bold text-slate-300 uppercase tracking-widest italic">No financial movements identified</p>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
           {/* Notes */}
           <div className="space-y-3">
-              <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Confirmation Protocol Notes</label>
-              <textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Add any specific details from the call (e.g. 'Confirmed lunch timing', 'Special bedding requested')..."
-                className="w-full px-6 py-4 bg-slate-50 border-2 border-transparent focus:bg-white focus:border-indigo-100 rounded-[2rem] text-sm font-bold text-slate-700 outline-none transition-all placeholder:text-slate-300 resize-none h-32 shadow-inner"
-              />
+            <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Confirmation Protocol Notes</label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Add any specific details from the call (e.g. 'Confirmed lunch timing', 'Special bedding requested')..."
+              className="w-full px-6 py-4 bg-slate-50 border-2 border-transparent focus:bg-white focus:border-indigo-100 rounded-[2rem] text-sm font-bold text-slate-700 outline-none transition-all placeholder:text-slate-300 resize-none h-32 shadow-inner"
+            />
           </div>
         </div>
 
@@ -2315,8 +2466,8 @@ const CheckInModal = ({
         const allRooms = res.data || [];
         // Filter by the booking's room type if it's a soft allocation
         const typeId = booking.room_type_id || (booking.rooms?.[0]?.room_type_id);
-        const filtered = allRooms.filter(r => 
-          r.status === 'Available' && 
+        const filtered = allRooms.filter(r =>
+          r.status === 'Available' &&
           (!typeId || r.room_type_id === typeId)
         );
         setAvailableRooms(filtered);
@@ -2325,7 +2476,7 @@ const CheckInModal = ({
       }
     };
     if (booking.status?.toLowerCase() === 'booked' && (!booking.rooms || booking.rooms.length === 0)) {
-       fetchAvailableRooms();
+      fetchAvailableRooms();
     }
   }, [booking]);
 
@@ -2596,7 +2747,7 @@ const CheckInModal = ({
                       </div>
                       <div className="bg-white/60 p-4 rounded-2xl border border-white/50 shadow-sm text-right">
                         <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-1">Room Category</p>
-                        <p className="font-bold text-indigo-600 text-sm truncate">
+                        <p className="font-bold text-indigo-600 text-[10px] sm:text-sm">
                           {(() => {
                             // 1. Direct room_type_name from API (if backend resolves it)
                             if (booking.room_type_name) return booking.room_type_name;
@@ -2619,61 +2770,60 @@ const CheckInModal = ({
                       </div>
                     </div>
 
-                      <div className="bg-slate-900 rounded-3xl p-5 shadow-xl">
-                          <div className="flex items-center gap-2 mb-3">
-                            <Home className="w-3 h-3 text-indigo-400" />
-                            {(booking.rooms && booking.rooms.length > 0) ? (
-                              <p className="text-[8px] font-bold text-emerald-400 uppercase tracking-wide">Allotted Sector(s) — Confirmed</p>
-                            ) : (
-                              <p className="text-[8px] font-bold text-orange-300 uppercase tracking-wide">Allotted Sector(s) — Assign {booking.num_rooms || 1} Room(s)</p>
-                            )}
-                          </div>
-                          {(booking.rooms && booking.rooms.length > 0) ? (
-                            <div className="space-y-1">
-                              {booking.rooms.map((room, idx) => {
-                                const resolveType = (r) => {
-                                  if (r?.type && r.type !== 'undefined') return r.type;
-                                  const rtId = r?.room_type_id;
-                                  return roomTypeObjects?.find(rt => rt.id === rtId)?.name || '';
-                                };
-                                const typeName = resolveType(room);
-                                return (
-                                  <div key={idx} className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-3 py-2">
-                                    <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-                                    <span className="font-bold text-white text-sm">Room {room.number}</span>
-                                    {typeName && <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-widest">· {typeName}</span>}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          ) : (
-                            <div className="space-y-3">
-                              <p className="font-bold text-orange-400 text-[10px] uppercase tracking-widest">Action Required: Assign {booking.num_rooms || 1} Room(s)</p>
-                              <div className="grid grid-cols-3 gap-2">
-                                {availableRooms.map(room => (
-                                  <button
-                                    key={room.id}
-                                    onClick={() => {
-                                      setSelectedRoomIds(prev =>
-                                        prev.includes(room.id)
-                                        ? prev.filter(id => id !== room.id)
-                                        : [...prev, room.id]
-                                      );
-                                    }}
-                                    className={`p-2 rounded-xl text-[10px] font-bold transition-all border ${
-                                      selectedRoomIds.includes(room.id)
-                                      ? "bg-indigo-600 text-white border-indigo-400"
-                                      : "bg-slate-800 text-slate-400 border-slate-700 hover:border-indigo-500"
-                                    }`}
-                                  >
-                                    {room.number}
-                                  </button>
-                                ))}
-                              </div>
-                              {availableRooms.length === 0 && <p className="text-[9px] text-rose-400 font-bold">No available rooms of this type!</p>}
-                            </div>
-                          )}
+                    <div className="bg-slate-900 rounded-3xl p-5 shadow-xl">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Home className="w-3 h-3 text-indigo-400" />
+                        {(booking.rooms && booking.rooms.length > 0) ? (
+                          <p className="text-[8px] font-bold text-emerald-400 uppercase tracking-wide">Allotted Sector(s) — Confirmed</p>
+                        ) : (
+                          <p className="text-[8px] font-bold text-orange-300 uppercase tracking-wide">Allotted Sector(s) — Assign {booking.num_rooms || 1} Room(s)</p>
+                        )}
                       </div>
+                      {(booking.rooms && booking.rooms.length > 0) ? (
+                        <div className="space-y-1">
+                          {booking.rooms.map((room, idx) => {
+                            const resolveType = (r) => {
+                              if (r?.type && r.type !== 'undefined') return r.type;
+                              const rtId = r?.room_type_id;
+                              return roomTypeObjects?.find(rt => rt.id === rtId)?.name || '';
+                            };
+                            const typeName = resolveType(room);
+                            return (
+                              <div key={idx} className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-3 py-2">
+                                <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                                <span className="font-bold text-white text-sm">Room {room.number}</span>
+                                {typeName && <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-widest">· {typeName}</span>}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <p className="font-bold text-orange-400 text-[10px] uppercase tracking-widest">Action Required: Assign {booking.num_rooms || 1} Room(s)</p>
+                          <div className="grid grid-cols-3 gap-2">
+                            {availableRooms.map(room => (
+                              <button
+                                key={room.id}
+                                onClick={() => {
+                                  setSelectedRoomIds(prev =>
+                                    prev.includes(room.id)
+                                      ? prev.filter(id => id !== room.id)
+                                      : [...prev, room.id]
+                                  );
+                                }}
+                                className={`p-2 rounded-xl text-[10px] font-bold transition-all border ${selectedRoomIds.includes(room.id)
+                                    ? "bg-indigo-600 text-white border-indigo-400"
+                                    : "bg-slate-800 text-slate-400 border-slate-700 hover:border-indigo-500"
+                                  }`}
+                              >
+                                {room.number}
+                              </button>
+                            ))}
+                          </div>
+                          {availableRooms.length === 0 && <p className="text-[9px] text-rose-400 font-bold">No available rooms of this type!</p>}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -2993,6 +3143,9 @@ const BookingFormModal = ({
         className="bg-white/95 backdrop-blur-xl rounded-[1.5rem] shadow-[0_32px_64px_-16px_rgba(0,0,0,0.2)] w-full max-w-6xl max-h-[95vh] overflow-hidden flex flex-col border border-white/20 relative"
         onClick={(e) => e.stopPropagation()}
       >
+        <div className="bg-red-600 text-white py-2 px-4 text-center text-[10px] font-bold uppercase tracking-widest z-[100]">
+          System Update Verification Active - New Financial Layout Applied
+        </div>
         {/* Animated Background Gradients */}
         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-rose-500 z-50"></div>
         <div className="absolute -top-24 -right-24 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
@@ -3291,7 +3444,7 @@ const BookingFormModal = ({
                   >
                     Discard
                   </button>
-                   <button
+                  <button
                     type="submit"
                     disabled={isSubmitting || isLoading || (!formData.room_type_id && formData.roomNumbers.length === 0)}
                     className="group px-8 py-3 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-xl font-bold uppercase tracking-wide text-[10px] hover:shadow-xl hover:shadow-indigo-500/30 transition-all duration-500 flex items-center justify-center gap-2 active:scale-95 disabled:opacity-30 disabled:grayscale disabled:cursor-not-allowed"
@@ -3586,19 +3739,19 @@ const Bookings = () => {
   const handleConfirmBooking = async (bookingId, payments, notes, isPackage) => {
     setIsSubmitting(true);
     try {
-      const endpoint = isPackage 
-        ? `/packages/booking/${bookingId}/confirm` 
+      const endpoint = isPackage
+        ? `/packages/booking/${bookingId}/confirm`
         : `/bookings/${bookingId}/confirm`;
-      
+
       const response = await API.post(endpoint, {
         payments: payments.filter(p => p.amount > 0),
         notes: notes
       }, authHeader());
-      
+
       showBannerMessage("success", `Booking ${response.data.display_id || bookingId} confirmed successfully!`);
       setBookingToConfirm(null);
       if (modalBooking) {
-         setModalBooking(response.data);
+        setModalBooking(response.data);
       }
       fetchData(); // Refresh list
     } catch (error) {
@@ -4116,8 +4269,8 @@ const Bookings = () => {
   const filteredRooms = useMemo(() => {
     if (!formData.room_type_id) return [];
     const selectedType = roomTypeObjects.find(rt => rt.id === Number(formData.room_type_id));
-    return rooms.filter((r) => 
-      (r.room_type_id === Number(formData.room_type_id)) || 
+    return rooms.filter((r) =>
+      (r.room_type_id === Number(formData.room_type_id)) ||
       (selectedType && r.type === selectedType.name)
     );
   }, [rooms, formData.room_type_id, roomTypeObjects]);
@@ -4128,7 +4281,7 @@ const Bookings = () => {
       .map((roomNumber) =>
         rooms.find(
           (r) => r.number === roomNumber && (
-            (r.room_type_id === Number(formData.room_type_id)) || 
+            (r.room_type_id === Number(formData.room_type_id)) ||
             (selectedType && r.type === selectedType.name)
           )
         ),
@@ -5021,7 +5174,7 @@ const Bookings = () => {
     const formData = new FormData();
     formData.append("id_card_image", images.id_card_image);
     formData.append("guest_photo", images.guest_photo);
-    
+
     // Pass room assignments if rooms are being assigned during check-in (Soft Allocation)
     if (images.room_ids) {
       formData.append("room_ids", images.room_ids);
@@ -6014,11 +6167,10 @@ const Bookings = () => {
                               </div>
                             )}
                             {booking.source && (
-                              <div className={`mt-1 inline-flex items-center px-1.5 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider ${
-                                (booking.source !== 'Direct' && booking.source !== 'Admin' && booking.source !== 'direct' && booking.source !== 'admin')
-                                ? "bg-violet-50 text-violet-600 border border-violet-100"
-                                : "bg-gray-50 text-gray-400 border border-gray-100"
-                              }`}>
+                              <div className={`mt-1 inline-flex items-center px-1.5 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider ${(booking.source !== 'Direct' && booking.source !== 'Admin' && booking.source !== 'direct' && booking.source !== 'admin')
+                                  ? "bg-violet-50 text-violet-600 border border-violet-100"
+                                  : "bg-gray-50 text-gray-400 border border-gray-100"
+                                }`}>
                                 {booking.source}
                               </div>
                             )}
@@ -6306,7 +6458,7 @@ const Bookings = () => {
                                     <FileText className="w-5 h-5" />
                                   </button>
                                 )}
-                                {hasPermission('bookings:edit') && b.status?.toLowerCase().replace(/[-_]/g, "") === "booked" && !b.is_confirmed && (
+                                {hasPermission('bookings:edit') && (b.status?.toLowerCase().replace(/[-_]/g, "") === "booked" || b.status?.toLowerCase().replace(/[-_]/g, "") === "checkedin") && (
                                   <button
                                     onClick={() => setBookingToConfirm(b)}
                                     className="w-10 h-10 bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white rounded-xl border-2 border-emerald-100 hover:border-emerald-600 transition-all shadow-sm flex items-center justify-center"
@@ -6318,28 +6470,28 @@ const Bookings = () => {
                                 {hasPermission('bookings:edit') && (
                                   <button
                                     onClick={() => setBookingToExtend(b)}
-                                  disabled={(() => {
-                                    if (!b || !b.status) return true;
-                                    const rawStatusLower = b.status.toLowerCase().trim();
-                                    const normalizedStatus = rawStatusLower.replace(/[-_]/g, "-");
-                                    return normalizedStatus !== "booked" && normalizedStatus !== "checked-in";
-                                  })()}
-                                  className="w-10 h-10 bg-white text-slate-400 hover:text-amber-600 rounded-xl border-2 border-slate-50 hover:border-amber-100 transition-all shadow-sm flex items-center justify-center disabled:opacity-20"
-                                  title="Extend Stay"
-                                >
-                                  <Calendar className="w-5 h-5" />
-                                </button>
-                              )}
+                                    disabled={(() => {
+                                      if (!b || !b.status) return true;
+                                      const rawStatusLower = b.status.toLowerCase().trim();
+                                      const normalizedStatus = rawStatusLower.replace(/[-_]/g, "-");
+                                      return normalizedStatus !== "booked" && normalizedStatus !== "checked-in";
+                                    })()}
+                                    className="w-10 h-10 bg-white text-slate-400 hover:text-amber-600 rounded-xl border-2 border-slate-50 hover:border-amber-100 transition-all shadow-sm flex items-center justify-center disabled:opacity-20"
+                                    title="Extend Stay"
+                                  >
+                                    <Calendar className="w-5 h-5" />
+                                  </button>
+                                )}
                                 {hasPermission('bookings:delete') && (
                                   <button
                                     onClick={() => cancelBooking(b.id, b.is_package)}
-                                  disabled={b.status?.toLowerCase().replace(/[-_]/g, "") !== "booked"}
-                                  className="w-10 h-10 bg-white text-slate-400 hover:text-rose-600 rounded-xl border-2 border-slate-50 hover:border-rose-100 transition-all shadow-sm flex items-center justify-center disabled:opacity-20"
-                                  title="Cancel Record"
-                                >
-                                  <Trash2 className="w-5 h-5" />
-                                </button>
-                              )}
+                                    disabled={b.status?.toLowerCase().replace(/[-_]/g, "") !== "booked" && b.status?.toLowerCase().replace(/[-_]/g, "") !== "checkedin"}
+                                    className="w-10 h-10 bg-white text-slate-400 hover:text-rose-600 rounded-xl border-2 border-slate-50 hover:border-rose-100 transition-all shadow-sm flex items-center justify-center disabled:opacity-20"
+                                    title="Cancel Record"
+                                  >
+                                    <Trash2 className="w-5 h-5" />
+                                  </button>
+                                )}
                                 {b.guest_email && (
                                   <button
                                     onClick={() => shareViaEmail(b)}
@@ -6393,10 +6545,10 @@ const Bookings = () => {
 
         {/* Calendar Tab */}
         {mainTab === "calendar" && (
-          <BookingCalendar 
-            rooms={allRooms} 
-            bookings={bookings} 
-            roomTypeObjects={roomTypeObjects} 
+          <BookingCalendar
+            rooms={allRooms}
+            bookings={bookings}
+            roomTypeObjects={roomTypeObjects}
           />
         )}
 

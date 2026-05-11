@@ -174,6 +174,7 @@ def create_checkout_request(
 @router.get("/checkout-request/{room_number}")
 def get_checkout_request(
     room_number: str,
+    checkout_mode: str = "multiple",
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     branch_id: int = Depends(get_branch_id)
@@ -190,10 +191,12 @@ def get_checkout_request(
         raise HTTPException(status_code=404, detail=f"Room {room_number} not found")
     
     # Find active booking
-    booking_link = (db.query(BookingRoom)
+    query = (db.query(BookingRoom)
                     .join(Booking)
-                    .filter(BookingRoom.room_id == room.id, Booking.status.in_(['checked-in', 'checked_in', 'booked']), Booking.branch_id == branch_id)
-                    .order_by(Booking.id.desc()).first())
+                    .filter(BookingRoom.room_id == room.id, Booking.status.in_(['checked-in', 'checked_in', 'booked'])))
+    if branch_id is not None:
+        query = query.filter(Booking.branch_id == branch_id)
+    booking_link = query.order_by(Booking.id.desc()).first()
     
     package_link = None
     booking = None
@@ -202,10 +205,13 @@ def get_checkout_request(
     if booking_link:
         booking = booking_link.booking
     else:
-        package_link = (db.query(PackageBookingRoom)
+        pkg_query = (db.query(PackageBookingRoom)
                         .join(PackageBooking)
-                        .filter(PackageBookingRoom.room_id == room.id, PackageBooking.status.in_(['checked-in', 'checked_in', 'booked']), PackageBooking.branch_id == branch_id)
-                        .order_by(PackageBooking.id.desc()).first())
+                        .filter(PackageBookingRoom.room_id == room.id, PackageBooking.status.in_(['checked-in', 'checked_in', 'booked'])))
+        if branch_id is not None:
+            pkg_query = pkg_query.filter(PackageBooking.branch_id == branch_id)
+        package_link = pkg_query.order_by(PackageBooking.id.desc()).first()
+        
         if package_link:
             booking = package_link.package_booking
             is_package = True
@@ -240,20 +246,37 @@ def get_checkout_request(
         
     # Calculate aggregate status
     # In multiple mode, if ANY request is not completed (or not inventory_checked), the booking is pending verified
-    aggregate_status = checkout_request.status
-    aggregate_inventory_checked = checkout_request.inventory_checked
-    
+    # IMPROVED: Only consider the LATEST non-cancelled request for each room in the booking
+    latest_requests_by_room = {}
     for req in all_requests:
+        if req.status == "cancelled":
+            continue
+        if req.room_number not in latest_requests_by_room:
+            latest_requests_by_room[req.room_number] = req
+            
+    booking_status = checkout_request.status
+    booking_inventory_checked = checkout_request.inventory_checked
+    
+    # Check all rooms in the booking that have checkout requests
+    for req in latest_requests_by_room.values():
         if req.status != "completed" or not req.inventory_checked:
-            aggregate_status = "pending"
-            aggregate_inventory_checked = False
+            booking_status = "pending"
+            booking_inventory_checked = False
             break
             
+    # Decide which status to return as the primary "status" field
+    primary_status = booking_status if checkout_mode == "multiple" else checkout_request.status
+    primary_inv_checked = booking_inventory_checked if checkout_mode == "multiple" else checkout_request.inventory_checked
+    
     return {
         "exists": True,
         "request_id": checkout_request.id,
-        "status": aggregate_status,
-        "inventory_checked": aggregate_inventory_checked,
+        "status": primary_status,
+        "room_status": checkout_request.status,
+        "booking_status": booking_status,
+        "inventory_checked": primary_inv_checked,
+        "room_inventory_checked": checkout_request.inventory_checked,
+        "booking_inventory_checked": booking_inventory_checked,
         "inventory_checked_by": checkout_request.inventory_checked_by,
         "inventory_checked_at": checkout_request.inventory_checked_at.isoformat() + "Z" if (checkout_request.inventory_checked_at and not checkout_request.inventory_checked_at.tzinfo) else (checkout_request.inventory_checked_at.isoformat().replace("+00:00", "Z") if checkout_request.inventory_checked_at else None),
         "inventory_notes": checkout_request.inventory_notes,
@@ -1895,7 +1918,11 @@ def cleanup_orphaned_checkouts_endpoint(
         
         if room_number:
             # Find checkouts for this room where room is still checked-in
-            room = db.query(Room).filter(Room.number == room_number, Room.branch_id == branch_id).first()
+            q = db.query(Room).filter(Room.number == room_number)
+            if branch_id is not None:
+                q = q.filter(Room.branch_id == branch_id)
+            room = q.first()
+            
             if not room:
                 raise HTTPException(status_code=404, detail=f"Room {room_number} not found")
             
@@ -5397,7 +5424,7 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, db: Ses
             # 12. Update booking and room statuses
             booking.status = "checked_out"
             booking.checked_out_at = datetime.now(__import__("datetime").timezone.utc)
-            booking.total_amount = grand_total
+            booking.total_amount = grand_total_before_advance
             db.query(Room).filter(Room.id.in_(room_ids)).update({"status": "Available"})
             
             # 12.5. Automatically create cleaning and refill service requests for all rooms

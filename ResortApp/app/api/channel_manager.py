@@ -44,6 +44,10 @@ async def aiosell_webhook(
     Inbound webhook for Aiosell Reservation Push
     Receives NEW, MODIFIED, CANCELLED reservations.
     """
+    from app.utils.aiosell_config import is_aiosell_active
+    if not is_aiosell_active(db):
+        return {"success": True, "message": "Aiosell is disabled in this environment."}
+        
     verify_webhook_auth(request)
     
     print(f"[AIOSELL WEBHOOK] FULL PAYLOAD: {payload}")

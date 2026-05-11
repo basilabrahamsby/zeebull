@@ -16,6 +16,148 @@ from app.models.room import Room
 # Helpers
 # ---------------------------------------------------------------------------
 
+def calculate_live_metrics(db: Session, audit: DayAudit, branch_id: int) -> DayAudit:
+    """Calculate and attach live metrics to an open DayAudit object (in-memory only)."""
+    # Calculate live checkins and checkouts since day was opened
+    nc_in = (
+        db.query(func.count(Booking.id))
+        .filter(
+            Booking.branch_id == branch_id,
+            Booking.checked_in_at >= audit.opened_at,
+        )
+        .scalar()
+    ) or 0
+    
+    nc_out = (
+        db.query(func.count(Booking.id))
+        .filter(
+            Booking.branch_id == branch_id,
+            Booking.checked_out_at >= audit.opened_at,
+        )
+        .scalar()
+    ) or 0
+    
+    audit.new_checkins = nc_in
+    audit.new_checkouts = nc_out
+
+    # Calculate live revenues since day was opened
+    from app.models.checkout import Checkout, CheckoutPayment
+    from app.models.foodorder import FoodOrder
+    from app.models.service import AssignedService
+    from app.models.service import Service as ServiceModel
+    from sqlalchemy.sql import case
+
+    checkouts = (
+        db.query(Checkout)
+        .filter(
+            Checkout.branch_id == branch_id,
+            Checkout.created_at >= audit.opened_at,
+        )
+        .all()
+    )
+    checkout_room_total = sum(float(c.room_total or 0.0) for c in checkouts)
+    checkout_food_total = sum(float(c.food_total or 0.0) for c in checkouts)
+    checkout_service_total = sum(float(c.service_total or 0.0) for c in checkouts)
+    checkout_tax_total = sum(float(c.tax_amount or 0.0) for c in checkouts)
+
+    food_revenue = (
+        db.query(func.coalesce(func.sum(FoodOrder.total_with_gst), 0))
+        .filter(
+            FoodOrder.branch_id == branch_id,
+            FoodOrder.created_at >= audit.opened_at,
+        )
+        .scalar()
+    ) or 0.0
+
+    service_revenue = (
+        db.query(func.coalesce(func.sum(
+            case(
+                (AssignedService.override_charges != None, AssignedService.override_charges),
+                else_=ServiceModel.charges
+            )
+        ), 0))
+        .join(ServiceModel, AssignedService.service_id == ServiceModel.id)
+        .filter(
+            AssignedService.branch_id == branch_id,
+            AssignedService.assigned_at >= audit.opened_at,
+        )
+        .scalar()
+    ) or 0.0
+
+    checkout_payments = (
+        db.query(CheckoutPayment)
+        .filter(
+            CheckoutPayment.branch_id == branch_id,
+            CheckoutPayment.created_at >= audit.opened_at,
+        )
+        .all()
+    )
+    payments_received = sum(float(p.amount or 0.0) for p in checkout_payments)
+
+    # Calculate Expenses & Purchases since opened via Journal Entries (actual cash flow)
+    from app.models.account import JournalEntry, JournalEntryLine
+
+    total_expenses = (
+        db.query(func.coalesce(func.sum(JournalEntry.total_amount), 0))
+        .filter(
+            JournalEntry.branch_id == branch_id,
+            JournalEntry.entry_date >= audit.opened_at,
+            JournalEntry.reference_type == "expense"
+        )
+        .scalar()
+    ) or 0.0
+
+    total_purchases = (
+        db.query(func.coalesce(func.sum(JournalEntry.total_amount), 0))
+        .filter(
+            JournalEntry.branch_id == branch_id,
+            JournalEntry.entry_date >= audit.opened_at,
+            JournalEntry.reference_type == "purchase_payment"
+        )
+        .scalar()
+    ) or 0.0
+    
+    # Calculate Expected Balances for the audit report
+    # We fetch all transactions for this audit
+    from sqlalchemy.orm import joinedload
+    txs = db.query(JournalEntry).options(
+        joinedload(JournalEntry.lines).joinedload(JournalEntryLine.debit_ledger),
+        joinedload(JournalEntry.lines).joinedload(JournalEntryLine.credit_ledger)
+    ).filter(
+        JournalEntry.branch_id == branch_id,
+        JournalEntry.entry_date >= audit.opened_at
+    ).all()
+    
+    expected_cash = float(audit.opening_cash_balance or 0.0)
+    expected_acc = float(audit.opening_account_balance or 0.0)
+    
+    for tx in txs:
+        ref_type = str(tx.reference_type or "").lower()
+        is_outflow = ref_type in ["expense", "purchase", "purchase_payment", "waste"]
+        amount = float(tx.total_amount or 0.0)
+        
+        is_cash = any("cash" in (line.debit_ledger.name.lower() if line.debit_ledger else "") or 
+                     "cash" in (line.credit_ledger.name.lower() if line.credit_ledger else "") 
+                     for line in tx.lines)
+        
+        if is_cash:
+            expected_cash += -amount if is_outflow else amount
+        else:
+            expected_acc += -amount if is_outflow else amount
+
+    audit.total_room_revenue = round(checkout_room_total, 2)
+    audit.total_food_revenue = round(float(food_revenue) + checkout_food_total, 2)
+    audit.total_service_revenue = round(float(service_revenue) + checkout_service_total, 2)
+    audit.total_gst_collected = round(checkout_tax_total, 2)
+    audit.total_payments_received = round(payments_received, 2)
+    audit.total_expenses = round(float(total_expenses), 2)
+    audit.total_purchases = round(float(total_purchases), 2)
+    audit.system_expected_cash = round(expected_cash, 2)
+    audit.system_expected_account = round(expected_acc, 2)
+    
+    return audit
+
+
 def get_current_open_audit(db: Session, branch_id: int) -> Optional[DayAudit]:
     """Return the currently open DayAudit for a branch, or None."""
     audit = (
@@ -24,88 +166,19 @@ def get_current_open_audit(db: Session, branch_id: int) -> Optional[DayAudit]:
         .first()
     )
     if audit:
-        # Calculate live checkins and checkouts since day was opened
-        nc_in = (
-            db.query(func.count(Booking.id))
-            .filter(
-                Booking.branch_id == branch_id,
-                Booking.checked_in_at >= audit.opened_at,
-            )
-            .scalar()
-        ) or 0
-        
-        nc_out = (
-            db.query(func.count(Booking.id))
-            .filter(
-                Booking.branch_id == branch_id,
-                Booking.checked_out_at >= audit.opened_at,
-            )
-            .scalar()
-        ) or 0
-        
-        audit.new_checkins = nc_in
-        audit.new_checkouts = nc_out
+        return calculate_live_metrics(db, audit, branch_id)
+    return None
 
-        # Calculate live revenues since day was opened
-        from app.models.checkout import Checkout, CheckoutPayment
-        from app.models.foodorder import FoodOrder
-        from app.models.service import AssignedService
-        from app.models.service import Service as ServiceModel
-        from sqlalchemy.sql import case
 
-        checkouts = (
-            db.query(Checkout)
-            .filter(
-                Checkout.branch_id == branch_id,
-                Checkout.created_at >= audit.opened_at,
-            )
-            .all()
-        )
-        checkout_room_total = sum(float(c.room_total or 0.0) for c in checkouts)
-        checkout_food_total = sum(float(c.food_total or 0.0) for c in checkouts)
-        checkout_service_total = sum(float(c.service_total or 0.0) for c in checkouts)
-        checkout_tax_total = sum(float(c.tax_amount or 0.0) for c in checkouts)
-
-        food_revenue = (
-            db.query(func.coalesce(func.sum(FoodOrder.total_with_gst), 0))
-            .filter(
-                FoodOrder.branch_id == branch_id,
-                FoodOrder.created_at >= audit.opened_at,
-            )
-            .scalar()
-        ) or 0.0
-
-        service_revenue = (
-            db.query(func.coalesce(func.sum(
-                case(
-                    (AssignedService.override_charges != None, AssignedService.override_charges),
-                    else_=ServiceModel.charges
-                )
-            ), 0))
-            .join(ServiceModel, AssignedService.service_id == ServiceModel.id)
-            .filter(
-                AssignedService.branch_id == branch_id,
-                AssignedService.assigned_at >= audit.opened_at,
-            )
-            .scalar()
-        ) or 0.0
-
-        checkout_payments = (
-            db.query(CheckoutPayment)
-            .filter(
-                CheckoutPayment.branch_id == branch_id,
-                CheckoutPayment.created_at >= audit.opened_at,
-            )
-            .all()
-        )
-        payments_received = sum(float(p.amount or 0.0) for p in checkout_payments)
-
-        audit.total_room_revenue = round(checkout_room_total, 2)
-        audit.total_food_revenue = round(float(food_revenue) + checkout_food_total, 2)
-        audit.total_service_revenue = round(float(service_revenue) + checkout_service_total, 2)
-        audit.total_gst_collected = round(checkout_tax_total, 2)
-        audit.total_payments_received = round(payments_received, 2)
-        
+def get_audit_by_id(db: Session, audit_id: int, branch_id: int) -> Optional[DayAudit]:
+    """Get audit by ID, calculating live metrics if it's still open."""
+    audit = db.query(DayAudit).filter(
+        DayAudit.id == audit_id,
+        DayAudit.branch_id == branch_id,
+    ).first()
+    
+    if audit and audit.status == "open":
+        return calculate_live_metrics(db, audit, branch_id)
     return audit
 
 
@@ -138,6 +211,7 @@ def open_day(
     business_date: date,
     opened_by_id: int,
     opening_cash_balance: float = 0.0,
+    opening_account_balance: float = 0.0,
     opening_notes: str = "",
 ) -> DayAudit:
     """
@@ -164,6 +238,7 @@ def open_day(
         opened_at=datetime.now(timezone.utc),
         opened_by_id=opened_by_id,
         opening_cash_balance=opening_cash_balance,
+        opening_account_balance=opening_account_balance,
         opening_notes=opening_notes,
         audit_log=[{"step": "Day Opened", "status": "done", "ts": datetime.now(timezone.utc).isoformat()}],
     )
@@ -182,6 +257,10 @@ def close_day(
     branch_id: int,
     closed_by_id: int,
     closing_cash_balance: float = 0.0,
+    closing_account_balance: float = 0.0,
+    system_expected_cash: float = 0.0,
+    system_expected_account: float = 0.0,
+    override_reason: str = "",
     closing_notes: str = "",
 ) -> DayAudit:
     """
@@ -389,12 +468,43 @@ def close_day(
     audit.closed_at = datetime.now(timezone.utc)
     audit.closed_by_id = closed_by_id
     audit.closing_cash_balance = closing_cash_balance
+    audit.closing_account_balance = closing_account_balance
+    audit.system_expected_cash = system_expected_cash
+    audit.system_expected_account = system_expected_account
+    audit.override_reason = override_reason
     audit.closing_notes = closing_notes
     audit.total_room_revenue = round(total_room_rev + checkout_room_total, 2)
     audit.total_food_revenue = round(float(food_revenue) + checkout_food_total, 2)
     audit.total_service_revenue = round(float(service_revenue) + checkout_service_total, 2)
     audit.total_gst_collected = round(total_gst + checkout_tax_total, 2)
     audit.total_payments_received = round(payments_received, 2)
+    
+    # Finalize expenses and purchases for the day via Journal Entries (actual cash flow)
+    from app.models.account import JournalEntry
+    
+    final_expenses = (
+        db.query(func.coalesce(func.sum(JournalEntry.total_amount), 0))
+        .filter(
+            JournalEntry.branch_id == branch_id,
+            JournalEntry.entry_date >= audit.opened_at,
+            JournalEntry.reference_type == "expense"
+        )
+        .scalar()
+    ) or 0.0
+    
+    final_purchases = (
+        db.query(func.coalesce(func.sum(JournalEntry.total_amount), 0))
+        .filter(
+            JournalEntry.branch_id == branch_id,
+            JournalEntry.entry_date >= audit.opened_at,
+            JournalEntry.reference_type.in_(["purchase", "purchase_payment"])
+        )
+        .scalar()
+    ) or 0.0
+    
+    audit.total_expenses = round(float(final_expenses), 2)
+    audit.total_purchases = round(float(final_purchases), 2)
+    
     audit.rooms_occupied = len(in_house_bookings)
     audit.new_checkins = new_checkins
     audit.new_checkouts = new_checkouts
@@ -403,6 +513,7 @@ def close_day(
     db.commit()
     db.refresh(audit)
     return audit
+
 
 
 # ---------------------------------------------------------------------------

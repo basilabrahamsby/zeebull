@@ -23,7 +23,8 @@ print(f"[AIOSELL DEBUG] CLIENT LOADED: ACTIVE={AIOSELL_ACTIVE}, HOTEL={HOTEL_COD
 
 def _send_push(payload: dict, endpoint_type: str, url: str):
     """Internal helper to dispatch payloads to Aiosell"""
-    if not AIOSELL_ACTIVE:
+    from app.utils.aiosell_config import is_aiosell_active
+    if not is_aiosell_active():
         print(f"[AIOSELL] Push {endpoint_type} skipped. Channel Manager is disabled.")
         return False
         
@@ -182,7 +183,8 @@ def push_restriction(room_code: str, start_date: date, end_date: date = None,
     Pushes restrictions (Stop Sell, Min Stay, etc.) to Aiosell v2 API.
     Used for Stop Sell, Min/Max Stay, etc.
     """
-    if not AIOSELL_ACTIVE:
+    from app.utils.aiosell_config import is_aiosell_active
+    if not is_aiosell_active():
         print("[AIOSELL] Push Restriction skipped. Channel Manager is disabled.")
         return False
         

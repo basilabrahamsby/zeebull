@@ -105,6 +105,7 @@ class AssignedServiceUpdate(BaseModel):
     inventory_returns: Optional[List[InventoryReturnItem]] = None  # Optional inventory items to return when completing
     return_location_id: Optional[int] = None  # Location to return items to
     billing_status: Optional[str] = None  # Allow updating billing status
+    payment_mode: Optional[str] = None  # NEW: Allow updating payment mode (Cash, UPI, etc.)
 
 class AssignedServiceOut(BaseModel):
     id: int

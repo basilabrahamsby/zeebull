@@ -1083,7 +1083,7 @@ const Billing = () => {
 
       try {
         const actualRoomNumber = roomNumber.includes('-') ? roomNumber.split('-')[1] : roomNumber;
-        const res = await api.get(`/bill/checkout-request/${actualRoomNumber}`);
+        const res = await api.get(`/bill/checkout-request/${actualRoomNumber}?checkout_mode=${checkoutMode}`);
         if (res.data && res.data.exists) {
           setCheckoutRequest(res.data);
         } else {
@@ -1581,7 +1581,9 @@ const Billing = () => {
     // 4. Totals with GST breakdown
     const subtotal = billData.charges.total_due;
     const totalGST = billData.charges.total_gst || 0;
-    const grandTotal = Math.max(0, subtotal + totalGST - (parseFloat(discount) || 0));
+    const advancePaid = billData.charges.advance_deposit || 0;
+    const netPayable = (subtotal + totalGST - (parseFloat(discount) || 0)) - advancePaid;
+    
     const totals = [
       ...(billData.charges.food_charges > 0 ? [['Food & Beverage', formatCurrency(billData.charges.food_charges)]] : []),
       ...(billData.charges.service_charges > 0 ? [['Service Charges', formatCurrency(billData.charges.service_charges)]] : []),
@@ -1597,8 +1599,10 @@ const Billing = () => {
       ...(billData.charges.inventory_gst > 0 ? [['Inventory GST (18%)', `+${formatCurrency(billData.charges.inventory_gst || 0)}`]] : []),
       ...(billData.charges.asset_damage_gst > 0 ? [['Damage GST (18%)', `+${formatCurrency(billData.charges.asset_damage_gst || 0)}`]] : []),
       ['Total GST', `+${formatCurrency(totalGST)}`],
+      ['Total Bill Value', formatCurrency(subtotal + totalGST)],
       ...(discount > 0 ? [['Discount', `-${formatCurrency(parseFloat(discount))}`]] : []),
-      ['Grand Total', formatCurrency(grandTotal)]
+      ...(advancePaid > 0 ? [['Advance Paid', `-${formatCurrency(advancePaid)}`]] : []),
+      [netPayable >= 0 ? 'Net Payable' : 'Refund Amount', formatCurrency(Math.abs(netPayable))]
     ];
 
     autoTable(doc, {
@@ -1685,6 +1689,10 @@ const Billing = () => {
     }
 
     text += `${line}\n`;
+    const totalBillValue = billData.charges.total_due + (billData.charges.total_gst || 0);
+    const advancePaid = billData.charges.advance_deposit || 0;
+    const netPayable = totalBillValue - discount - advancePaid;
+
     text += `Subtotal: ${formatCurrency(billData.charges.total_due)}\n`;
     // GST Breakdown
     if (billData.charges.room_gst > 0) {
@@ -1705,8 +1713,11 @@ const Billing = () => {
       text += `Consumables GST (5%): +${formatCurrency(billData.charges.consumables_gst || 0)}\n`;
     }
     text += `Total GST: +${formatCurrency(billData.charges.total_gst || 0)}\n`;
+    text += `Total Bill Value: ${formatCurrency(totalBillValue)}\n`;
     if (discount > 0) text += `Discount: -${formatCurrency(parseFloat(discount))}\n`;
-    text += `${bold('Grand Total:')} ${formatCurrency(Math.max(0, billData.charges.total_due + (billData.charges.total_gst || 0) - discount))}\n`;
+    if (advancePaid > 0) text += `Advance Paid: -${formatCurrency(advancePaid)}\n`;
+    
+    text += `${bold(netPayable >= 0 ? 'Net Payable:' : 'Refund Amount:')} ${formatCurrency(Math.abs(netPayable))}\n`;
     text += `${line}\nThank you for staying with us!`;
 
     return encodeURIComponent(text);
@@ -2120,12 +2131,19 @@ const Billing = () => {
                       <p className="text-xs text-gray-500">Damage GST (5%): +{formatCurrency(billData.charges.asset_damage_gst || 0)}</p>
                     )}
                     <p className="text-sm text-gray-600 font-semibold">Total GST: +{formatCurrency(billData.charges.total_gst || 0)}</p>
+                    <p className="text-sm text-gray-700 font-bold border-t pt-1 mt-1">Total Bill: {formatCurrency(billData.charges.total_due + (billData.charges.total_gst || 0))}</p>
 
                     {discount > 0 && (
                       <p className="text-sm text-green-600">Discount: -{formatCurrency(parseFloat(discount))}</p>
                     )}
-                    <p className="font-bold text-xl text-gray-900">
-                      Grand Total: {formatCurrency(Math.max(0, billData.charges.total_due + (billData.charges.total_gst || 0) - discount))}
+                    {billData.charges.advance_deposit > 0 && (
+                      <p className="text-sm text-emerald-600">Advance Paid: -{formatCurrency(billData.charges.advance_deposit)}</p>
+                    )}
+                    <p className="font-bold text-xl text-gray-900 mt-2 pt-2 border-t-2 border-gray-300">
+                      {billData.charges.total_due + (billData.charges.total_gst || 0) - discount - (billData.charges.advance_deposit || 0) >= 0 
+                        ? "Net Payable: " 
+                        : "Refund Amount: "}
+                      {formatCurrency(Math.abs(billData.charges.total_due + (billData.charges.total_gst || 0) - discount - (billData.charges.advance_deposit || 0)))}
                     </p>
                   </div>
                 </div>

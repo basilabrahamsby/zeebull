@@ -322,7 +322,7 @@ class _RequestCard extends StatefulWidget {
 class _RequestCardState extends State<_RequestCard> {
   bool _isUpdating = false;
 
-  Future<void> _doUpdate(String status, [String? billingStatus]) async {
+  Future<void> _doUpdate(String status, [String? billingStatus, String? paymentMode]) async {
     if (_isUpdating) return;
     setState(() => _isUpdating = true);
     try {
@@ -333,6 +333,7 @@ class _RequestCardState extends State<_RequestCard> {
         status, 
         employeeId: empId,
         billingStatus: billingStatus,
+        paymentMode: paymentMode,
       );
     } finally {
       if (mounted) setState(() => _isUpdating = false);
@@ -606,8 +607,8 @@ class _RequestCardState extends State<_RequestCard> {
                                  foodOrderAmount: request.foodOrderAmount,
                                  foodOrderGst: request.foodOrderGst,
                                  foodOrderTotal: request.foodOrderTotal,
-                                 onJustComplete: (billingStatus) => _doUpdate('completed', billingStatus),
-                                 onReturn: (items, destId, billingStatus) async {
+                                 onJustComplete: (billingStatus, paymentMode) => _doUpdate('completed', billingStatus, paymentMode),
+                                 onReturn: (items, destId, billingStatus, paymentMode) async {
                                     final provider = context.read<InventoryProvider>();
                                     final locs = provider.locations;
                                     
@@ -633,7 +634,7 @@ class _RequestCardState extends State<_RequestCard> {
                                        }).toList(),
                                        notes: "Return from Service Request #${request.id}"
                                     );
-                                    _doUpdate('completed', billingStatus);
+                                    _doUpdate('completed', billingStatus, paymentMode);
                                  }
                               )
                             );

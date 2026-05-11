@@ -1033,6 +1033,7 @@ const Inventory = () => {
   const [editingItem, setEditingItem] = useState(null);
   const [editingCategory, setEditingCategory] = useState(null);
   const [editingVendor, setEditingVendor] = useState(null);
+  const [editingLocation, setEditingLocation] = useState(null);
 
   // New form states for Stock Issue & Consumption module
   const [showRequisitionForm, setShowRequisitionForm] = useState(false);
@@ -1239,6 +1240,8 @@ const Inventory = () => {
     gst_number: "",
     payment_terms: "",
     payment_status: "pending",
+    payment_method: "Cash",
+    payment_date: getCurrentDateIST(),
     notes: "",
     status: "draft",
     details: [
@@ -1355,7 +1358,7 @@ const Inventory = () => {
         // Also fetch metadata needed for the assignment form
         Promise.all([
           API.get("/inventory/items?limit=1000&is_fixed_asset=true").then(res => setItems(res.data || [])),
-          API.get("/inventory/locations?limit=1000").then(res => setLocations(res.data || [])),
+          API.get("/inventory/locations?limit=10000").then(res => setLocations(res.data || [])),
           API.get("/inventory/categories?limit=1000").then(res => setCategories(res.data || []))
         ]).catch(err => console.error("Failed to fetch asset metadata:", err));
       } else if (activeTab === "laundry") {
@@ -1889,6 +1892,18 @@ const Inventory = () => {
         return;
       }
 
+      // Check for duplicate items
+      const itemIds = details.map(d => d.item_id);
+      const uniqueItemIds = new Set(itemIds);
+      if (itemIds.length !== uniqueItemIds.size) {
+        addNotification({ 
+          title: "Validation Error", 
+          message: "Duplicate items found in the purchase order. Please combine them into a single row or remove duplicates.", 
+          type: "error" 
+        });
+        return;
+      }
+
       // Prepare purchase data according to PurchaseMasterCreate schema
       const purchaseData = {
         purchase_number: purchaseForm.purchase_number,
@@ -1900,6 +1915,8 @@ const Inventory = () => {
         gst_number: purchaseForm.gst_number || null,
         payment_terms: purchaseForm.payment_terms || null,
         payment_status: purchaseForm.payment_status || "pending",
+        payment_method: purchaseForm.payment_method || "Cash",
+        payment_date: purchaseForm.payment_date || null,
         destination_location_id: purchaseForm.destination_location_id ? parseInt(purchaseForm.destination_location_id) : null,
         notes: purchaseForm.notes || null,
         status: purchaseForm.status || "draft",
@@ -2090,6 +2107,18 @@ const Inventory = () => {
         return;
       }
 
+      // Check for duplicate items
+      const itemIds = details.map(d => d.item_id);
+      const uniqueItemIds = new Set(itemIds);
+      if (itemIds.length !== uniqueItemIds.size) {
+        addNotification({ 
+          title: "Validation Error", 
+          message: "Duplicate items found in the requisition. Please combine them into a single row or remove duplicates.", 
+          type: "error" 
+        });
+        return;
+      }
+
       await API.post("/inventory/requisitions", {
         destination_department: requisitionForm.destination_department,
         date_needed: requisitionForm.date_needed || null,
@@ -2199,6 +2228,18 @@ const Inventory = () => {
 
       if (details.length === 0) {
         addNotification({ title: "Validation Error", message: "Please add at least one item", type: "error" });
+        return;
+      }
+
+      // Check for duplicate items
+      const itemIds = details.map(d => d.item_id);
+      const uniqueItemIds = new Set(itemIds);
+      if (itemIds.length !== uniqueItemIds.size) {
+        addNotification({ 
+          title: "Validation Error", 
+          message: "Duplicate items found in the stock issue. Please combine them into a single row or remove duplicates.", 
+          type: "error" 
+        });
         return;
       }
 
@@ -2438,21 +2479,28 @@ const Inventory = () => {
   const handleLocationSubmit = async (e) => {
     e.preventDefault();
     try {
-      // Enterprise view branch selection
-      const isEnterpriseView = activeBranchId === 'all';
-      const config = {};
-      if (isEnterpriseView) {
-        if (!selectedBranchForCreation) {
-          addNotification({ title: "Branch Required", message: "Please select a branch to assign this location to.", type: "error" });
-          return;
+      if (editingLocation) {
+        await API.put(`/inventory/locations/${editingLocation.id}`, locationForm);
+        addNotification({ title: "Success", message: "Location updated successfully!", type: "success" });
+      } else {
+        // Enterprise view branch selection
+        const isEnterpriseView = activeBranchId === 'all';
+        const config = {};
+        if (isEnterpriseView) {
+          if (!selectedBranchForCreation) {
+            addNotification({ title: "Branch Required", message: "Please select a branch to assign this location to.", type: "error" });
+            return;
+          }
+          config.headers = { "X-Branch-ID": selectedBranchForCreation };
         }
-        config.headers = { "X-Branch-ID": selectedBranchForCreation };
-      }
 
-      await API.post("/inventory/locations", locationForm, config);
-      addNotification({ title: "Success", message: "Location created successfully!", type: "success" });
+        await API.post("/inventory/locations", locationForm, config);
+        addNotification({ title: "Success", message: "Location created successfully!", type: "success" });
+      }
+      
       setSelectedBranchForCreation("");
       setShowLocationForm(false);
+      setEditingLocation(null);
       setLocationForm({
         name: "",
         location_type: "",
@@ -2466,13 +2514,29 @@ const Inventory = () => {
       });
       fetchData();
     } catch (error) {
-      console.error("Error creating location:", error);
+      console.error("Error submitting location:", error);
       addNotification({
         title: "Error",
-        message: "Failed to create location: " + (error.response?.data?.detail || error.message),
+        message: "Failed to submit location: " + (error.response?.data?.detail || error.message),
         type: "error"
       });
     }
+  };
+
+  const handleEditLocation = (location) => {
+    setEditingLocation(location);
+    setLocationForm({
+      name: location.name || "",
+      location_type: location.location_type || "",
+      building: location.building || "",
+      floor: location.floor || "",
+      room_area: location.room_area || "",
+      parent_location_id: location.parent_location_id || "",
+      is_inventory_point: location.is_inventory_point || false,
+      description: location.description || "",
+      is_active: location.is_active !== undefined ? location.is_active : true,
+    });
+    setShowLocationForm(true);
   };
 
   // Asset mapping handlers
@@ -3481,11 +3545,24 @@ const Inventory = () => {
                               <h3 className="font-semibold text-gray-900">
                                 {loc.name}
                               </h3>
-                              {loc.is_inventory_point ? (
-                                <span className="px-2 py-1 text-xs bg-green-100 text-green-800 rounded-full">
-                                  Inventory Point
-                                </span>
-                              ) : null}
+                              <div className="flex items-center gap-2">
+                                {loc.is_inventory_point ? (
+                                  <span className="px-2 py-1 text-xs bg-green-100 text-green-800 rounded-full">
+                                    Inventory Point
+                                  </span>
+                                ) : null}
+                                {hasPermission('inventory_location:edit') && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleEditLocation(loc);
+                                    }}
+                                    className="p-1 text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
+                                  >
+                                    <Edit className="w-4 h-4" />
+                                  </button>
+                                )}
+                              </div>
                             </div>
                             <div className="space-y-1 text-sm text-gray-600">
                               <p>
@@ -3536,13 +3613,16 @@ const Inventory = () => {
                             <th className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                               Inventory Point
                             </th>
+                            <th className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                              Actions
+                            </th>
                           </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
                           {filteredLocations.length === 0 ? (
                             <tr>
                               <td
-                                colSpan="6"
+                                colSpan="7"
                                 className="px-4 py-8 text-center text-gray-500"
                               >
                                 No locations found. Click "New Location" to
@@ -3584,6 +3664,19 @@ const Inventory = () => {
                                       No
                                     </span>
                                   )}
+                                </td>
+                                <td className="px-2 sm:px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                                  <div className="flex gap-2">
+                                    {hasPermission('inventory_location:edit') && (
+                                      <button
+                                        onClick={() => handleEditLocation(loc)}
+                                        className="p-1 text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
+                                        title="Edit Location"
+                                      >
+                                        <Edit className="w-4 h-4" />
+                                      </button>
+                                    )}
+                                  </div>
                                 </td>
                               </tr>
                             ))
@@ -4484,8 +4577,10 @@ const Inventory = () => {
             selectedBranchForCreation={selectedBranchForCreation}
             setSelectedBranchForCreation={setSelectedBranchForCreation}
             branches={branches}
+            editingLocation={editingLocation}
             onClose={() => {
               setShowLocationForm(false);
+              setEditingLocation(null);
               setLocationForm({
                 name: "",
                 location_type: "",
@@ -4498,8 +4593,7 @@ const Inventory = () => {
                 is_active: true,
               });
             }}
-          />
-        )
+          />        )
       }
 
       {/* Asset Mapping Form Modal */}
@@ -6935,7 +7029,7 @@ function PurchaseFormModal({
           </div>
         </div>
         <form onSubmit={onSubmit} className="p-6 space-y-4">
-          <div className="grid grid-cols-4 gap-4 bg-gray-50 p-4 rounded-xl border border-gray-100 mb-6">
+          <div className="grid grid-cols-5 gap-4 bg-gray-50 p-4 rounded-xl border border-gray-100 mb-6">
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1">
                 PO Number *
@@ -6984,6 +7078,30 @@ function PurchaseFormModal({
             </div>
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1">
+                Payment Mode *
+              </label>
+              <select
+                value={form.payment_method || "Cash"}
+                onChange={(e) => {
+                  const method = e.target.value;
+                  const isImmediate = ["Cash", "UPI", "Bank Transfer"].includes(method);
+                  setForm({ 
+                    ...form, 
+                    payment_method: method,
+                    payment_status: isImmediate ? "paid" : form.payment_status
+                  });
+                }}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white"
+                required
+              >
+                <option value="Cash">Cash</option>
+                <option value="Bank Transfer">Bank Transfer</option>
+                <option value="UPI">UPI</option>
+                <option value="Cheque">Cheque</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-1">
                 Destination Location *
               </label>
               <select
@@ -7003,8 +7121,8 @@ function PurchaseFormModal({
               </select>
             </div>
 
-          {/* Invoice Number + Bill Upload row */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50 px-4 pb-4 rounded-xl border border-gray-100 -mt-2">
+          {/* Invoice Number + Payment Date + Bill Upload row */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-gray-50 px-4 pb-4 rounded-xl border border-gray-100 -mt-2">
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1">
                 Invoice Number <span className="text-gray-400 font-normal">(optional)</span>
@@ -7014,6 +7132,17 @@ function PurchaseFormModal({
                 value={form.invoice_number || ""}
                 onChange={(e) => setForm({ ...form, invoice_number: e.target.value })}
                 placeholder="e.g. INV-2024-001"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-1">
+                Payment Done Date
+              </label>
+              <input
+                type="date"
+                value={form.payment_date || ""}
+                onChange={(e) => setForm({ ...form, payment_date: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white"
               />
             </div>
@@ -7068,8 +7197,16 @@ function PurchaseFormModal({
                   {form.details.map((detail, index) => {
                     const { netTotal, taxAmount } = calculateRowTotal(detail);
                     const searchQuery = window._itemSearchQuery || "";
+                    
+                    // Filter out items already selected in other rows to prevent duplicates
+                    const selectedItemIds = form.details
+                      .filter((_, i) => i !== index)
+                      .map(d => String(d.item_id))
+                      .filter(id => id !== "");
+
                     const filteredItems = items.filter(i => 
-                      !searchQuery || i.name.toLowerCase().includes(searchQuery)
+                      (!searchQuery || i.name.toLowerCase().includes(searchQuery)) &&
+                      !selectedItemIds.includes(String(i.id))
                     );
 
                     return (
@@ -7159,6 +7296,22 @@ function PurchaseFormModal({
                             {formatCurrency(netTotal)}
                           </span>
                         </td>
+                        <td className="px-4 py-3 align-middle text-center rounded-r-lg">
+                          {form.details.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newDetails = [...form.details];
+                                newDetails.splice(index, 1);
+                                setForm({ ...form, details: newDetails });
+                              }}
+                              className="text-red-500 hover:text-red-700 p-1.5 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Remove Item"
+                            >
+                              <Trash2 className="w-5 h-5" />
+                            </button>
+                          )}
+                        </td>
                       </tr>
                     );
                   })}
@@ -7210,8 +7363,15 @@ function PurchaseDetailsModal({ purchase, onClose, onUpdate }) {
   const [currentPaymentStatus, setCurrentPaymentStatus] = useState(
     purchase?.payment_status || "pending",
   );
+  const [currentPaymentMethod, setCurrentPaymentMethod] = useState(
+    purchase?.payment_method || "Cash",
+  );
+  const [currentPaymentDate, setCurrentPaymentDate] = useState(
+    purchase?.payment_date || "",
+  );
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const [showPaymentStatusDropdown, setShowPaymentStatusDropdown] = useState(false);
+  const [showPaymentMethodDropdown, setShowPaymentMethodDropdown] = useState(false);
   const [showBillViewer, setShowBillViewer] = useState(false);
   const [isUploadingBill, setIsUploadingBill] = useState(false);
 
@@ -7223,6 +7383,8 @@ function PurchaseDetailsModal({ purchase, onClose, onUpdate }) {
     if (purchase) {
       setCurrentStatus(purchase.status || "draft");
       setCurrentPaymentStatus(purchase.payment_status || "pending");
+      setCurrentPaymentMethod(purchase.payment_method || "Cash");
+      setCurrentPaymentDate(purchase.payment_date || "");
     }
   }, [purchase]);
 
@@ -7273,6 +7435,52 @@ function PurchaseDetailsModal({ purchase, onClose, onUpdate }) {
     } finally {
       setUpdatingPaymentStatus(false);
       setShowPaymentStatusDropdown(false);
+    }
+  };
+
+  const handlePaymentMethodUpdate = async (newPaymentMethod) => {
+    if (newPaymentMethod === currentPaymentMethod) {
+      setShowPaymentMethodDropdown(false);
+      return;
+    }
+
+    setUpdatingPaymentStatus(true);
+    try {
+      await API.put(`/inventory/purchases/${purchase.id}`, { payment_method: newPaymentMethod });
+
+      setCurrentPaymentMethod(newPaymentMethod);
+      if (onUpdate) {
+        onUpdate({ ...purchase, payment_method: newPaymentMethod });
+      }
+      alert("Payment mode updated successfully!");
+    } catch (error) {
+      console.error("Error updating payment mode:", error);
+      alert(`Failed to update payment mode: ${error.response?.data?.detail || "Please try again."}`);
+    } finally {
+      setUpdatingPaymentStatus(false);
+      setShowPaymentMethodDropdown(false);
+    }
+  };
+
+  const handlePaymentDateUpdate = async (newPaymentDate) => {
+    if (newPaymentDate === currentPaymentDate) {
+      return;
+    }
+
+    setUpdatingPaymentStatus(true);
+    try {
+      await API.put(`/inventory/purchases/${purchase.id}`, { payment_date: newPaymentDate });
+
+      setCurrentPaymentDate(newPaymentDate);
+      if (onUpdate) {
+        onUpdate({ ...purchase, payment_date: newPaymentDate });
+      }
+      alert("Payment date updated successfully!");
+    } catch (error) {
+      console.error("Error updating payment date:", error);
+      alert(`Failed to update payment date: ${error.response?.data?.detail || "Please try again."}`);
+    } finally {
+      setUpdatingPaymentStatus(false);
     }
   };
 
@@ -7511,6 +7719,39 @@ function PurchaseDetailsModal({ purchase, onClose, onUpdate }) {
                 </div>
               )}
             </div>
+            {/* Payment Mode Update Dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setShowPaymentMethodDropdown(!showPaymentMethodDropdown)}
+                disabled={updatingPaymentStatus}
+                className="px-3 py-2 text-sm font-medium rounded-lg border border-gray-300 hover:bg-gray-50 flex items-center gap-2 disabled:opacity-50"
+              >
+                <span>Mode:</span>
+                <span className="px-2 py-1 text-xs font-semibold rounded-full bg-indigo-100 text-indigo-800">
+                  {currentPaymentMethod}
+                </span>
+                {updatingPaymentStatus ? "..." : "▼"}
+              </button>
+              {showPaymentMethodDropdown && (
+                <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-20">
+                  {["Cash", "Bank Transfer", "UPI", "Cheque"].map((mode) => (
+                    <button
+                      key={mode}
+                      onClick={() => handlePaymentMethodUpdate(mode)}
+                      disabled={
+                        updatingPaymentStatus || mode === currentPaymentMethod
+                      }
+                      className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed ${mode === currentPaymentMethod ? "bg-indigo-50" : ""
+                        }`}
+                    >
+                      <span className="px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">
+                        {mode}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             {/* Print Button */}
             <button
               onClick={handlePrint}
@@ -7661,6 +7902,30 @@ function PurchaseDetailsModal({ purchase, onClose, onUpdate }) {
                   {currentPaymentStatus}
                 </span>
               </p>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-500">
+                Payment Mode
+              </label>
+              <p className="mt-1">
+                <span className="px-2 py-1 text-xs font-semibold rounded-full bg-indigo-100 text-indigo-800">
+                  {currentPaymentMethod || "-"}
+                </span>
+              </p>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-500">
+                Payment Done Date
+              </label>
+              <div className="mt-1">
+                <input
+                  type="date"
+                  value={currentPaymentDate ? currentPaymentDate.split('T')[0] : ""}
+                  onChange={(e) => handlePaymentDateUpdate(e.target.value)}
+                  disabled={updatingPaymentStatus}
+                  className="text-xs font-semibold px-2 py-1 rounded-lg border border-gray-200 focus:border-indigo-400 outline-none bg-gray-50/50 hover:bg-white transition-all disabled:opacity-50"
+                />
+              </div>
             </div>
           </div>
 
@@ -8268,6 +8533,16 @@ function IssueFormModal({
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {form.details.map((detail, index) => {
+                    // Filter out items already selected in other rows to prevent duplicates
+                    const otherSelectedItemIds = form.details
+                      .filter((_, i) => i !== index)
+                      .map(d => String(d.item_id))
+                      .filter(id => id !== "");
+
+                    const rowAvailableItems = availableItems.filter(i => 
+                      !otherSelectedItemIds.includes(String(i.id))
+                    );
+
                     const item = items.find(
                       (i) => i.id === parseInt(detail.item_id),
                     );
@@ -8294,7 +8569,7 @@ function IssueFormModal({
                             required
                           >
                             <option value="">Select Item</option>
-                            {availableItems.map((item) => (
+                            {rowAvailableItems.map((item) => (
                               <option key={item.id} value={item.id} disabled={getSourceStock(item.id) <= 0}>
                                 {item.name} (Stock: {parseFloat(getSourceStock(item.id)).toFixed(2)})
                               </option>
@@ -8556,6 +8831,16 @@ function RequisitionFormModal({
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {form.details.map((detail, index) => {
+                    // Filter out items already selected in other rows to prevent duplicates
+                    const otherSelectedItemIds = form.details
+                      .filter((_, i) => i !== index)
+                      .map(d => String(d.item_id))
+                      .filter(id => id !== "");
+
+                    const rowAvailableItems = items.filter(i => 
+                      !otherSelectedItemIds.includes(String(i.id))
+                    );
+
                     const item = items.find(
                       (i) => i.id === parseInt(detail.item_id),
                     );
@@ -8580,7 +8865,7 @@ function RequisitionFormModal({
                             required
                           >
                             <option value="">Select Item</option>
-                            {items.map((item) => (
+                            {rowAvailableItems.map((item) => (
                               <option key={item.id} value={item.id}>
                                 {item.name}
                               </option>
@@ -8957,7 +9242,7 @@ function WasteLogFormModal({
 };
 
 // Location Form Modal
-function LocationFormModal({ form, setForm, locations, onSubmit, onClose, activeBranchId, selectedBranchForCreation, setSelectedBranchForCreation, branches }) {
+function LocationFormModal({ form, setForm, locations, onSubmit, onClose, activeBranchId, selectedBranchForCreation, setSelectedBranchForCreation, branches, editingLocation }) {
   const locationTypes = [
     { value: "GUEST_ROOM", label: "Guest Room" },
     { value: "WAREHOUSE", label: "Warehouse" },
@@ -8973,7 +9258,9 @@ function LocationFormModal({ form, setForm, locations, onSubmit, onClose, active
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[10000] p-2 sm:p-4">
       <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
         <div className="p-6 border-b border-gray-200 flex justify-between items-center">
-          <h2 className="text-2xl font-bold text-gray-800">Add Location</h2>
+          <h2 className="text-2xl font-bold text-gray-800">
+            {editingLocation ? "Edit Location" : "Add Location"}
+          </h2>
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600"
@@ -8982,8 +9269,8 @@ function LocationFormModal({ form, setForm, locations, onSubmit, onClose, active
           </button>
         </div>
         <form onSubmit={onSubmit} className="p-6 space-y-4">
-          {/* Branch Selection - Only for Enterprise View */}
-          {activeBranchId === "all" && (
+          {/* Branch Selection - Only for Enterprise View and NOT in Edit mode */}
+          {activeBranchId === "all" && !editingLocation && (
             <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 mb-6">
               <h3 className="text-md font-bold text-indigo-900 mb-3 flex items-center gap-2">
                 🏢 Assign to Branch <span className="text-red-500">*</span>
@@ -9172,7 +9459,7 @@ function LocationFormModal({ form, setForm, locations, onSubmit, onClose, active
               type="submit"
               className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
             >
-              Create Location
+              {editingLocation ? "Update Location" : "Create Location"}
             </button>
           </div>
         </form>
@@ -10351,6 +10638,21 @@ function RecipeFormModal({
       });
       return;
     }
+
+    // Check for duplicate ingredients
+    const itemIds = form.ingredients
+      .filter(d => d.inventory_item_id && d.inventory_item_id !== "")
+      .map(d => String(d.inventory_item_id));
+    const uniqueItemIds = new Set(itemIds);
+    if (itemIds.length !== uniqueItemIds.size) {
+      addNotification({ 
+        title: "Validation Error", 
+        message: "Duplicate ingredients found. Please combine them into a single row or remove duplicates.", 
+        type: "error" 
+      });
+      return;
+    }
+
     onSubmit(form);
   };
 
@@ -10494,43 +10796,53 @@ function RecipeFormModal({
               </p>
             ) : (
               <div className="space-y-2">
-                {form.ingredients.map((ingredient, index) => (
-                  <div
-                    key={index}
-                    className="flex gap-2 items-end p-3 border border-gray-200 rounded-lg"
-                  >
-                    <div className="flex-1">
-                      <label className="block text-xs font-medium text-gray-600 mb-1">
-                        Inventory Item
-                      </label>
-                      <select
-                        value={ingredient.inventory_item_id}
-                        onChange={(e) => {
-                          const selectedItemId = e.target.value;
-                          const selectedItem = items.find(
-                            (i) => i.id === parseInt(selectedItemId),
-                          );
-                          const newIngredients = [...form.ingredients];
-                          newIngredients[index] = {
-                            ...newIngredients[index],
-                            inventory_item_id: selectedItemId,
-                            unit: selectedItem
-                              ? selectedItem.unit
-                              : newIngredients[index].unit,
-                          };
-                          setForm({ ...form, ingredients: newIngredients });
-                        }}
-                        className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
-                        required
-                      >
-                        <option value="">Select Item</option>
-                        {items.map((item) => (
-                          <option key={item.id} value={item.id}>
-                            {item.name} ({item.unit})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                {form.ingredients.map((ingredient, index) => {
+                  // Filter out items already selected in other rows to prevent duplicates
+                  const otherSelectedIngredientIds = form.ingredients
+                    .filter((_, i) => i !== index)
+                    .map(d => String(d.inventory_item_id))
+                    .filter(id => id !== "");
+
+                  const rowAvailableItems = items.filter(i => 
+                    !otherSelectedIngredientIds.includes(String(i.id))
+                  );
+                  return (
+                    <div
+                      key={index}
+                      className="flex gap-2 items-end p-3 border border-gray-200 rounded-lg"
+                    >
+                      <div className="flex-1">
+                        <label className="block text-xs font-medium text-gray-600 mb-1">
+                          Inventory Item
+                        </label>
+                        <select
+                          value={ingredient.inventory_item_id}
+                          onChange={(e) => {
+                            const selectedItemId = e.target.value;
+                            const selectedItem = items.find(
+                              (i) => i.id === parseInt(selectedItemId),
+                            );
+                            const newIngredients = [...form.ingredients];
+                            newIngredients[index] = {
+                              ...newIngredients[index],
+                              inventory_item_id: selectedItemId,
+                              unit: selectedItem
+                                ? selectedItem.unit
+                                : newIngredients[index].unit,
+                            };
+                            setForm({ ...form, ingredients: newIngredients });
+                          }}
+                          className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
+                          required
+                        >
+                          <option value="">Select Item</option>
+                          {rowAvailableItems.map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {item.name} ({item.unit})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     <div className="w-24">
                       <label className="block text-xs font-medium text-gray-600 mb-1">
                         Quantity
@@ -10587,10 +10899,12 @@ function RecipeFormModal({
                       Remove
                     </button>
                   </div>
-                ))}
-              </div>
-            )}
+                );
+              })
+            }
           </div>
+          )}
+        </div>
 
           <div className="flex justify-end gap-3 pt-4 border-t">
             <button
