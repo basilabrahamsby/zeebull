@@ -94,6 +94,8 @@ class CheckoutFull(BaseModel):
     created_at: Optional[datetime]
     guest_name: Optional[str] = ""
     room_number: Optional[str] = ""
+    advance_deposit: float = 0
+    refund_amount: float = 0
 
     class Config:
         from_attributes = True
@@ -117,6 +119,8 @@ class CheckoutDetail(BaseModel):
     food_orders: List[dict] = []
     services: List[dict] = []
     booking_details: Optional[dict] = None
+    advance_deposit: float = 0
+    refund_amount: float = 0
 
     class Config:
         from_attributes = True
@@ -125,6 +129,8 @@ class CheckoutSuccess(BaseModel):
     message: str = "Checkout successful"
     checkout_id: int
     grand_total: float
+    advance_deposit: float = 0
+    refund_amount: float = 0
     checkout_date: datetime
     
 class ConsumableAuditItem(BaseModel):

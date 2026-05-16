@@ -46,6 +46,7 @@ def _calculate_availability_for_date(db: Session, room_type_id: int, target_date
     ACTIVE_STATUSES = ["Booked", "booked", "checked-in", "Checked-in", "Confirmed", "confirmed", "Occupied", "occupied"]
 
     # 2. Hard allocations (specific room assigned to booking)
+    # Count physical rooms of THIS type currently held by active bookings
     assigned_overlaps = db.query(BookingRoom).join(Booking).join(Room).filter(
         Room.room_type_id == room_type_id,
         Booking.branch_id == effective_branch,
@@ -54,31 +55,48 @@ def _calculate_availability_for_date(db: Session, room_type_id: int, target_date
         Booking.check_out > target_date
     ).count()
 
-    # 3. Soft allocations (room-type booking without an assigned room)
-    from sqlalchemy import func
-    soft_overlaps_sum = db.query(func.sum(Booking.num_rooms)).filter(
+    # 3. Soft allocations (bookings of this type with unassigned room remainder)
+    # We count the total 'num_rooms' requested for this type, subtracting any physical assignments already made
+    # to avoid double counting if some rooms are assigned but others aren't.
+    from sqlalchemy import func, or_, and_
+    
+    bookings_of_type = db.query(Booking).filter(
         Booking.room_type_id == room_type_id,
         Booking.branch_id == effective_branch,
         Booking.status.in_(ACTIVE_STATUSES),
         Booking.check_in <= target_date,
-        Booking.check_out > target_date,
-        ~Booking.booking_rooms.any()
-    ).scalar()
+        Booking.check_out > target_date
+    ).all()
 
-    soft_overlaps = int(soft_overlaps_sum) if soft_overlaps_sum else 0
-    total_bookings = assigned_overlaps + soft_overlaps
+    soft_remainder = 0
+    for b in bookings_of_type:
+        # Count how many rooms for THIS booking are assigned to rooms of THIS type
+        # (This handles the case where a booking might have rooms of different types)
+        num_assigned_this_type = db.query(BookingRoom).join(Room).filter(
+            BookingRoom.booking_id == b.id,
+            Room.room_type_id == room_type_id
+        ).count()
+        
+        soft_remainder += max(0, (b.num_rooms or 1) - num_assigned_this_type)
+
+    total_bookings = assigned_overlaps + soft_remainder
 
     # Physical availability (internal view)
     physical_available = max(0, capacity - total_bookings)
 
-    # OTA quota logic:
+    # OTA quota logic (Pool System):
     #   None  → not configured, fall back to physical availability
     #   0     → explicit stop-sell, push 0 to CM
-    #   N > 0 → OTA ceiling; subtract bookings, cap at physical_available
+    #   N > 0 → Dedicated OTA pool. All bookings (Local + OTA) consume from this pool.
+    #           Ensures that a buffer of (Capacity - N) is always kept for PMS.
     if room_type.online_inventory is not None:
         if room_type.online_inventory <= 0:
             return 0  # Explicitly set to 0 = stop sell on OTA
-        ota_available = room_type.online_inventory - total_bookings
+        
+        # Calculate availability based on the OTA pool limit
+        ota_available = max(0, room_type.online_inventory - total_bookings)
+        
+        # Result is the lesser of the OTA pool remainder and actual physical availability
         return max(0, min(ota_available, physical_available))
 
     # online_inventory not configured — expose full physical availability

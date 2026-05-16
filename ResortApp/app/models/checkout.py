@@ -130,6 +130,7 @@ class Checkout(Base):
     asset_damage_charges = Column(Float, default=0.0)  # Total from asset damages
     key_card_fee = Column(Float, default=0.0)
     advance_deposit = Column(Float, default=0.0)  # Advance paid during booking
+    refund_amount = Column(Float, default=0.0)    # Amount refunded to guest
     tips_gratuity = Column(Float, default=0.0)
 
     # Detailed Bill Breakdown

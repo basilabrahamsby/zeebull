@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, BackgroundTasks
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, func, and_
@@ -2351,8 +2351,11 @@ def get_checkout_details(checkout_id: int, db: Session = Depends(get_db), curren
         "food_orders": food_orders,
         "services": services,
         "booking_details": booking_details,
+        "booking_details": booking_details,
         "bill_details": bill_details,
-        "invoice_pdf_path": checkout.invoice_pdf_path
+        "invoice_pdf_path": checkout.invoice_pdf_path,
+        "advance_deposit": checkout.advance_deposit,
+        "refund_amount": checkout.refund_amount
     }
 
 @router.get("/active-rooms", response_model=List[dict])
@@ -2662,11 +2665,16 @@ def _calculate_bill_for_single_room(db: Session, room_number: str, branch_id: in
             charges.room_charges = 0
     else:
         charges.package_charges = 0
-        # For regular bookings: calculate room charges as dynamic priced days
-        # Use existing dynamic pricing utility for accurate holiday/weekend rates
-        dynamic_room_total = calculate_dynamic_booking_price(db, room.room_type_id, booking.check_in, effective_checkout_date, room_count=1)
-        charges.room_charges = dynamic_room_total or ((room.price or 0) * stay_days)
-        print(f"[DEBUG-BILL] Dynamic Pricing Result: {dynamic_room_total} (Base Fallback: {(room.price or 0) * stay_days})")
+        # For regular bookings: calculate room charges. 
+        # PRIORITY: Use custom room_rate from booking if set (overrides dynamic pricing)
+        if getattr(booking, 'room_rate', 0) > 0:
+            charges.room_charges = booking.room_rate * stay_days
+            print(f"[DEBUG-BILL] Using Custom Room Rate: {booking.room_rate} * {stay_days} days = {charges.room_charges}")
+        else:
+            # Fallback to dynamic pricing utility for accurate holiday/weekend rates
+            dynamic_room_total = calculate_dynamic_booking_price(db, room.room_type_id, booking.check_in, effective_checkout_date, room_count=1)
+            charges.room_charges = dynamic_room_total or ((room.price or 0) * stay_days)
+            print(f"[DEBUG-BILL] Dynamic Pricing Result: {dynamic_room_total} (Base Fallback: {(room.price or 0) * stay_days})")
     
     # Determine start time for billing to include orders created before formal check-in
     # 1. Start with booking check-in date at 00:00:00
@@ -3578,11 +3586,17 @@ def _calculate_bill_for_entire_booking(db: Session, room_number: str, branch_id:
         # For regular bookings: calculate total room charges from ALL rooms using dynamic pricing
         total_room_cost = 0.0
         for room in all_rooms:
-            # Match the single-room pricing logic exactly
-            dynamic_rate = calculate_dynamic_booking_price(db, room.room_type_id, booking.check_in, effective_checkout_date, room_count=1)
-            room_cost = dynamic_rate or ((room.price or 0) * stay_days)
+            # Match the single-room pricing logic exactly: 
+            # PRIORITY: Use custom room_rate from booking if set
+            if getattr(booking, 'room_rate', 0) > 0:
+                room_cost = booking.room_rate * stay_days
+                print(f"[DEBUG-BILL-MULTI] Room {room.number}: Using Custom Rate {booking.room_rate}")
+            else:
+                dynamic_rate = calculate_dynamic_booking_price(db, room.room_type_id, booking.check_in, effective_checkout_date, room_count=1)
+                room_cost = dynamic_rate or ((room.price or 0) * stay_days)
+                print(f"[DEBUG-BILL-MULTI] Room {room.number} (Type ID: {room.room_type_id}): Dynamic={dynamic_rate}, Final={room_cost}")
+            
             total_room_cost += room_cost
-            print(f"[DEBUG-BILL-MULTI] Room {room.number} (Type ID: {room.room_type_id}): Dynamic={dynamic_rate}, Final={room_cost}")
             
         charges.room_charges = total_room_cost
     
@@ -4230,7 +4244,7 @@ def get_bill_for_booking(room_number: str, checkout_mode: str = "multiple", db: 
 
 
 @router.post("/checkout/{room_number}", response_model=CheckoutSuccess)
-def process_booking_checkout(room_number: str, request: CheckoutRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user), branch_id: int = Depends(get_branch_id)):
+def process_booking_checkout(room_number: str, request: CheckoutRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db), current_user: User = Depends(get_current_user), branch_id: int = Depends(get_branch_id)):
     """
     Finalizes the checkout for a room or entire booking.
     If checkout_mode is 'single', only the specified room is checked out.
@@ -4388,6 +4402,8 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, db: Ses
                 return CheckoutSuccess(
                     checkout_id=checkout_to_check.id,
                     grand_total=checkout_to_check.grand_total,
+                    advance_deposit=checkout_to_check.advance_deposit,
+                    refund_amount=checkout_to_check.refund_amount,
                     checkout_date=checkout_to_check.checkout_date or checkout_to_check.created_at
                 )
         
@@ -4402,6 +4418,8 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, db: Ses
                 return CheckoutSuccess(
                     checkout_id=existing.id,
                     grand_total=existing.grand_total,
+                    advance_deposit=existing.advance_deposit,
+                    refund_amount=existing.refund_amount,
                     checkout_date=existing.checkout_date or existing.created_at
                 )
             raise HTTPException(
@@ -4450,6 +4468,10 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, db: Ses
                     # Key card fee
                     if not room_verification.key_card_returned:
                         key_card_fee = 50.0  # Default lost key fee
+            else:
+                # If no fresh verification, use the pre-calculated ones from DB audit fallback
+                consumables_charges = charges.consumables_charges or 0.0
+                asset_damage_charges = charges.asset_damage_charges or 0.0
             
             # 2. Calculate Late Checkout Fee
             actual_checkout_time = request.actual_checkout_time or get_ist_now()
@@ -4463,21 +4485,15 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, db: Ses
             advance_deposit = getattr(booking, 'advance_deposit', 0.0) or 0.0
             
             # 4. Calculate final bill with all charges
-            # 4. Calculate final bill with all charges
-            
-            # Start with the DB-calculated total
             base_total = charges.total_due
             base_gst = charges.total_gst or 0
             
-            # If we calculated fresh charges from verification data, use them INSTEAD of what's in DB
-            if request.room_verifications:
-                # Subtract DB values to avoiding double counting
-                base_total -= (charges.consumables_charges or 0)
-                base_total -= (charges.asset_damage_charges or 0)
-                
-                base_gst -= (charges.consumables_gst or 0)
-                base_gst -= (charges.asset_damage_gst or 0)
-            
+            # Subtract components that we will add back in subtotal to ensure consistency
+            base_total -= (charges.consumables_charges or 0)
+            base_total -= (charges.asset_damage_charges or 0)
+            base_gst -= (charges.consumables_gst or 0)
+            base_gst -= (charges.asset_damage_gst or 0)
+
             subtotal = base_total + consumables_charges + asset_damage_charges + key_card_fee + late_checkout_fee
             
             # Recalculate GST with new charges (consumables and asset damages may have GST)
@@ -4492,10 +4508,11 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, db: Ses
             tips_gratuity = max(0, request.tips_gratuity or 0.0)
             
             # Grand total before advance deposit deduction
-            grand_total_before_advance = max(0, subtotal + tax_amount - discount_amount + tips_gratuity)
+            grand_total_before_advance = subtotal + tax_amount - discount_amount + tips_gratuity
             
             # Deduct advance deposit
-            grand_total = max(0, grand_total_before_advance - advance_deposit)
+            grand_total = grand_total_before_advance - advance_deposit
+            refund_amount = max(0, advance_deposit - grand_total_before_advance)
             
             # 5. Get effective checkout date for billing
             effective_checkout = bill_data.get("effective_checkout_date", booking.check_out)
@@ -4566,6 +4583,8 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, db: Ses
                     return CheckoutSuccess(
                         checkout_id=existing_booking_checkout.id,
                         grand_total=existing_booking_checkout.grand_total,
+                        advance_deposit=existing_booking_checkout.advance_deposit,
+                        refund_amount=existing_booking_checkout.refund_amount,
                         checkout_date=existing_booking_checkout.checkout_date or existing_booking_checkout.created_at
                     )
             
@@ -4621,6 +4640,7 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, db: Ses
                 asset_damage_charges=asset_damage_charges,
                 key_card_fee=key_card_fee,
                 advance_deposit=advance_deposit,
+                refund_amount=refund_amount,
                 tips_gratuity=tips_gratuity,
                 guest_gstin=request.guest_gstin,
                 is_b2b=request.is_b2b or False,
@@ -4955,7 +4975,8 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, db: Ses
                     payment_method=payment_method,
                     branch_id=branch_id,
                     created_by=current_user.id if current_user else None,
-                    advance_amount=float(new_checkout.advance_deposit or 0)
+                    advance_amount=float(new_checkout.advance_deposit or 0),
+                    refund_amount=float(new_checkout.refund_amount or 0)
                 )
 
             except Exception as journal_error:
@@ -4969,6 +4990,20 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, db: Ses
                     new_checkout.notes = f"Journal entry creation failed: {str(journal_error)}"
                 else:
                     new_checkout.notes += f"\nJournal entry creation failed: {str(journal_error)}"
+            
+            # 16. Trigger Aiosell Inventory Push
+            if background_tasks:
+                try:
+                    from app.core.aiosell_triggers import trigger_inventory_push
+                    if is_package:
+                        # For package bookings, push all room types involved
+                        involved_room_types = {br.room.room_type_id for br in booking.rooms if br.room}
+                        for rt_id in involved_room_types:
+                            background_tasks.add_task(trigger_inventory_push, rt_id)
+                    elif booking.room_type_id:
+                        background_tasks.add_task(trigger_inventory_push, booking.room_type_id)
+                except Exception as push_error:
+                    print(f"[WARNING] Failed to trigger inventory push after checkout: {push_error}")
             
         except Exception as e:
             db.rollback()
@@ -5035,6 +5070,8 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, db: Ses
                             return CheckoutSuccess(
                                 checkout_id=existing_checkout.id,
                                 grand_total=existing_checkout.grand_total,
+                                advance_deposit=existing_checkout.advance_deposit,
+                                refund_amount=existing_checkout.refund_amount,
                                 checkout_date=existing_checkout.checkout_date or existing_checkout.created_at
                             )
                 except HTTPException:
@@ -5095,6 +5132,8 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, db: Ses
         return CheckoutSuccess(
             checkout_id=new_checkout.id,
             grand_total=new_checkout.grand_total,
+            advance_deposit=new_checkout.advance_deposit,
+            refund_amount=new_checkout.refund_amount,
             checkout_date=new_checkout.checkout_date or new_checkout.created_at
         )
     
@@ -5150,6 +5189,8 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, db: Ses
             return CheckoutSuccess(
                 checkout_id=existing_checkout.id,
                 grand_total=existing_checkout.grand_total,
+                advance_deposit=existing_checkout.advance_deposit,
+                refund_amount=existing_checkout.refund_amount,
                 checkout_date=existing_checkout.checkout_date or existing_checkout.created_at
             )
         
@@ -5242,8 +5283,9 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, db: Ses
             discount_amount = max(0, request.discount_amount or 0)
             tips_gratuity = max(0, request.tips_gratuity or 0.0)
             
-            grand_total_before_advance = max(0, subtotal + tax_amount - discount_amount + tips_gratuity)
-            grand_total = max(0, grand_total_before_advance - advance_deposit)
+            grand_total_before_advance = subtotal + tax_amount - discount_amount + tips_gratuity
+            grand_total = grand_total_before_advance - advance_deposit
+            refund_amount = max(0, advance_deposit - grand_total_before_advance)
             
             # 5. Get effective checkout date
             effective_checkout = bill_data.get("effective_checkout_date", booking.check_out)
@@ -5310,6 +5352,7 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, db: Ses
                 asset_damage_charges=total_asset_damage_charges,
                 key_card_fee=total_key_card_fee,
                 advance_deposit=advance_deposit,
+                refund_amount=refund_amount,
                 tips_gratuity=tips_gratuity,
                 guest_gstin=request.guest_gstin,
                 is_b2b=request.is_b2b or False,
@@ -5480,8 +5523,8 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, db: Ses
             
             # 12. Automatically create journal entry for checkout (Scenario 2: Guest Checkout)
             # Debit: Bank Account / Cash | Credit: Room Revenue, Output CGST, Output SGST
-            # Only create if grand_total > 0 and we have valid data
-            if new_checkout.grand_total and new_checkout.grand_total > 0:
+            # Only create if we have valid data (handles both payments and refunds)
+            if new_checkout.id:
                 try:
                     from app.utils.accounting_helpers import create_complete_checkout_journal_entry
                     
@@ -5510,6 +5553,7 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, db: Ses
                         payment_method=payment_method,
                         created_by=current_user.id if current_user else None,
                         advance_amount=float(new_checkout.advance_deposit or 0),
+                        refund_amount=float(new_checkout.refund_amount or 0),
                         branch_id=effective_branch_id
                     )
                     if result is None:
@@ -5517,6 +5561,17 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, db: Ses
                 except Exception as journal_error:
                     import traceback
                     print(f"[WARNING] Failed to create journal entry for checkout {new_checkout.id}: {str(journal_error)}\n{traceback.format_exc()}")
+
+            # 13. Trigger Aiosell Inventory Push (Multiple Rooms)
+            if background_tasks:
+                try:
+                    from app.core.aiosell_triggers import trigger_inventory_push
+                    # Get all unique room type IDs from the rooms involved
+                    involved_room_types = {r.room_type_id for r in all_rooms if r.room_type_id}
+                    for rt_id in involved_room_types:
+                        background_tasks.add_task(trigger_inventory_push, rt_id)
+                except Exception as push_error:
+                    print(f"[WARNING] Failed to trigger inventory push after multiple checkout: {push_error}")
 
         except Exception as e:
             db.rollback()
@@ -5533,6 +5588,8 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, db: Ses
         return CheckoutSuccess(
             checkout_id=new_checkout.id,
             grand_total=new_checkout.grand_total,
+            advance_deposit=new_checkout.advance_deposit,
+            refund_amount=new_checkout.refund_amount,
             checkout_date=new_checkout.checkout_date or new_checkout.created_at
         )
 

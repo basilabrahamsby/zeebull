@@ -17,6 +17,7 @@ from app.models.employee import Employee as EmployeeModel, Leave as LeaveModel, 
 from app.models.salary_payment import SalaryPayment
 from app.models.settings import SystemSetting
 from app.models.user import User
+from app.utils import auth
 from app.utils.auth import get_current_user, get_db
 from app.utils.branch_scope import get_branch_id
 from app.utils.timezone import get_system_timezone
@@ -424,6 +425,8 @@ def update_employee(
     join_date: str = Form(None),
     email: str = Form(None),
     phone: str = Form(None),
+    password: str = Form(None),
+    is_active: str = Form(None),
     image: UploadFile = File(None),
     daily_tasks: str = Form(None),
     current_user: User = Depends(get_current_user),
@@ -476,6 +479,14 @@ def update_employee(
     
     if phone and employee.user:
         employee.user.phone = phone
+
+    if password and employee.user:
+        print(f"DEBUG: Updating password for user {employee.user.email}")
+        employee.user.hashed_password = auth.get_password_hash(password)
+
+    if is_active is not None and employee.user:
+        print(f"DEBUG: Updating is_active to {is_active} for user {employee.user.email}")
+        employee.user.is_active = is_active.lower() == "true"
 
     db.commit()
     db.refresh(employee)

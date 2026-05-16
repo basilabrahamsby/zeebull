@@ -447,6 +447,40 @@ def delete_food_order(db: Session, order_id: int, branch_id: int):
         db.commit()
     return order
 
+def sync_food_order_to_requests(db: Session, order_id: int, status: str = None, billing_status: str = None, branch_id: int = None):
+    """Sync FoodOrder status and billing to linked ServiceRequests"""
+    
+    # 1. Handle Billing Status Sync (Applies to ALL linked requests)
+    if billing_status is not None:
+        billing_query = db.query(ServiceRequest).filter(ServiceRequest.food_order_id == order_id)
+        if branch_id is not None:
+            billing_query = billing_query.filter(ServiceRequest.branch_id == branch_id)
+        billing_query.update({"billing_status": billing_status})
+        print(f"[DEBUG-SYNC] Synced billing_status {billing_status} to all ServiceRequests for FO {order_id}")
+
+    # 2. Handle Status Sync (Applies ONLY to Kitchen Preparation as per user request)
+    if status is not None:
+        # Map FoodOrder status to ServiceRequest status
+        mapped_status = "pending"
+        if status in ["preparing", "cooking", "accepted", "in_progress"]:
+            mapped_status = "in_progress"
+        elif status in ["ready", "completed", "delivered", "served"]:
+            mapped_status = "completed"
+        elif status == "cancelled":
+            mapped_status = "cancelled"
+            
+        status_query = db.query(ServiceRequest).filter(
+            ServiceRequest.food_order_id == order_id,
+            ServiceRequest.request_type == "kitchen_preparation"
+        )
+        if branch_id is not None:
+            status_query = status_query.filter(ServiceRequest.branch_id == branch_id)
+            
+        status_query.update({"status": mapped_status})
+        print(f"[DEBUG-SYNC] Synced status {mapped_status} only to kitchen_preparation for FO {order_id}")
+    
+    db.commit()
+
 def update_food_order_status(db: Session, order_id: int, status: str, branch_id: int):
     order = db.query(FoodOrder).filter(FoodOrder.id == order_id, FoodOrder.branch_id == branch_id).first()
 
@@ -461,6 +495,9 @@ def update_food_order_status(db: Session, order_id: int, status: str, branch_id:
         
         db.commit()
         db.refresh(order)
+        
+        # Sync to linked ServiceRequests
+        sync_food_order_to_requests(db, order.id, status=status, branch_id=branch_id)
         
         # Process inventory usage if completed
         if old_status != "completed" and status == "completed":
@@ -529,6 +566,9 @@ def update_food_order(db: Session, order_id: int, update_data: FoodOrderUpdate, 
             except Exception as e:
                 print(f"Failed to process inventory usage: {e}")
 
+        # Sync to linked ServiceRequests
+        sync_food_order_to_requests(db, order.id, status=update_data.status, branch_id=branch_id)
+
         # Notify status change
         try:
             from app.models.room import Room
@@ -572,6 +612,9 @@ def update_food_order(db: Session, order_id: int, update_data: FoodOrderUpdate, 
                 print(f"[INFO] Created journal entry for food order {order.id} marked as paid via update")
             except Exception as e:
                 print(f"[ERROR] Failed to create journal entry for food order {order.id}: {e}")
+        
+        # Sync billing to linked ServiceRequests
+        sync_food_order_to_requests(db, order.id, billing_status=update_data.billing_status, branch_id=branch_id)
 
     if update_data.payment_method is not None:
         order.payment_method = update_data.payment_method
@@ -597,7 +640,7 @@ def update_food_order(db: Session, order_id: int, update_data: FoodOrderUpdate, 
                 food_order_id=order.id,
                 room_id=order.room_id,
                 employee_id=order.assigned_employee_id,
-                request_type="delivery",
+                request_type="food_delivery",
                 description=order.delivery_request or f"Room service delivery for food order #{order.id}",
                 status="pending" if order.status != "scheduled" else "scheduled",
                 branch_id=branch_id

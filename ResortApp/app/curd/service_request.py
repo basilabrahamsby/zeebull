@@ -337,6 +337,40 @@ def update_service_request(db: Session, request_id: int, update_data: ServiceReq
         
     if update_data.billing_status is not None:
         request.billing_status = update_data.billing_status
+        
+        # If this is linked to a food order, sync billing status to the order and ALL other requests
+        if request.food_order_id:
+            from app.models.foodorder import FoodOrder
+            food_order = db.query(FoodOrder).filter(FoodOrder.id == request.food_order_id).first()
+            if food_order:
+                was_paid = food_order.billing_status == "paid"
+                food_order.billing_status = update_data.billing_status
+                if update_data.payment_mode:
+                    food_order.payment_method = update_data.payment_mode
+                
+                # Sync to all other service requests for this order
+                from app.curd.foodorder import sync_food_order_to_requests
+                sync_food_order_to_requests(db, food_order.id, billing_status=update_data.billing_status, branch_id=branch_id)
+                
+                # If newly paid, create journal entry
+                if food_order.billing_status == "paid" and not was_paid:
+                    try:
+                        from app.utils.accounting_helpers import create_food_order_journal_entry
+                        from app.models.room import Room
+                        room = db.query(Room).filter(Room.id == food_order.room_id).first()
+                        
+                        create_food_order_journal_entry(
+                            db=db,
+                            food_order_id=food_order.id,
+                            amount=food_order.total_with_gst or food_order.amount,
+                            room_number=room.number if room else "Unknown",
+                            branch_id=branch_id,
+                            gst_rate=5.0,
+                            payment_method=update_data.payment_mode or food_order.payment_method
+                        )
+                        print(f"[INFO] Created journal entry for food order {food_order.id} marked as paid via service update")
+                    except Exception as e:
+                        print(f"[ERROR] Failed to create journal entry for food order {food_order.id}: {e}")
 
     if update_data.status == "in_progress" and not request.started_at:
         request.started_at = datetime.now(timezone.utc)
@@ -356,6 +390,11 @@ def update_service_request(db: Session, request_id: int, update_data: ServiceReq
         if request.food_order_id:
             food_order = db.query(FoodOrder).filter(FoodOrder.id == request.food_order_id, FoodOrder.branch_id == branch_id).first()
             if food_order:
+                # Ensure billing status is synced if order is already paid
+                if food_order.billing_status == "paid" and request.billing_status != "paid":
+                    request.billing_status = "paid"
+                    print(f"[INFO] Service request {request.id} automatically synced to 'paid' because linked food order {food_order.id} is already paid")
+
                 # Only mark as completed if the task is specifically delivery or similar delivery task
                 is_delivery_task = request.request_type in ["food_delivery", "delivery", "room_service"]
                 
@@ -363,38 +402,8 @@ def update_service_request(db: Session, request_id: int, update_data: ServiceReq
                     # Mark food order as completed
                     food_order.status = "completed"
                     
-                    was_paid = food_order.billing_status == "paid"
-                    
-                    # Use billing_status from update_data if provided, otherwise default to unpaid
-                    if update_data.billing_status:
-                        food_order.billing_status = update_data.billing_status
-                    elif food_order.billing_status != "paid":
-                        food_order.billing_status = "unpaid"
-                    
-                    if update_data.payment_mode:
-                        food_order.payment_method = update_data.payment_mode
-                    
-                    # If order is now paid but wasn't before, record accounting entry
-                    if food_order.billing_status == "paid" and not was_paid:
-                        try:
-                            from app.utils.accounting_helpers import create_food_order_journal_entry
-                            from app.models.room import Room
-                            room = db.query(Room).get(food_order.room_id)
-                            
-                            create_food_order_journal_entry(
-                                db=db,
-                                food_order_id=food_order.id,
-                                amount=food_order.total_with_gst or food_order.amount,
-                                room_number=room.number if room else "Unknown",
-                                branch_id=branch_id,
-                                gst_rate=5.0,
-                                payment_method=update_data.payment_mode or food_order.payment_method
-                            )
-                            print(f"[INFO] Created journal entry for food order {food_order.id} marked as paid via service completion")
-                        except Exception as e:
-                            print(f"[ERROR] Failed to create journal entry for food order {food_order.id}: {e}")
-                    
-                    print(f"[INFO] Food order {food_order.id} marked as completed (billing: {food_order.billing_status}, mode: {update_data.payment_mode}) due to delivery service completion")
+                    # Billing status and journal entries are now handled above for all cases
+                    print(f"[INFO] Food order {food_order.id} marked as completed due to delivery service completion")
                 elif update_data.status == "cancelled":
                     # Mark food order as cancelled
                     food_order.status = "cancelled"

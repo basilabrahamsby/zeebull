@@ -1,8 +1,10 @@
 from pydantic import BaseModel
 from datetime import datetime
+from typing import Optional
 
 class PaymentBase(BaseModel):
-    booking_id: int
+    booking_id: Optional[int] = None
+    package_booking_id: Optional[int] = None
     amount: float
     method: str
 

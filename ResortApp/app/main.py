@@ -30,6 +30,7 @@ from app.api import (
     booking,
     checkout,
     dashboard,
+    day_audit,
     employee,
     expenses,
     food_category,
@@ -289,6 +290,7 @@ app.include_router(packages.router, prefix="/api", tags=["Packages"])
 app.include_router(frontend.router, prefix="/api", tags=["Frontend"])
 app.include_router(booking.router, prefix="/api", tags=["Booking"])
 app.include_router(checkout.router, prefix="/api", tags=["Checkout"])
+app.include_router(day_audit.router, prefix="/api", tags=["Day Audit"])
 app.include_router(dashboard.router, prefix="/api", tags=["Dashboard"])
 app.include_router(employee.router, prefix="/api", tags=["Employee"])
 app.include_router(expenses.router, prefix="/api", tags=["Expenses"])

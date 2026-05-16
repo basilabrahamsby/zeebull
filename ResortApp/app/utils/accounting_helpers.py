@@ -10,6 +10,19 @@ from app.curd.account import create_journal_entry
 from app.schemas.account import JournalEntryCreate, JournalEntryLineCreateInEntry
 
 
+def is_bank_ledger_method(method: str) -> bool:
+    """Check if a payment method should be mapped to the Bank ledger instead of Cash."""
+    if not method:
+        return False
+    m = str(method).lower().strip()
+    bank_methods = [
+        "card", "swipe", "debit", "credit", "upi", "netbanking", 
+        "bank transfer", "bank_transfer", "online", "cheque",
+        "google_pay", "phonepe", "paytm", "qr_code", "net_banking"
+    ]
+    return m in bank_methods
+
+
 def find_ledger_by_name(db: Session, name: str, branch_id: int, module: Optional[str] = None) -> Optional[AccountLedger]:
     """Find ledger by name and branch (including global ledgers), optionally filtered by module"""
     from sqlalchemy import or_
@@ -38,8 +51,7 @@ def create_advance_payment_journal_entry(
     Debit: Cash in Hand / Bank Account
     Credit: Advance Deposits - Guests (Current Asset/Liability)
     """
-    payment_method_lower = payment_method.lower() if payment_method else "cash"
-    if payment_method_lower in ["card", "swipe", "debit", "credit", "upi", "netbanking", "bank transfer"]:
+    if is_bank_ledger_method(payment_method):
         payment_ledger = find_ledger_by_name(db, "Bank Account - Main", branch_id=branch_id, module="General")
     else:
         payment_ledger = find_ledger_by_name(db, "Cash in Hand", branch_id=branch_id, module="General")
@@ -227,8 +239,7 @@ def create_purchase_payment_journal_entry(
     """
     vendor_payable = find_ledger_by_name(db, "Accounts Payable", branch_id=branch_id, module="Purchase")
     
-    payment_method_lower = payment_method.lower() if payment_method else "cash"
-    if payment_method_lower in ["card", "swipe", "debit", "credit", "upi", "netbanking", "bank transfer"]:
+    if is_bank_ledger_method(payment_method):
         payment_ledger = find_ledger_by_name(db, "Bank Account - Main", branch_id=branch_id, module="General")
     else:
         payment_ledger = find_ledger_by_name(db, "Cash in Hand", branch_id=branch_id, module="General")
@@ -321,8 +332,7 @@ def create_food_order_journal_entry(
     """
     # Determine debit ledger based on payment status
     if payment_method:
-        payment_method_lower = payment_method.lower()
-        if payment_method_lower in ["card", "swipe", "debit", "credit", "upi", "netbanking", "bank transfer"]:
+        if is_bank_ledger_method(payment_method):
             debit_ledger = find_ledger_by_name(db, "Bank Account - Main", branch_id=branch_id, module="General")
         else:
             debit_ledger = find_ledger_by_name(db, "Cash in Hand", branch_id=branch_id, module="General")
@@ -361,6 +371,74 @@ def create_food_order_journal_entry(
     return create_journal_entry(db, entry, branch_id=branch_id, created_by=created_by).id
 
 
+def create_service_journal_entry(
+    db: Session,
+    service_id: int,
+    amount: float,
+    room_number: str,
+    service_name: str,
+    branch_id: int,
+    gst_rate: float = 18.0,
+    created_by: Optional[int] = None,
+    payment_method: Optional[str] = None
+) -> int:
+    """
+    Debit: Cash in Hand / Bank Account / Accounts Receivable
+    Credit: Spa & Wellness Revenue, CGST Payable, SGST Payable
+    """
+    # Determine debit ledger based on payment status
+    if payment_method:
+        if is_bank_ledger_method(payment_method):
+            debit_ledger = find_ledger_by_name(db, "Bank Account - Main", branch_id=branch_id, module="General")
+        else:
+            debit_ledger = find_ledger_by_name(db, "Cash in Hand", branch_id=branch_id, module="General")
+    else:
+        debit_ledger = find_ledger_by_name(db, "Accounts Receivable", branch_id=branch_id, module="Booking")
+
+    # Determine revenue ledger based on service name
+    revenue_ledger_name = "Spa & Wellness Revenue"
+    if service_name and "laundry" in service_name.lower():
+        revenue_ledger_name = "Laundry Revenue"
+    elif service_name and "event" in service_name.lower():
+        revenue_ledger_name = "Event Revenue"
+
+    service_revenue = find_ledger_by_name(db, revenue_ledger_name, branch_id=branch_id, module="Service")
+    output_cgst = find_ledger_by_name(db, "CGST Payable", branch_id=branch_id, module="GST")
+    output_sgst = find_ledger_by_name(db, "SGST Payable", branch_id=branch_id, module="GST")
+
+    if not all([debit_ledger, service_revenue, output_cgst, output_sgst]):
+        print(f"[WARNING] Ledgers missing for service {service_id}")
+        # Try a fallback for service revenue if specific one not found
+        if not service_revenue:
+            service_revenue = find_ledger_by_name(db, "Spa & Wellness Revenue", branch_id=branch_id, module="Service")
+        
+        if not all([debit_ledger, service_revenue, output_cgst, output_sgst]):
+            return None
+
+    base_amount = round(amount / (1 + (gst_rate / 100)), 2)
+    gst_amount = round(amount - base_amount, 2)
+    
+    # Use current time for timestamp to avoid Day Audit filtering issues
+    now = datetime.now(timezone.utc)
+    
+    lines = [
+        JournalEntryLineCreateInEntry(debit_ledger_id=debit_ledger.id, credit_ledger_id=None, amount=amount, description=f"Service: {service_name} (Room {room_number}){f' paid via {payment_method}' if payment_method else ''}"),
+        JournalEntryLineCreateInEntry(debit_ledger_id=None, credit_ledger_id=service_revenue.id, amount=base_amount, description=revenue_ledger_name),
+        JournalEntryLineCreateInEntry(debit_ledger_id=None, credit_ledger_id=output_cgst.id, amount=gst_amount/2, description=f"CGST @ {gst_rate/2}%"),
+        JournalEntryLineCreateInEntry(debit_ledger_id=None, credit_ledger_id=output_sgst.id, amount=gst_amount/2, description=f"SGST @ {gst_rate/2}%")
+    ]
+    
+    entry = JournalEntryCreate(
+        entry_date=now,
+        reference_type="service_payment" if payment_method else "service",
+        reference_id=service_id,
+        description=f"Service {'Payment ' if payment_method else ''}- {service_name} (Room {room_number})",
+        lines=lines
+    )
+    
+    return create_journal_entry(db, entry, branch_id=branch_id, created_by=created_by).id
+
+
 def create_complete_checkout_journal_entry(
     db: Session,
     checkout_id: int,
@@ -378,7 +456,8 @@ def create_complete_checkout_journal_entry(
     payment_method: str = "cash",
     payment_ledger_id: Optional[int] = None,
     created_by: Optional[int] = None,
-    advance_amount: float = 0.0
+    advance_amount: float = 0.0,
+    refund_amount: float = 0.0
 ) -> int:
     """
     Comprehensive guest checkout entry
@@ -393,8 +472,7 @@ def create_complete_checkout_journal_entry(
     advance_ledger = find_ledger_by_name(db, "Advance Deposits - Guests", branch_id=branch_id, module="Booking")
 
     if not payment_ledger_id:
-        payment_method_lower = payment_method.lower() if payment_method else "cash"
-        if payment_method_lower in ["card", "swipe", "debit", "credit", "upi", "netbanking", "bank transfer"]:
+        if is_bank_ledger_method(payment_method):
             payment_ledger = find_ledger_by_name(db, "Bank Account - Main", branch_id=branch_id, module="General")
         else:
             payment_ledger = find_ledger_by_name(db, "Cash in Hand", branch_id=branch_id, module="General")
@@ -406,9 +484,11 @@ def create_complete_checkout_journal_entry(
         print(f"[WARNING] Payment ledger not found for checkout {checkout_id}")
         return None
 
-    lines = [
-        JournalEntryLineCreateInEntry(debit_ledger_id=payment_ledger.id, credit_ledger_id=None, amount=grand_total, description=f"Final Payment - {guest_name} (Room {room_number})")
-    ]
+    lines = []
+    
+    # Final Payment (if guest pays)
+    if grand_total > 0:
+        lines.append(JournalEntryLineCreateInEntry(debit_ledger_id=payment_ledger.id, credit_ledger_id=None, amount=grand_total, description=f"Final Payment - {guest_name} (Room {room_number})"))
     
     if room_total > 0 and room_revenue: lines.append(JournalEntryLineCreateInEntry(debit_ledger_id=None, credit_ledger_id=room_revenue.id, amount=room_total, description="Room Tariff Income"))
     if food_total > 0 and food_revenue: lines.append(JournalEntryLineCreateInEntry(debit_ledger_id=None, credit_ledger_id=food_revenue.id, amount=food_total, description="Restaurant Revenue"))
@@ -418,13 +498,14 @@ def create_complete_checkout_journal_entry(
     if tax_amount > 0 and output_sgst: lines.append(JournalEntryLineCreateInEntry(debit_ledger_id=None, credit_ledger_id=output_sgst.id, amount=tax_amount/2, description="SGST Payable"))
     if discount_amount > 0 and discount_ledger: lines.append(JournalEntryLineCreateInEntry(debit_ledger_id=discount_ledger.id, credit_ledger_id=None, amount=discount_amount, description="Discount Allowed"))
     
-    # Advance Adjustment
-    total_credits = room_total + food_total + service_total + package_total + tax_amount
-    utilized_advance = max(0, round(total_credits - grand_total - discount_amount, 2))
+    # Advance Adjustment (Utilized part only in the main entry)
+    total_bill = room_total + food_total + service_total + package_total + tax_amount - discount_amount
+    utilized_advance = min(advance_amount, total_bill) if advance_amount > 0 else 0
+    
     if utilized_advance > 0 and advance_ledger:
         lines.append(JournalEntryLineCreateInEntry(debit_ledger_id=advance_ledger.id, credit_ledger_id=None, amount=utilized_advance, description="Advance Adjusted"))
 
-    entry = JournalEntryCreate(
+    main_entry = JournalEntryCreate(
         entry_date=datetime.now(timezone.utc),
         reference_type="checkout",
         reference_id=checkout_id,
@@ -432,7 +513,38 @@ def create_complete_checkout_journal_entry(
         lines=lines
     )
     
-    return create_journal_entry(db, entry, branch_id=branch_id, created_by=created_by).id
+    je_id = create_journal_entry(db, main_entry, branch_id=branch_id, created_by=created_by).id
+    
+    # ── Refund Entry (If applicable) ───────────────────────────────────────
+    if refund_amount > 0 and advance_ledger and payment_ledger:
+        refund_lines = [
+            JournalEntryLineCreateInEntry(
+                debit_ledger_id=advance_ledger.id,
+                credit_ledger_id=None,
+                amount=refund_amount,
+                description=f"Refund from Advance - {guest_name}"
+            ),
+            JournalEntryLineCreateInEntry(
+                debit_ledger_id=None,
+                credit_ledger_id=payment_ledger.id,
+                amount=refund_amount,
+                description=f"Refund paid via {payment_method}"
+            )
+        ]
+        
+        refund_entry = JournalEntryCreate(
+            entry_date=datetime.now(timezone.utc),
+            reference_type="refund",
+            reference_id=checkout_id,
+            description=f"Guest Refund - {guest_name} (Room {room_number})",
+            notes=f"Refunded from advance deposit. Method: {payment_method}",
+            lines=refund_lines
+        )
+        
+        create_journal_entry(db, refund_entry, branch_id=branch_id, created_by=created_by)
+        print(f"[INFO] Refund journal entry created for checkout {checkout_id}")
+
+    return je_id
 
 
 def create_rcm_journal_entry(
@@ -456,3 +568,62 @@ def create_rcm_journal_entry(
     # We omit the full RCM complex logic here for brevity in this refactor pass 
     # but ensure branch_id is at least passed to create_journal_entry if implemented.
     pass
+
+
+def create_expense_journal_entry(
+    db: Session,
+    expense_id: int,
+    amount: float,
+    category: str,
+    description: str,
+    payment_mode: str,
+    branch_id: int,
+    created_by: Optional[int] = None
+) -> int:
+    """
+    Create journal entry for a standard expense
+    Debit: Expense Ledger (based on category)
+    Credit: Cash in Hand / Bank Account (based on payment_mode)
+    """
+    # 1. Determine Credit Ledger (Payment Method)
+    if is_bank_ledger_method(payment_mode):
+        credit_ledger = find_ledger_by_name(db, "Bank Account - Main", branch_id=branch_id, module="General")
+    else:
+        credit_ledger = find_ledger_by_name(db, "Cash in Hand", branch_id=branch_id, module="General")
+
+    # 2. Determine Debit Ledger (Expense Category)
+    # Try to find a specific ledger for this category, or fallback to "Direct Expenses"
+    debit_ledger = find_ledger_by_name(db, category, branch_id=branch_id, module="Expense")
+    if not debit_ledger:
+        debit_ledger = find_ledger_by_name(db, "Direct Expenses", branch_id=branch_id, module="Expense")
+
+    if not all([credit_ledger, debit_ledger]):
+        print(f"[WARNING] Ledgers not found for expense {expense_id} (Category: {category}, Mode: {payment_mode}). Skipping entry.")
+        return None
+
+    lines = [
+        JournalEntryLineCreateInEntry(
+            debit_ledger_id=debit_ledger.id,
+            credit_ledger_id=None,
+            amount=amount,
+            description=f"Expense: {category} - {description}"
+        ),
+        JournalEntryLineCreateInEntry(
+            debit_ledger_id=None,
+            credit_ledger_id=credit_ledger.id,
+            amount=amount,
+            description=f"Paid via {payment_mode}"
+        )
+    ]
+
+    entry = JournalEntryCreate(
+        entry_date=datetime.now(timezone.utc),
+        reference_type="expense",
+        reference_id=expense_id,
+        description=f"Expense - {category}",
+        notes=description,
+        lines=lines
+    )
+
+    je = create_journal_entry(db, entry, branch_id=branch_id, created_by=created_by)
+    return je.id

@@ -1750,6 +1750,57 @@ def create_issue(
         raise HTTPException(status_code=500, detail=f"Error creating issue: {str(e)}")
 
 
+@router.post("/consumption")
+def add_inventory_consumption(
+    data: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    branch_id: int = Depends(get_branch_id)
+):
+    """
+    Backward compatibility endpoint for mobile app.
+    Translates a flat consumption request into a StockIssue.
+    """
+    try:
+        item_id = data.get("item_id")
+        location_id = data.get("location_id")
+        quantity = data.get("quantity", 1)
+        notes = data.get("notes", "Consumption via mobile")
+        
+        if not item_id or not location_id:
+            raise HTTPException(status_code=400, detail="item_id and location_id are required")
+            
+        # Fetch item to get unit
+        item = inventory_crud.get_item_by_id(db, item_id)
+        if not item:
+            raise HTTPException(status_code=404, detail="Item not found")
+            
+        # Create StockIssue payload
+        issue_data = {
+            "destination_location_id": location_id,
+            "notes": notes,
+            "details": [
+                {
+                    "item_id": item_id,
+                    "issued_quantity": quantity,
+                    "unit": item.unit or "pcs",
+                    "notes": notes
+                }
+            ]
+        }
+        
+        created = inventory_crud.create_stock_issue(db, issue_data, branch_id=branch_id, issued_by=current_user.id)
+        return {"message": "Inventory added successfully", "issue_number": created.issue_number}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error adding inventory: {str(e)}")
+
+
 @router.get("/issues", response_model=List[StockIssueOut])
 def get_issues(
     skip: int = 0,
@@ -3156,6 +3207,7 @@ def sync_rooms_to_locations(
 
 # Asset Mapping Endpoints
 @router.post("/asset-mappings", response_model=AssetMappingOut)
+@router.post("/mapping", response_model=AssetMappingOut)
 def create_asset_mapping(
     mapping: AssetMappingCreate,
     db: Session = Depends(get_db),

@@ -721,7 +721,7 @@ def create_room(
         if background_tasks:
             try:
                 from app.core.aiosell_triggers import trigger_inventory_push
-                trigger_inventory_push(db, background_tasks, db_room.room_type_id)
+                background_tasks.add_task(trigger_inventory_push, db_room.room_type_id)
             except Exception as e:
                 print(f"Failed to queue Aiosell inventory push: {e}")
         

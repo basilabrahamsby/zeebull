@@ -81,6 +81,7 @@ from app.api import (
     activity_logs,
     rate_plan,
     calendar,
+    day_audit,
 )
 from app.api.settings import router as settings_router
 from app.api import reports_module
@@ -108,15 +109,6 @@ except Exception as e:
     traceback.print_exc()
     inventory = None
 
-# Import day audit router
-try:
-    from app.api import day_audit as day_audit_module
-    print("[OK] Day Audit router imported successfully")
-except Exception as e:
-    print(f"[ERROR] ERROR importing day_audit router: {e}")
-    import traceback
-    traceback.print_exc()
-    day_audit_module = None
 
 # Import comprehensive reports router separately to catch any import errors
 try:
@@ -365,6 +357,7 @@ app.include_router(account.router, prefix="/api", tags=["Accounts"])
 app.include_router(gst_reports.router, prefix="/api", tags=["GST Reports"])
 app.include_router(reports_module.router, prefix="/api", tags=["Reports Module"])
 app.include_router(attendance.router, prefix="/api", tags=["Attendance"])
+app.include_router(day_audit.router, prefix="/api", tags=["Day Audit"])
 app.include_router(notification.router, prefix="/api/notifications", tags=["Notifications"])
 app.include_router(service_report.router, prefix="/api", tags=["Service Reports"])
 app.include_router(activity_logs.router, prefix="/api/activity-logs", tags=["Activity Logs"])
@@ -404,17 +397,6 @@ if inventory is not None:
 else:
     print("[ERROR] Inventory router not imported, skipping registration")
 
-# Include day audit router if it was imported successfully
-if day_audit_module is not None:
-    try:
-        app.include_router(day_audit_module.router, prefix="/api", tags=["Day Audit"])
-        print(f"[OK] Day Audit router registered with {len(day_audit_module.router.routes)} routes")
-    except Exception as e:
-        print(f"[ERROR] ERROR registering day_audit router: {e}")
-        import traceback
-        traceback.print_exc()
-else:
-    print("[ERROR] Day Audit router not imported, skipping registration")
 
 # Include stock reconciliation router
 # try:

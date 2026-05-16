@@ -420,9 +420,17 @@ def get_service_requests(
                 print(f"[ERROR] Error converting checkout request {cr.id}: {e}")
                 continue
     
-    print(f"[DEBUG] Returning {len(result)} items for user {current_user.email}")
-    for item in result:
-        print(f"  - Item ID: {item.get('id')}, Room: {item.get('room_number')}, AssignedTo: {item.get('employee_name')}")
+    # 4. Sort the combined results by date descending (newest first)
+    # We use a helper to extract the date safely as a string for lexicographical comparison or parse it
+    def get_item_date(item):
+        d = item.get('created_at') or item.get('assigned_at') or "1970-01-01T00:00:00Z"
+        return d
+
+    result.sort(key=get_item_date, reverse=True)
+
+    print(f"[DEBUG] Returning {len(result)} items for user {current_user.email if current_user else 'None'}")
+    for item in result[:10]: # Print top 10 for debug
+        print(f"  - Item ID: {item.get('id')}, Type: {item.get('type')}, Status: {item.get('status')}, Date: {item.get('created_at')}")
     
     return result
 

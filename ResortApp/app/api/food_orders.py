@@ -190,6 +190,13 @@ def mark_order_paid(
     db.commit()
     db.refresh(order)
     
+    # Sync status to linked service requests (ensure delivery task is updated)
+    try:
+        from app.curd.foodorder import sync_food_order_to_requests
+        sync_food_order_to_requests(db, order.id, billing_status="paid", branch_id=branch_id)
+    except Exception as e:
+        print(f"[ERROR] Failed to sync food order {order.id} to requests: {e}")
+
     # Automatically create journal entry for food revenue
     try:
         from app.utils.accounting_helpers import create_food_order_journal_entry

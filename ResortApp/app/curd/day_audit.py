@@ -40,21 +40,87 @@ def calculate_live_metrics(db: Session, audit: DayAudit, branch_id: int) -> DayA
     audit.new_checkins = nc_in
     audit.new_checkouts = nc_out
 
-    # Calculate live revenues since day was opened
-    from app.models.checkout import Checkout, CheckoutPayment
+    # 2. Calculate Revenues & Payments via Journal Entries (The most reliable source)
+    from app.models.account import JournalEntry, JournalEntryLine
+    from sqlalchemy.orm import joinedload
+
+    # Fetch all transactions for this audit window
+    txs = db.query(JournalEntry).options(
+        joinedload(JournalEntry.lines).joinedload(JournalEntryLine.debit_ledger),
+        joinedload(JournalEntry.lines).joinedload(JournalEntryLine.credit_ledger)
+    ).filter(
+        JournalEntry.branch_id == branch_id,
+        JournalEntry.entry_date >= audit.opened_at
+    ).all()
+
+    expected_cash = float(audit.opening_cash_balance or 0.0)
+    expected_acc = float(audit.opening_account_balance or 0.0)
+    payments_received = 0.0
+    total_expenses = 0.0
+    total_purchases = 0.0
+
+    for tx in txs:
+        ref_type = str(tx.reference_type or "").lower()
+        amount = float(tx.total_amount or 0.0)
+        
+        # Track totals for summary fields
+        if ref_type == "expense":
+            total_expenses += amount
+        elif ref_type in ["purchase", "purchase_payment"]:
+            total_purchases += amount
+
+        tx_cash_impact = 0.0
+        tx_acc_impact = 0.0
+        
+        for line in tx.lines:
+            # Check Debit side (Inflow to ledger)
+            if line.debit_ledger:
+                lname = line.debit_ledger.name.lower()
+                is_cash = "cash" in lname
+                is_bank = "bank" in lname
+                
+                if is_cash or is_bank:
+                    # Check if this is an internal transfer (debit cash, credit bank or vice versa)
+                    is_transfer = False
+                    if line.credit_ledger:
+                        clname = line.credit_ledger.name.lower()
+                        if ("cash" in clname or "bank" in clname):
+                            is_transfer = True
+                    
+                    val = float(line.amount or 0.0)
+                    if is_cash: tx_cash_impact += val
+                    else: tx_acc_impact += val
+                    
+                    # If it's a debit to cash/bank from a non-cash/bank source, it's a payment received
+                    # (Unless it's an expense/purchase reversal, which is rare)
+                    if not is_transfer and ref_type not in ["expense", "purchase", "purchase_payment", "waste"]:
+                         payments_received += val
+            
+            # Check Credit side (Outflow from ledger)
+            if line.credit_ledger:
+                lname = line.credit_ledger.name.lower()
+                is_cash = "cash" in lname
+                is_bank = "bank" in lname
+                
+                if is_cash or is_bank:
+                    val = float(line.amount or 0.0)
+                    if is_cash: tx_cash_impact -= val
+                    else: tx_acc_impact -= val
+
+        expected_cash += tx_cash_impact
+        expected_acc += tx_acc_impact
+
+    # Calculate Revenue components (from checkouts and direct orders)
+    from app.models.checkout import Checkout
     from app.models.foodorder import FoodOrder
-    from app.models.service import AssignedService
-    from app.models.service import Service as ServiceModel
+    from app.models.service import AssignedService, Service as ServiceModel
     from sqlalchemy.sql import case
 
-    checkouts = (
-        db.query(Checkout)
-        .filter(
-            Checkout.branch_id == branch_id,
-            Checkout.created_at >= audit.opened_at,
-        )
-        .all()
-    )
+    checkouts = db.query(Checkout).filter(
+        Checkout.branch_id == branch_id,
+        Checkout.created_at >= audit.opened_at,
+    ).all()
+    
     checkout_room_total = sum(float(c.room_total or 0.0) for c in checkouts)
     checkout_food_total = sum(float(c.food_total or 0.0) for c in checkouts)
     checkout_service_total = sum(float(c.service_total or 0.0) for c in checkouts)
@@ -65,6 +131,7 @@ def calculate_live_metrics(db: Session, audit: DayAudit, branch_id: int) -> DayA
         .filter(
             FoodOrder.branch_id == branch_id,
             FoodOrder.created_at >= audit.opened_at,
+            FoodOrder.status != "cancelled"
         )
         .scalar()
     ) or 0.0
@@ -80,75 +147,29 @@ def calculate_live_metrics(db: Session, audit: DayAudit, branch_id: int) -> DayA
         .filter(
             AssignedService.branch_id == branch_id,
             AssignedService.assigned_at >= audit.opened_at,
+            AssignedService.status != "cancelled"
         )
         .scalar()
     ) or 0.0
 
-    checkout_payments = (
-        db.query(CheckoutPayment)
-        .filter(
-            CheckoutPayment.branch_id == branch_id,
-            CheckoutPayment.created_at >= audit.opened_at,
+    night_charges_data = (
+        db.query(
+            func.coalesce(func.sum(NightCharge.room_charge), 0),
+            func.coalesce(func.sum(NightCharge.gst_amount), 0)
         )
-        .all()
+        .filter(
+            NightCharge.day_audit_id == audit.id,
+            NightCharge.is_reversed == False
+        )
+        .first()
     )
-    payments_received = sum(float(p.amount or 0.0) for p in checkout_payments)
+    night_room_rev = float(night_charges_data[0]) if night_charges_data else 0.0
+    night_gst_amount = float(night_charges_data[1]) if night_charges_data else 0.0
 
-    # Calculate Expenses & Purchases since opened via Journal Entries (actual cash flow)
-    from app.models.account import JournalEntry, JournalEntryLine
-
-    total_expenses = (
-        db.query(func.coalesce(func.sum(JournalEntry.total_amount), 0))
-        .filter(
-            JournalEntry.branch_id == branch_id,
-            JournalEntry.entry_date >= audit.opened_at,
-            JournalEntry.reference_type == "expense"
-        )
-        .scalar()
-    ) or 0.0
-
-    total_purchases = (
-        db.query(func.coalesce(func.sum(JournalEntry.total_amount), 0))
-        .filter(
-            JournalEntry.branch_id == branch_id,
-            JournalEntry.entry_date >= audit.opened_at,
-            JournalEntry.reference_type == "purchase_payment"
-        )
-        .scalar()
-    ) or 0.0
-    
-    # Calculate Expected Balances for the audit report
-    # We fetch all transactions for this audit
-    from sqlalchemy.orm import joinedload
-    txs = db.query(JournalEntry).options(
-        joinedload(JournalEntry.lines).joinedload(JournalEntryLine.debit_ledger),
-        joinedload(JournalEntry.lines).joinedload(JournalEntryLine.credit_ledger)
-    ).filter(
-        JournalEntry.branch_id == branch_id,
-        JournalEntry.entry_date >= audit.opened_at
-    ).all()
-    
-    expected_cash = float(audit.opening_cash_balance or 0.0)
-    expected_acc = float(audit.opening_account_balance or 0.0)
-    
-    for tx in txs:
-        ref_type = str(tx.reference_type or "").lower()
-        is_outflow = ref_type in ["expense", "purchase", "purchase_payment", "waste"]
-        amount = float(tx.total_amount or 0.0)
-        
-        is_cash = any("cash" in (line.debit_ledger.name.lower() if line.debit_ledger else "") or 
-                     "cash" in (line.credit_ledger.name.lower() if line.credit_ledger else "") 
-                     for line in tx.lines)
-        
-        if is_cash:
-            expected_cash += -amount if is_outflow else amount
-        else:
-            expected_acc += -amount if is_outflow else amount
-
-    audit.total_room_revenue = round(checkout_room_total, 2)
+    audit.total_room_revenue = round(checkout_room_total + night_room_rev, 2)
     audit.total_food_revenue = round(float(food_revenue) + checkout_food_total, 2)
     audit.total_service_revenue = round(float(service_revenue) + checkout_service_total, 2)
-    audit.total_gst_collected = round(checkout_tax_total, 2)
+    audit.total_gst_collected = round(checkout_tax_total + night_gst_amount, 2)
     audit.total_payments_received = round(payments_received, 2)
     audit.total_expenses = round(float(total_expenses), 2)
     audit.total_purchases = round(float(total_purchases), 2)
@@ -438,32 +459,7 @@ def close_day(
         "ts": datetime.now(timezone.utc).isoformat(),
     })
 
-    # ── Step 5: Finalize audit record including checkout totals ────────────
-    from app.models.checkout import Checkout, CheckoutPayment
-
-    checkouts = (
-        db.query(Checkout)
-        .filter(
-            Checkout.branch_id == branch_id,
-            Checkout.created_at >= audit.opened_at,
-        )
-        .all()
-    )
-    checkout_room_total = sum(float(c.room_total or 0.0) for c in checkouts)
-    checkout_food_total = sum(float(c.food_total or 0.0) for c in checkouts)
-    checkout_service_total = sum(float(c.service_total or 0.0) for c in checkouts)
-    checkout_tax_total = sum(float(c.tax_amount or 0.0) for c in checkouts)
-
-    checkout_payments = (
-        db.query(CheckoutPayment)
-        .filter(
-            CheckoutPayment.branch_id == branch_id,
-            CheckoutPayment.created_at >= audit.opened_at,
-        )
-        .all()
-    )
-    payments_received = sum(float(p.amount or 0.0) for p in checkout_payments)
-
+    # ── Step 5: Finalize audit record including all totals ─────────────────
     audit.status = "closed"
     audit.closed_at = datetime.now(timezone.utc)
     audit.closed_by_id = closed_by_id
@@ -473,37 +469,9 @@ def close_day(
     audit.system_expected_account = system_expected_account
     audit.override_reason = override_reason
     audit.closing_notes = closing_notes
-    audit.total_room_revenue = round(total_room_rev + checkout_room_total, 2)
-    audit.total_food_revenue = round(float(food_revenue) + checkout_food_total, 2)
-    audit.total_service_revenue = round(float(service_revenue) + checkout_service_total, 2)
-    audit.total_gst_collected = round(total_gst + checkout_tax_total, 2)
-    audit.total_payments_received = round(payments_received, 2)
     
-    # Finalize expenses and purchases for the day via Journal Entries (actual cash flow)
-    from app.models.account import JournalEntry
-    
-    final_expenses = (
-        db.query(func.coalesce(func.sum(JournalEntry.total_amount), 0))
-        .filter(
-            JournalEntry.branch_id == branch_id,
-            JournalEntry.entry_date >= audit.opened_at,
-            JournalEntry.reference_type == "expense"
-        )
-        .scalar()
-    ) or 0.0
-    
-    final_purchases = (
-        db.query(func.coalesce(func.sum(JournalEntry.total_amount), 0))
-        .filter(
-            JournalEntry.branch_id == branch_id,
-            JournalEntry.entry_date >= audit.opened_at,
-            JournalEntry.reference_type.in_(["purchase", "purchase_payment"])
-        )
-        .scalar()
-    ) or 0.0
-    
-    audit.total_expenses = round(float(final_expenses), 2)
-    audit.total_purchases = round(float(final_purchases), 2)
+    # Recalculate all metrics one last time using unified logic
+    calculate_live_metrics(db, audit, branch_id)
     
     audit.rooms_occupied = len(in_house_bookings)
     audit.new_checkins = new_checkins

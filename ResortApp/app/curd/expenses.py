@@ -20,6 +20,7 @@ def create_expense(db: Session, data, branch_id: int, image_path: str = None):
         image=image_path,
         department=getattr(expense_data, 'department', None),
         status=getattr(expense_data, 'status', 'Pending'),
+        payment_mode=getattr(expense_data, 'payment_mode', 'Cash'),
         # RCM fields
         rcm_applicable=getattr(expense_data, 'rcm_applicable', False),
         rcm_tax_rate=getattr(expense_data, 'rcm_tax_rate', None),

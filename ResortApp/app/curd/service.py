@@ -987,7 +987,10 @@ def update_assigned_service_status(db: Session, assigned_id: int, update_data: A
             ServiceRequest.status.notin_(["cancelled"]) 
         ).all()
         
-        print(f"[DEBUG-SYNC] Found {len(requests)} ServiceRequests for Room {assigned.room_id} to Sync (Current Svc Status: {new_status})")
+        # Determine billing status for sync - Priority: 1. Input data 2. Database state (if not default)
+        current_billing = update_data.billing_status or (assigned.billing_status if assigned.billing_status != "unbilled" else None)
+
+        print(f"[DEBUG-SYNC] Found {len(requests)} ServiceRequests for Room {assigned.room_id} to Sync (Current Svc Status: {new_status}, Billing: {current_billing})")
         
         for req in requests:
             # Check if employee matches (if assigned) and if type matches (heuristic)
@@ -1032,9 +1035,6 @@ def update_assigned_service_status(db: Session, assigned_id: int, update_data: A
                             req.completed_at = datetime.now(timezone.utc)
                 
                 # ALWAYS propagate billing_status if we have one (Paid/Unpaid)
-                # Priority: 1. Input data 2. Database state (if not default)
-                current_billing = update_data.billing_status or (assigned.billing_status if assigned.billing_status != "unbilled" else None)
-                
                 if current_billing:
                     req.billing_status = current_billing
                     print(f"[DEBUG-SYNC] Syncing Req {req.id} billing to {current_billing}")
@@ -1079,6 +1079,38 @@ def update_assigned_service_status(db: Session, assigned_id: int, update_data: A
                                 print(f"[INFO] Auto-updated FoodOrder {food_order.id} status/billing/mode based on sync")
                         except Exception as fo_err:
                             print(f"[WARNING] Failed to update linked FoodOrder: {fo_err}")
+                
+            
+        # --- NEW: Service Accounting Sync for General Services (Non-Food) ---
+        # Moved outside the ServiceRequest loop to ensure it runs even if no guest request exists
+        if current_billing == "paid":
+            # Check if we already have a journal entry for this service to avoid duplicates
+            from app.models.account import JournalEntry
+            existing_je = db.query(JournalEntry).filter(
+                JournalEntry.reference_type == "service_payment",
+                JournalEntry.reference_id == assigned.id
+            ).first()
+            
+            if not existing_je:
+                try:
+                    from app.utils.accounting_helpers import create_service_journal_entry
+                    # Use override_charges if available, otherwise fallback to service charges
+                    service_amount = assigned.override_charges if assigned.override_charges is not None else assigned.service.charges
+                    
+                    if service_amount > 0:
+                        create_service_journal_entry(
+                            db=db,
+                            service_id=assigned.id,
+                            amount=service_amount,
+                            room_number=assigned.room.number if assigned.room else "Unknown",
+                            service_name=assigned.service.name,
+                            branch_id=assigned.branch_id,
+                            gst_rate=getattr(assigned.service, 'gst_rate', 18.0) or 18.0,
+                            payment_method=update_data.payment_mode or "cash"
+                        )
+                        print(f"[INFO] Created journal entry for service {assigned.id} ({assigned.service.name}) marked as paid")
+                except Exception as svc_je_err:
+                    print(f"[ERROR] Failed to create journal entry for service {assigned.id}: {svc_je_err}")
             
     except Exception as sync_err:
         print(f"[WARNING] Status sync to ServiceRequest failed: {sync_err}")

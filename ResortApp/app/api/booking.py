@@ -1776,3 +1776,54 @@ def get_checkin_image(filename: str):
     if not os.path.exists(filepath) or not os.path.isfile(filepath):
         raise HTTPException(status_code=404, detail="Image not found")
     return FileResponse(filepath)
+
+# -------------------------------
+# DELETE booking by ID  →  soft-cancel (status = "cancelled")
+# -------------------------------
+@router.delete("/{booking_id}")
+def delete_booking(
+    booking_id: Union[str, int],
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    branch_id: int = Depends(get_branch_id)
+):
+    """
+    Soft-cancel a booking by ID.
+    Sets status to 'cancelled' — does NOT delete the row from the database.
+    Checked-in bookings cannot be cancelled; they must go through checkout.
+    """
+    numeric_id, _ = parse_display_id(str(booking_id))
+    if numeric_id is None:
+        raise HTTPException(status_code=400, detail=f"Invalid booking ID format: {booking_id}")
+    booking_id = numeric_id
+
+    query = db.query(Booking).filter(Booking.id == booking_id)
+    if branch_id is not None:
+        query = query.filter(Booking.branch_id == branch_id)
+    booking = query.first()
+
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+
+    # Block cancellation of active (checked-in) bookings
+    blocked_statuses = {"checked-in", "checked_in", "checkedin"}
+    if booking.status.lower().replace(" ", "-") == "checked-in" or booking.status.lower() in blocked_statuses:
+        raise HTTPException(
+            status_code=409,
+            detail="Cannot cancel a checked-in booking. Please complete checkout first."
+        )
+
+    # Already cancelled — idempotent
+    if booking.status.lower() == "cancelled":
+        return {"detail": f"Booking {booking_id} is already cancelled"}
+
+    # Soft-cancel: update status only, keep all records intact
+    booking.status = "cancelled"
+    if hasattr(booking, 'cancelled_at'):
+        booking.cancelled_at = get_ist_now()
+
+    db.commit()
+    db.refresh(booking)
+
+    return {"detail": f"Booking {booking_id} cancelled successfully", "status": "cancelled"}
+

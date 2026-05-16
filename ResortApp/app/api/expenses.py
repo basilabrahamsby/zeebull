@@ -30,6 +30,7 @@ async def create_expense(
     description: str = Form(None),
     employee_id: int = Form(...),
     department: str = Form(None),
+    payment_mode: str = Form("Cash"),
     image: UploadFile = File(None),
     # RCM fields
     rcm_applicable: bool = Form(False),
@@ -87,7 +88,8 @@ async def create_expense(
         original_bill_no=original_bill_no if rcm_applicable else None,
         vendor_id=vendor_id if vendor_id else None,
         rcm_liability_date=rcm_liability_dt if rcm_applicable else None,
-        itc_eligible=itc_eligible if rcm_applicable else True
+        itc_eligible=itc_eligible if rcm_applicable else True,
+        payment_mode=payment_mode
     )
     
     created = expense_crud.create_expense(db, data=expense_data, branch_id=branch_id, image_path=image_path)
@@ -147,6 +149,7 @@ async def create_expense(
             amount=float(amount),
             category=category,
             description=description or "",
+            payment_mode=payment_mode,
             created_by=current_user.id,
             branch_id=branch_id
         )

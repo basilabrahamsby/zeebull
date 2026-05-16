@@ -21,6 +21,7 @@ class Expense(Base):
     status = Column(String, default="Pending", nullable=False) # Pending, Approved, Rejected, Paid
     created_at = Column(DateTime, default=_get_ist_now)
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False, index=True)
+    payment_mode = Column(String, default="Cash", nullable=False)
     
     branch = relationship("Branch")
 
