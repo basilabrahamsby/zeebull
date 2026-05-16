@@ -524,9 +524,21 @@ const CheckoutDetailModal = React.memo(({ checkout, onClose, onUpdateSuccess }) 
                     <span className="font-medium">-{formatCurrency(details.discount_amount)}</span>
                   </div>
                 )}
+                {details.advance_deposit > 0 && (
+                  <div className="flex justify-between text-emerald-600">
+                    <span>Advance Paid:</span>
+                    <span className="font-medium">-{formatCurrency(details.advance_deposit)}</span>
+                  </div>
+                )}
+                {details.refund_amount > 0 && (
+                  <div className="flex justify-between text-blue-600 font-bold">
+                    <span>Refund Amount:</span>
+                    <span className="font-bold">{formatCurrency(details.refund_amount)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-xl font-bold text-indigo-600 pt-2 border-t">
-                  <span>Grand Total:</span>
-                  <span>{formatCurrency(details.grand_total)}</span>
+                  <span>{details.refund_amount > 0 ? "Net Payable:" : "Grand Total:"}</span>
+                  <span>{details.refund_amount > 0 ? formatCurrency(0) : formatCurrency(details.grand_total)}</span>
                 </div>
               </div>
             </div>
@@ -2143,7 +2155,9 @@ const Billing = () => {
                       {billData.charges.total_due + (billData.charges.total_gst || 0) - discount - (billData.charges.advance_deposit || 0) >= 0 
                         ? "Net Payable: " 
                         : "Refund Amount: "}
-                      {formatCurrency(Math.abs(billData.charges.total_due + (billData.charges.total_gst || 0) - discount - (billData.charges.advance_deposit || 0)))}
+                      <span className={billData.charges.total_due + (billData.charges.total_gst || 0) - discount - (billData.charges.advance_deposit || 0) < 0 ? "text-blue-600" : ""}>
+                        {formatCurrency(Math.abs(billData.charges.total_due + (billData.charges.total_gst || 0) - discount - (billData.charges.advance_deposit || 0)))}
+                      </span>
                     </p>
                   </div>
                 </div>
@@ -2374,7 +2388,9 @@ const Billing = () => {
                       <td className="p-2 sm:p-3 text-gray-800 text-xs sm:text-sm hidden lg:table-cell">{c.booking_id || c.package_booking_id || 'N/A'}</td>
                       <td className="p-2 sm:p-3 text-gray-800 text-xs sm:text-sm hidden md:table-cell">{c.payment_method}</td>
                       <td className="p-2 sm:p-3 text-gray-800 text-xs sm:text-sm hidden lg:table-cell">{new Date(c.created_at).toLocaleDateString()}</td>
-                      <td className="p-2 sm:p-3 font-bold text-gray-900 text-right text-xs sm:text-sm">{formatCurrency(c.grand_total)}</td>
+                      <td className={`p-2 sm:p-3 font-bold text-right text-xs sm:text-sm ${c.grand_total < 0 ? "text-red-600" : "text-gray-900"}`}>
+                        {c.grand_total < 0 ? `-${formatCurrency(Math.abs(c.grand_total))}` : formatCurrency(c.grand_total)}
+                      </td>
                     </tr>
                   ))
                 ) : (

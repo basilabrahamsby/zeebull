@@ -128,12 +128,13 @@ class _ManagerCheckoutWorkflowState extends State<ManagerCheckoutWorkflow> {
 
   Future<void> _finalizeCheckOut() async {
     setState(() => _isLoading = true);
+    final charges = _billData?['charges'] ?? {};
     final result = await context.read<ManagementProvider>().finalizeCheckout(
       _roomController.text, 
       {
         'payment_method': _paymentMethod,
         'discount_amount': _discount,
-        'amount_paid': (_billData?['charges']?['grand_total'] ?? 0) - _discount,
+        'amount_paid': (charges['total_due'] ?? charges['grand_total'] ?? 0.0) + (charges['total_gst'] ?? 0.0) - _discount - (charges['advance_deposit'] ?? 0.0),
       },
       branchId: _activeBranchId
     );
@@ -416,8 +417,9 @@ class _ManagerCheckoutWorkflowState extends State<ManagerCheckoutWorkflow> {
     final services = (charges['service_charges'] ?? charges['services'] ?? 0.0);
     final penalties = (charges['inventory_charges'] ?? 0.0) + (charges['asset_damage_charges'] ?? 0.0) + (charges['consumables_charges'] ?? charges['penalties'] ?? 0.0);
     final gst = (charges['total_gst'] ?? charges['gst'] ?? 0.0);
+    final advance = (charges['advance_deposit'] ?? 0.0);
     
-    final grandTotal = (charges['total_due'] ?? charges['grand_total'] ?? 0.0) + (charges['total_gst'] ?? 0.0) - _discount;
+    final grandTotal = (charges['total_due'] ?? charges['grand_total'] ?? 0.0) + (charges['total_gst'] ?? 0.0) - _discount - advance;
     
     return Column(
       children: [
@@ -467,6 +469,7 @@ class _ManagerCheckoutWorkflowState extends State<ManagerCheckoutWorkflow> {
                     _buildSummaryRow("Subtotal", format.format((charges['total_due'] ?? charges['subtotal'] ?? 0))),
                     _buildSummaryRow("GST", format.format(gst)),
                     if (_discount > 0) _buildSummaryRow("Discount", "- ${format.format(_discount)}"),
+                    if (advance > 0) _buildSummaryRow("Advance Paid", "- ${format.format(advance)}"),
                     const Divider(color: Colors.white10, height: 32),
                     _buildSummaryRow("GRAND TOTAL", format.format(grandTotal), isTotal: true),
                   ],
@@ -594,7 +597,10 @@ class _ManagerCheckoutWorkflowState extends State<ManagerCheckoutWorkflow> {
     
     if (_discount > 0) text += "Discount: -${format.format(_discount)}\n";
     
-    final total = (charges['total_due'] ?? charges['grand_total'] ?? 0.0) + gst - _discount;
+    final advance = (charges['advance_deposit'] ?? 0.0);
+    if (advance > 0) text += "Advance Paid: -${format.format(advance)}\n";
+    
+    final total = (charges['total_due'] ?? charges['grand_total'] ?? 0.0) + gst - _discount - advance;
     text += "--------------------------------\n";
     text += "*GRAND TOTAL: ${format.format(total)}*\n";
     text += "--------------------------------\n";

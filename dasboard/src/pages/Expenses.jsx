@@ -50,6 +50,7 @@ const Expenses = () => {
     date: "",
     description: "",
     department: "",
+    payment_mode: "Cash",
     bill_image: null,
   });
 
@@ -152,6 +153,7 @@ const Expenses = () => {
       data.append("date", form.date);
       data.append("description", form.description);
       if (form.department) data.append("department", form.department);
+      data.append("payment_mode", form.payment_mode);
       if (form.bill_image) data.append("image", form.bill_image);
 
       await API.post("/expenses", data, {
@@ -165,6 +167,7 @@ const Expenses = () => {
         date: "",
         description: "",
         department: "",
+        payment_mode: "Cash",
         bill_image: null,
       });
       setImagePreview(null);
@@ -297,6 +300,17 @@ const Expenses = () => {
               <option key={dept} value={dept}>{dept}</option>
             ))}
           </select>
+          <select
+            value={form.payment_mode}
+            onChange={(e) => setForm({ ...form, payment_mode: e.target.value })}
+            className="border p-3 rounded-xl focus:ring-2 focus:ring-indigo-500 w-full"
+            required
+          >
+            <option value="Cash">Cash</option>
+            <option value="Bank Transfer">Bank Transfer</option>
+            <option value="UPI">UPI</option>
+            <option value="Card">Card</option>
+          </select>
           <input
             type="text"
             placeholder="Description"
@@ -410,6 +424,7 @@ const Expenses = () => {
                 <th className="p-3 border">Category</th>
                 <th className="p-3 border">Department</th>
                 <th className="p-3 border">Amount</th>
+                <th className="p-3 border">Mode</th>
                 <th className="p-3 border">Date</th>
                 <th className="p-3 border">Description</th>
                 <th className="p-3 border">Bill</th>
@@ -433,6 +448,13 @@ const Expenses = () => {
                       )}
                     </td>
                     <td className="p-2 text-green-600 font-semibold">₹{exp.amount}</td>
+                    <td className="p-2">
+                      <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                        exp.payment_mode === "Cash" ? "bg-amber-100 text-amber-800" : "bg-blue-100 text-blue-800"
+                      }`}>
+                        {exp.payment_mode || "Cash"}
+                      </span>
+                    </td>
                     <td className="p-2">{formatDateShort(exp.date)}</td>
                     <td className="p-2">{exp.description}</td>
                     <td className="p-2">

@@ -23,6 +23,11 @@ class ApiService {
     _dio.options.connectTimeout = const Duration(seconds: 90);
     _dio.options.receiveTimeout = const Duration(seconds: 90);
     
+    // Prevent browser disk caching for Flutter Web
+    _dio.options.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate';
+    _dio.options.headers['Pragma'] = 'no-cache';
+    _dio.options.headers['Expires'] = '0';
+    
     _dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) async {
         print("[DIO-REQ] ${options.method} ${options.baseUrl}${options.path}");
@@ -34,6 +39,13 @@ class ApiService {
         // Add branch scoping header if set
         if (_branchId != null) {
           options.headers['X-Branch-ID'] = _branchId;
+        }
+
+        // Cache buster for GET requests on Web
+        if (options.method.toUpperCase() == 'GET') {
+           final Map<String, dynamic> qParams = Map.from(options.queryParameters);
+           qParams['_'] = DateTime.now().millisecondsSinceEpoch.toString();
+           options.queryParameters = qParams;
         }
         
         return handler.next(options);
@@ -499,5 +511,12 @@ class ApiService {
 
   Future<Response> finalizeCheckout(String roomNumber, Map<String, dynamic> data) async {
     return await _dio.post('/bill/checkout/$roomNumber', data: data);
+  }
+
+  Future<Response> confirmBooking(int bookingId, Map<String, dynamic> data, {bool isPackage = false}) async {
+    final endpoint = isPackage 
+      ? '/packages/booking/$bookingId/confirm' 
+      : '/bookings/$bookingId/confirm';
+    return await _dio.post(endpoint, data: data);
   }
 }

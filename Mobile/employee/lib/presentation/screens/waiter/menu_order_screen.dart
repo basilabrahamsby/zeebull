@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:orchid_employee/presentation/providers/food_management_provider.dart';
+import 'package:orchid_employee/data/models/food_management_model.dart';
 import 'package:orchid_employee/data/models/menu_model.dart';
 import 'package:orchid_employee/core/constants/app_colors.dart';
+import 'package:orchid_employee/presentation/widgets/onyx_glass_card.dart';
 
 class MenuOrderScreen extends StatefulWidget {
   final String? tableId;
@@ -15,43 +19,49 @@ class _MenuOrderScreenState extends State<MenuOrderScreen> {
   final List<CartItem> _cart = [];
   final TextEditingController _searchController = TextEditingController();
 
-  // Mock Menu Data
-  final List<MenuItem> _menuItems = [
-    MenuItem(id: "1", name: "Paneer Tikka", category: "Starters", price: 280, description: "Grilled cottage cheese with spices"),
-    MenuItem(id: "2", name: "Chicken 65", category: "Starters", price: 320),
-    MenuItem(id: "3", name: "Butter Chicken", category: "Main Course", price: 450),
-    MenuItem(id: "4", name: "Dal Makhani", category: "Main Course", price: 350),
-    MenuItem(id: "5", name: "Butter Naan", category: "Breads", price: 60),
-    MenuItem(id: "6", name: "Garlic Naan", category: "Breads", price: 80),
-    MenuItem(id: "7", name: "Jeera Rice", category: "Rice", price: 180),
-    MenuItem(id: "8", name: "Gulab Jamun", category: "Desserts", price: 120),
-    MenuItem(id: "9", name: "Fresh Lime Soda", category: "Beverages", price: 90),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<FoodManagementProvider>().fetchAllManagementData();
+    });
+  }
 
-  List<String> get _categories => ['All', ..._menuItems.map((m) => m.category).toSet()];
+  List<String> _getCategories(List<FoodCategory> categories) {
+    return ['All', ...categories.map((c) => c.name)];
+  }
 
-  List<MenuItem> get _filteredMenu {
-    return _menuItems.where((item) {
-      final matchesCategory = _selectedCategory == 'All' || item.category == _selectedCategory;
+  List<FoodItem> _getFilteredMenu(List<FoodItem> items, List<FoodCategory> categories) {
+    return items.where((item) {
+      final category = categories.firstWhere((c) => c.id == item.categoryId, 
+          orElse: () => FoodCategory(id: 0, name: "Unknown")).name;
+      
+      final matchesCategory = _selectedCategory == 'All' || category == _selectedCategory;
       final matchesSearch = item.name.toLowerCase().contains(_searchController.text.toLowerCase());
       return matchesCategory && matchesSearch;
     }).toList();
   }
 
-  void _addToCart(MenuItem item) {
+  void _addToCart(FoodItem item) {
     setState(() {
-      final existingIndex = _cart.indexWhere((c) => c.item.id == item.id);
+      final existingIndex = _cart.indexWhere((c) => c.item.id == item.id.toString());
       if (existingIndex != -1) {
         _cart[existingIndex].quantity++;
       } else {
-        _cart.add(CartItem(item: item));
+        _cart.add(CartItem(item: MenuItem(
+          id: item.id.toString(),
+          name: item.name,
+          category: "Food", // Fallback
+          price: item.price,
+          description: item.description,
+        )));
       }
     });
   }
 
-  void _removeFromCart(MenuItem item) {
+  void _removeFromCart(FoodItem item) {
     setState(() {
-      final existingIndex = _cart.indexWhere((c) => c.item.id == item.id);
+      final existingIndex = _cart.indexWhere((c) => c.item.id == item.id.toString());
       if (existingIndex != -1) {
         if (_cart[existingIndex].quantity > 1) {
           _cart[existingIndex].quantity--;
@@ -62,8 +72,9 @@ class _MenuOrderScreenState extends State<MenuOrderScreen> {
     });
   }
 
-  int _getItemQuantity(String itemId) {
-    final cartItem = _cart.firstWhere((c) => c.item.id == itemId, orElse: () => CartItem(item: MenuItem(id: "", name: "", category: "", price: 0), quantity: 0));
+  int _getItemQuantity(int itemId) {
+    final cartItem = _cart.firstWhere((c) => c.item.id == itemId.toString(), 
+        orElse: () => CartItem(item: MenuItem(id: "", name: "", category: "", price: 0), quantity: 0));
     return cartItem.quantity;
   }
 
@@ -71,13 +82,23 @@ class _MenuOrderScreenState extends State<MenuOrderScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final foodProvider = context.watch<FoodManagementProvider>();
+    final items = foodProvider.items;
+    final categories = foodProvider.categories;
+    
+    final filteredMenu = _getFilteredMenu(items, categories);
+    final categoryList = _getCategories(categories);
+
     return Scaffold(
       backgroundColor: Colors.grey[100],
       appBar: AppBar(
         title: Text(widget.tableId != null ? "Order for ${widget.tableId}" : "Take Order"),
         backgroundColor: Colors.green[700],
+        foregroundColor: Colors.white,
       ),
-      body: Column(
+      body: foodProvider.isLoading && items.isEmpty 
+        ? const Center(child: CircularProgressIndicator())
+        : Column(
         children: [
           // Search & Filters
           Container(
@@ -105,7 +126,7 @@ class _MenuOrderScreenState extends State<MenuOrderScreen> {
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.only(left: 16, bottom: 16),
                   child: Row(
-                    children: _categories.map((cat) => Padding(
+                    children: categoryList.map((cat) => Padding(
                       padding: const EdgeInsets.only(right: 8),
                       child: ChoiceChip(
                         label: Text(cat),
@@ -125,11 +146,13 @@ class _MenuOrderScreenState extends State<MenuOrderScreen> {
 
           // Menu List
           Expanded(
-            child: ListView.builder(
+            child: filteredMenu.isEmpty 
+              ? Center(child: Text("No items found", style: TextStyle(color: Colors.grey[400])))
+              : ListView.builder(
               padding: const EdgeInsets.all(16),
-              itemCount: _filteredMenu.length,
+              itemCount: filteredMenu.length,
               itemBuilder: (context, index) {
-                final item = _filteredMenu[index];
+                final item = filteredMenu[index];
                 final qty = _getItemQuantity(item.id);
                 return _MenuCard(
                   item: item,
@@ -186,7 +209,7 @@ class _MenuOrderScreenState extends State<MenuOrderScreen> {
 }
 
 class _MenuCard extends StatelessWidget {
-  final MenuItem item;
+  final FoodItem item;
   final int quantity;
   final VoidCallback onAdd;
   final VoidCallback onRemove;
@@ -202,21 +225,23 @@ class _MenuCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      elevation: 0,
+      color: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: Colors.grey.withOpacity(0.05))),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(16),
         child: Row(
           children: [
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(item.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  Text(item.name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: -0.5)),
                   const SizedBox(height: 4),
-                  if (item.description != null)
-                    Text(item.description!, style: TextStyle(color: Colors.grey[600], fontSize: 12), maxLines: 2, overflow: TextOverflow.ellipsis),
-                  const SizedBox(height: 8),
-                  Text("₹${item.price.toStringAsFixed(0)}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  if (item.description != null && item.description!.isNotEmpty)
+                    Text(item.description!, style: TextStyle(color: Colors.grey[600], fontSize: 13, height: 1.3), maxLines: 2, overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 12),
+                  Text("₹${item.price.toStringAsFixed(0)}", style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: Colors.black)),
                 ],
               ),
             ),
@@ -225,25 +250,28 @@ class _MenuCard extends StatelessWidget {
                 onPressed: onAdd,
                 style: TextButton.styleFrom(
                   foregroundColor: Colors.green[700],
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    side: BorderSide(color: Colors.green[700]!),
+                    borderRadius: BorderRadius.circular(12),
+                    side: BorderSide(color: Colors.green[700]!, width: 1.5),
                   ),
                 ),
-                child: const Text("ADD"),
+                child: const Text("ADD", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13)),
               )
             else
               Container(
                 decoration: BoxDecoration(
                   color: Colors.green[700],
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(color: Colors.green[700]!.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4)),
+                  ],
                 ),
                 child: Row(
                   children: [
-                    IconButton(icon: const Icon(Icons.remove, color: Colors.white), onPressed: onRemove),
-                    Text("$quantity", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                    IconButton(icon: const Icon(Icons.add, color: Colors.white), onPressed: onAdd),
+                    IconButton(icon: const Icon(Icons.remove, color: Colors.white, size: 20), onPressed: onRemove),
+                    Text("$quantity", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16)),
+                    IconButton(icon: const Icon(Icons.add, color: Colors.white, size: 20), onPressed: onAdd),
                   ],
                 ),
               ),

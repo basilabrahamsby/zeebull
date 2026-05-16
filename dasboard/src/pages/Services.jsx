@@ -1750,7 +1750,12 @@ const Services = () => {
         descLower.includes("cleaning") ||
         descLower.includes("room service");
 
-      if (isFoodRequest && (billingStatus === null || billingStatus === undefined || billingStatus === "")) {
+      const isAlreadyPaid = 
+        (request.billing_status || "").toLowerCase() === 'paid' || 
+        (request.food_order_billing_status || "").toLowerCase() === 'paid' ||
+        (request.food_order?.billing_status || "").toLowerCase() === 'paid';
+
+      if (isFoodRequest && !isAlreadyPaid && (billingStatus === null || billingStatus === undefined || billingStatus === "")) {
         setPaymentModal({ requestId, newStatus });
         return;
       }
@@ -1763,7 +1768,11 @@ const Services = () => {
     }
 
     if (newStatus === "completed" && (billingStatus === null || billingStatus === undefined || billingStatus === "")) {
-      if (request && request.food_order_id) {
+      const isAlreadyPaid = 
+        (request.billing_status || "").toLowerCase() === 'paid' || 
+        (request.food_order_billing_status || "").toLowerCase() === 'paid' ||
+        (request.food_order?.billing_status || "").toLowerCase() === 'paid';
+      if (request && request.food_order_id && !isAlreadyPaid) {
         setPaymentModal({ requestId, newStatus });
         return;
       }

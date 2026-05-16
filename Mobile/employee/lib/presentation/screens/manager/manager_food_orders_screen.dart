@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:orchid_employee/data/services/api_service.dart';
 import 'package:orchid_employee/presentation/widgets/skeleton_loaders.dart';
 import 'package:orchid_employee/presentation/widgets/onyx_glass_card.dart';
+import 'package:orchid_employee/presentation/widgets/onyx_glass_dialog.dart';
 import 'package:orchid_employee/core/constants/app_colors.dart';
 import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -988,7 +989,7 @@ class _ManagerFoodOrdersScreenState extends State<ManagerFoodOrdersScreen> with 
                     itemCount: filtered.length,
                     itemBuilder: (context, index) {
                       final o = filtered[index];
-                      final empName = o['assigned_employee_name'] ?? o['waiter_name'] ?? 'UNASSIGNED';
+                      final empName = o['employee_name'] ?? o['assigned_employee_name'] ?? o['waiter_name'] ?? 'UNASSIGNED';
                       final statusColor = _getStatusColor(o['status']);
                       
                       return Container(
@@ -1016,7 +1017,7 @@ class _ManagerFoodOrdersScreenState extends State<ManagerFoodOrdersScreen> with 
                                 Text("ASSIGNED: ${empName.toUpperCase()}", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 9, color: statusColor.withOpacity(0.7), letterSpacing: 0.5)),
                               ],
                             ),
-                            trailing: requestedOnly 
+                            trailing: (requestedOnly || empName == 'UNASSIGNED')
                                 ? TextButton(
                                     onPressed: () => _showEmployeeAssignment(o['id']),
                                     style: TextButton.styleFrom(backgroundColor: AppColors.accent.withOpacity(0.1), padding: const EdgeInsets.symmetric(horizontal: 16)),
@@ -1109,9 +1110,15 @@ class _ManagerFoodOrdersScreenState extends State<ManagerFoodOrdersScreen> with 
                   children: [
                     _buildGlassDetailRow("DESTINATION", (order['room_number'] != null || order['number'] != null || order['room_id'] != null ? "ROOM ${order['room_number'] ?? order['number'] ?? order['room_id']}" : "TABLE ${order['table_number'] ?? 'N/A'}").toUpperCase(), Colors.white),
                     _buildGlassDetailRow("ORDER TYPE", (order['order_type']?.toString() ?? "N/A").toUpperCase(), AppColors.accent),
-                    _buildGlassDetailRow("STATUS", (order['status']?.toString() ?? "PENDING").toUpperCase(), _getStatusColor(order['status'])),
+                    GestureDetector(
+                      onTap: () => _showStatusUpdateDialog(order['id'], order['status']?.toString() ?? 'pending'),
+                      child: _buildGlassDetailRow("STATUS", (order['status']?.toString() ?? "PENDING").toUpperCase(), _getStatusColor(order['status'])),
+                    ),
                     _buildGlassDetailRow("TOTAL BILL", "₹${order['total_with_gst'] ?? order['amount']}", Colors.greenAccent),
-                    _buildGlassDetailRow("WAITER", (order['waiter_name'] ?? "UNASSIGNED").toUpperCase(), Colors.white70),
+                    GestureDetector(
+                      onTap: () => _showEmployeeAssignment(order['id']),
+                      child: _buildGlassDetailRow("WAITER", (order['employee_name'] ?? order['waiter_name'] ?? "UNASSIGNED").toUpperCase(), (order['employee_name'] ?? order['waiter_name']) == null ? AppColors.accent : Colors.white70),
+                    ),
                     if (order['delivery_instructions'] != null)
                        _buildGlassDetailRow("NOTES", order['delivery_instructions'].toString().toUpperCase(), Colors.white38),
                     const SizedBox(height: 32),
@@ -1183,6 +1190,9 @@ class _ManagerFoodOrdersScreenState extends State<ManagerFoodOrdersScreen> with 
 
   void _showCompletionModal(Map<String, dynamic> order) {
     String paymentStatus = 'unpaid';
+    String paymentMethod = 'Cash'; // Default
+    final paymentMethods = ['Cash', 'Card', 'UPI', 'Bank Transfer'];
+
     showDialog(
       context: context,
       builder: (ctx) => BackdropFilter(
@@ -1199,6 +1209,30 @@ class _ManagerFoodOrdersScreenState extends State<ManagerFoodOrdersScreen> with 
                 const SizedBox(height: 24),
                 _buildSettlementTile("UNPAID", 'unpaid', paymentStatus, (v) => setModalState(() => paymentStatus = v)),
                 _buildSettlementTile("PAID", 'paid', paymentStatus, (v) => setModalState(() => paymentStatus = v)),
+                
+                if (paymentStatus == 'paid') ...[
+                  const SizedBox(height: 24),
+                  const Text("PAYMENT MODE:", style: TextStyle(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.white10),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: paymentMethod,
+                        dropdownColor: AppColors.onyx,
+                        isExpanded: true,
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                        items: paymentMethods.map((m) => DropdownMenuItem(value: m, child: Text(m.toUpperCase()))).toList(),
+                        onChanged: (v) => setModalState(() => paymentMethod = v!),
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
             actions: [
@@ -1206,13 +1240,18 @@ class _ManagerFoodOrdersScreenState extends State<ManagerFoodOrdersScreen> with 
               TextButton(
                 onPressed: () async {
                   try {
-                    // Show a simple loading indicator on the snackbar or button
                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("PROCESSING SETTLEMENT..."), duration: Duration(milliseconds: 500)));
                     
-                    await context.read<ApiService>().updateFoodOrder(order['id'], {
+                    final updateData = {
                       'status': 'completed',
                       'billing_status': paymentStatus,
-                    });
+                    };
+                    
+                    if (paymentStatus == 'paid') {
+                      updateData['payment_method'] = paymentMethod;
+                    }
+                    
+                    await context.read<ApiService>().updateFoodOrder(order['id'], updateData);
                     
                     if (mounted) {
                        Navigator.pop(ctx);
@@ -1266,6 +1305,61 @@ class _ManagerFoodOrdersScreenState extends State<ManagerFoodOrdersScreen> with 
             Navigator.pop(ctx);
             _loadOrders();
           },
+        ),
+      ),
+    );
+  }
+
+  void _showStatusUpdateDialog(int orderId, String currentStatus) {
+    String selectedStatus = currentStatus;
+    final statuses = ['pending', 'preparing', 'cooking', 'ready', 'delivered', 'cancelled'];
+    
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setModalState) => OnyxGlassDialog(
+          title: "UPDATE STATUS",
+          children: [
+            const Text("SELECT NEW STATUS FOR THIS ORDER:", style: TextStyle(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.white10),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: selectedStatus,
+                  dropdownColor: AppColors.onyx,
+                  isExpanded: true,
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                  items: statuses.map((s) => DropdownMenuItem(value: s, child: Text(s.toUpperCase()))).toList(),
+                  onChanged: (v) => setModalState(() => selectedStatus = v!),
+                ),
+              ),
+            ),
+          ],
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("CANCEL", style: TextStyle(color: Colors.white24, fontWeight: FontWeight.bold))),
+            TextButton(
+              onPressed: () async {
+                try {
+                  Navigator.pop(ctx);
+                  await context.read<ApiService>().updateFoodOrder(orderId, {'status': selectedStatus});
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("STATUS UPDATED TO ${selectedStatus.toUpperCase()}"), backgroundColor: Colors.green));
+                    _loadOrders();
+                    if (Navigator.of(context).canPop()) Navigator.pop(context); // Close details sheet to show list with new status
+                  }
+                } catch (e) {
+                  if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("FAILED TO UPDATE: $e"), backgroundColor: Colors.redAccent));
+                }
+              },
+              child: const Text("UPDATE", style: TextStyle(color: AppColors.accent, fontWeight: FontWeight.w900)),
+            ),
+          ],
         ),
       ),
     );
@@ -1577,7 +1671,10 @@ class _ManagerFoodOrdersScreenState extends State<ManagerFoodOrdersScreen> with 
 
   Future<Map<String, dynamic>> _loadModalData() async {
     final api = context.read<ApiService>();
-    final results = await Future.wait([api.getRooms(), api.getEmployees()]);
+    final results = await Future.wait([
+      api.getRooms(queryParameters: {'status': 'Checked-in'}), 
+      api.getEmployees()
+    ]);
     return {'rooms': results[0].data as List? ?? [], 'employees': results[1].data as List? ?? []};
   }
 

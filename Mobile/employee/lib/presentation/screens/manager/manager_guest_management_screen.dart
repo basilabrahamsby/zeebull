@@ -231,9 +231,14 @@ class _ManagerGuestManagementScreenState extends State<ManagerGuestManagementScr
 
   Future<void> _assignServiceToBooking(dynamic service, {double? amount}) async {
     final api = context.read<ApiService>();
-    final roomId = _details?['room_id'] ?? widget.booking['room_id'];
-    
-    if (roomId == null) return;
+    final rooms = _details?['rooms'] as List? ?? [];
+    final firstRoom = rooms.isNotEmpty ? rooms[0] : null;
+    final roomId = firstRoom?['id'] ?? firstRoom?['room_id'] ?? widget.booking['room_id'];
+
+    if (roomId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("No room found for this booking"), backgroundColor: Colors.redAccent));
+      return;
+    }
     
     setState(() => _isUpdating = true);
     try {
@@ -255,14 +260,28 @@ class _ManagerGuestManagementScreenState extends State<ManagerGuestManagementScr
 
   Future<void> _addInventoryConsumption(dynamic item, {double quantity = 1.0}) async {
     final api = context.read<ApiService>();
-    final roomId = _details?['room_id'] ?? widget.booking['room_id'];
-    
-    if (roomId == null) return;
+    final rooms = _details?['rooms'] as List? ?? [];
+    final firstRoom = rooms.isNotEmpty ? rooms[0] : null;
+    final roomId = firstRoom?['id'] ?? firstRoom?['room_id'] ?? widget.booking['room_id'];
+
+    if (roomId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("No room found for this booking"), backgroundColor: Colors.redAccent));
+      return;
+    }
+
+    int? locationId;
+    if (_details?['rooms'] != null && (_details!['rooms'] as List).isNotEmpty) {
+      final rooms = _details!['rooms'] as List;
+      final matchingRoom = rooms.firstWhere((r) => r['id'] == roomId || r['room_id'] == roomId, orElse: () => rooms[0]);
+      locationId = matchingRoom['inventory_location_id'];
+    }
+    locationId ??= roomId;
 
     setState(() => _isUpdating = true);
     try {
       await api.dio.post('/inventory/consumption', data: {
-        'inventory_item_id': item['id'],
+        'item_id': item['id'],
+        'location_id': locationId,
         'room_id': roomId,
         'booking_id': widget.booking['id'],
         'quantity': quantity,
@@ -1024,13 +1043,21 @@ class _ManagerGuestManagementScreenState extends State<ManagerGuestManagementScr
     final roomId = _details?['room_id'] ?? widget.booking['room_id'];
     if (roomId == null) return;
 
+    int? locationId;
+    if (_details?['rooms'] != null && (_details!['rooms'] as List).isNotEmpty) {
+      final rooms = _details!['rooms'] as List;
+      final matchingRoom = rooms.firstWhere((r) => r['id'] == roomId || r['room_id'] == roomId, orElse: () => rooms[0]);
+      locationId = matchingRoom['inventory_location_id'];
+    }
+    locationId ??= roomId;
+
     setState(() => _isUpdating = true);
     try {
       await api.dio.post('/inventory/mapping', data: {
-        'inventory_item_id': item['id'],
-        'room_id': roomId,
+        'item_id': item['id'],
+        'location_id': locationId,
         'quantity': quantity,
-        'status': 'verified',
+        'notes': 'Mapped via Mobile Manager',
       });
       _loadDetails();
     } catch (e) {
@@ -1043,19 +1070,34 @@ class _ManagerGuestManagementScreenState extends State<ManagerGuestManagementScr
 
   Future<void> _addRentedItem(dynamic item, {required double quantity, required double rate}) async {
     final api = context.read<ApiService>();
-    final roomId = _details?['room_id'] ?? widget.booking['room_id'];
-    if (roomId == null) return;
+    final rooms = _details?['rooms'] as List? ?? [];
+    final firstRoom = rooms.isNotEmpty ? rooms[0] : null;
+    final roomId = firstRoom?['id'] ?? firstRoom?['room_id'] ?? widget.booking['room_id'];
+
+    if (roomId == null) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("No room found for this booking"), backgroundColor: Colors.redAccent));
+      return;
+    }
+
+    int? locationId;
+    if (_details?['rooms'] != null && (_details!['rooms'] as List).isNotEmpty) {
+      final rooms = _details!['rooms'] as List;
+      final matchingRoom = rooms.firstWhere((r) => r['id'] == roomId || r['room_id'] == roomId, orElse: () => rooms[0]);
+      locationId = matchingRoom['inventory_location_id'];
+    }
+    locationId ??= roomId;
 
     setState(() => _isUpdating = true);
     try {
       await api.dio.post('/inventory/issues', data: {
         'booking_id': widget.booking['id'],
-        'destination_location_id': roomId,
+        'destination_location_id': locationId,
         'issue_date': DateTime.now().toIso8601String(),
         'details': [
           {
             'item_id': item['id'],
             'quantity': quantity,
+            'issued_quantity': quantity,
             'rental_price': rate,
             'unit': item['unit'] ?? 'pcs',
             'is_payable': true,

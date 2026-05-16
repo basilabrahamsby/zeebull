@@ -21,6 +21,7 @@ import 'package:orchid_employee/presentation/screens/manager/manager_room_mgmt_s
 import 'package:orchid_employee/presentation/screens/manager/manager_bookings_screen.dart';
 import 'package:orchid_employee/presentation/screens/manager/manager_food_orders_screen.dart';
 import 'package:orchid_employee/presentation/screens/manager/manager_service_assignment_screen.dart';
+import 'package:orchid_employee/presentation/screens/manager/manager_checkout_workflow.dart';
 
 class AppDrawer extends StatelessWidget {
   const AppDrawer({super.key});
@@ -192,6 +193,14 @@ class AppDrawer extends StatelessWidget {
                     onTap: () {
                       Navigator.pop(context);
                       Navigator.push(context, MaterialPageRoute(builder: (_) => const ManagerBookingsScreen()));
+                    },
+                  ),
+                  _DrawerItem(
+                    icon: Icons.logout_rounded,
+                    title: "GUEST CHECK-OUT",
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => const ManagerCheckoutWorkflow()));
                     },
                   ),
                   _DrawerItem(

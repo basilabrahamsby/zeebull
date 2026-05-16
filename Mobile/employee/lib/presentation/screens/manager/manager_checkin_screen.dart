@@ -180,7 +180,32 @@ class _ManagerCheckInScreenState extends State<ManagerCheckInScreen> {
                       
                       if (_selectedBooking != null) ...[
                         const SizedBox(height: 32),
-                        const Text("ROOM ASSIGNMENT", style: TextStyle(color: AppColors.accent, fontSize: 12, fontWeight: FontWeight.w900, letterSpacing: 2)),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text("ROOM ASSIGNMENT", style: TextStyle(color: AppColors.accent, fontSize: 12, fontWeight: FontWeight.w900, letterSpacing: 2)),
+                            if (_availableRooms.isNotEmpty)
+                              TextButton(
+                                onPressed: () {
+                                  setState(() {
+                                    final requiredRooms = _selectedBooking['num_rooms'] ?? 1;
+                                    if (_selectedRoomIds.length == _availableRooms.length || _selectedRoomIds.length >= requiredRooms) {
+                                      _selectedRoomIds.clear();
+                                    } else {
+                                      _selectedRoomIds.clear();
+                                      for (var i = 0; i < _availableRooms.length && i < requiredRooms; i++) {
+                                        _selectedRoomIds.add(_availableRooms[i]['id']);
+                                      }
+                                    }
+                                  });
+                                },
+                                child: Text(
+                                  _selectedRoomIds.length == (_selectedBooking['num_rooms'] ?? 1) ? "CLEAR ALL" : "SELECT ALL",
+                                  style: const TextStyle(color: AppColors.accent, fontSize: 10, fontWeight: FontWeight.w900),
+                                ),
+                              ),
+                          ],
+                        ),
                         const SizedBox(height: 8),
                         Text("Assign ${_selectedBooking['num_rooms'] ?? 1} room(s) for this booking", style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 11)),
                         const SizedBox(height: 16),
@@ -188,33 +213,65 @@ class _ManagerCheckInScreenState extends State<ManagerCheckInScreen> {
                           ? const Center(child: CircularProgressIndicator(color: AppColors.accent))
                           : _availableRooms.isEmpty
                               ? Text("No available rooms in this category!", style: TextStyle(color: Colors.redAccent.withOpacity(0.5), fontSize: 12))
-                              : Wrap(
-                                  spacing: 8,
-                                  runSpacing: 8,
-                                  children: _availableRooms.map((room) {
+                              : GridView.builder(
+                                  shrinkWrap: true,
+                                  physics: const NeverScrollableScrollPhysics(),
+                                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                                    crossAxisCount: 4,
+                                    crossAxisSpacing: 10,
+                                    mainAxisSpacing: 10,
+                                    childAspectRatio: 1.2,
+                                  ),
+                                  itemCount: _availableRooms.length,
+                                  itemBuilder: (context, index) {
+                                    final room = _availableRooms[index];
                                     final isSelected = _selectedRoomIds.contains(room['id']);
-                                    return FilterChip(
-                                      label: Text("${room['number']}", style: const TextStyle(fontWeight: FontWeight.bold)),
-                                      selected: isSelected,
-                                      selectedColor: AppColors.accent.withOpacity(0.2),
-                                      checkmarkColor: AppColors.accent,
-                                      backgroundColor: Colors.white.withOpacity(0.05),
-                                      labelStyle: TextStyle(color: isSelected ? AppColors.accent : Colors.white70, fontSize: 13),
-                                      side: BorderSide(color: isSelected ? AppColors.accent.withOpacity(0.5) : Colors.white10),
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                      onSelected: (selected) {
+                                    return GestureDetector(
+                                      onTap: () {
                                         setState(() {
-                                          if (selected) {
+                                          if (isSelected) {
+                                            _selectedRoomIds.remove(room['id']);
+                                          } else {
                                             if (_selectedRoomIds.length < (_selectedBooking['num_rooms'] ?? 1)) {
                                               _selectedRoomIds.add(room['id']);
+                                            } else {
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                SnackBar(content: Text("Maximum ${_selectedBooking['num_rooms']} rooms allowed"), duration: const Duration(seconds: 1))
+                                              );
                                             }
-                                          } else {
-                                            _selectedRoomIds.remove(room['id']);
                                           }
                                         });
                                       },
+                                      child: AnimatedContainer(
+                                        duration: const Duration(milliseconds: 200),
+                                        decoration: BoxDecoration(
+                                          color: isSelected ? AppColors.accent : Colors.white.withOpacity(0.05),
+                                          borderRadius: BorderRadius.circular(12),
+                                          border: Border.all(
+                                            color: isSelected ? AppColors.accent : Colors.white.withOpacity(0.1),
+                                            width: 1.5,
+                                          ),
+                                          boxShadow: isSelected ? [
+                                            BoxShadow(
+                                              color: AppColors.accent.withOpacity(0.3),
+                                              blurRadius: 10,
+                                              spreadRadius: 1,
+                                            )
+                                          ] : [],
+                                        ),
+                                        child: Center(
+                                          child: Text(
+                                            "${room['number']}",
+                                            style: TextStyle(
+                                              color: isSelected ? AppColors.onyx : Colors.white,
+                                              fontWeight: FontWeight.w900,
+                                              fontSize: 14,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
                                     );
-                                  }).toList(),
+                                  },
                                 ),
                       ],
                       

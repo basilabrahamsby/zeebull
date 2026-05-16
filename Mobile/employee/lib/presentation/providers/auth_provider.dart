@@ -141,8 +141,8 @@ class AuthProvider extends ChangeNotifier {
 
     if (roleStr.contains('housekeeping')) return UserRole.housekeeping;
     if (roleStr.contains('kitchen') || roleStr.contains('chef') || roleStr.contains('cook')) return UserRole.kitchen;
-    if (roleStr.contains('waiter') || roleStr.contains('server')) return UserRole.waiter;
-     if (roleStr.contains('maintenance')) return UserRole.maintenance;
+    if (roleStr.contains('waiter') || roleStr.contains('server') || roleStr.contains('service') || roleStr.contains('room')) return UserRole.waiter;
+    if (roleStr.contains('maintenance')) return UserRole.maintenance;
     return UserRole.unknown;
   }
 

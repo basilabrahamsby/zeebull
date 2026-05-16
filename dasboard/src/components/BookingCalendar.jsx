@@ -7,7 +7,8 @@ import {
   User, 
   Clock, 
   Info,
-  Globe
+  Globe,
+  RefreshCw
 } from 'lucide-react';
 
 import API from '../services/api';
@@ -19,6 +20,7 @@ const BookingCalendar = ({ rooms, bookings, roomTypeObjects }) => {
   const [selectedCell, setSelectedCell] = useState(null); // { groupName, date, bookings }
   const [isAiosellActive, setIsAiosellActive] = useState(false);
   const [isUpdatingAiosell, setIsUpdatingAiosell] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   // Fetch Aiosell status
   React.useEffect(() => {
@@ -51,6 +53,20 @@ const BookingCalendar = ({ rooms, bookings, roomTypeObjects }) => {
       toast.error("Failed to update Channel Manager status");
     } finally {
       setIsUpdatingAiosell(false);
+    }
+  };
+
+  const handleResync = async () => {
+    setIsSyncing(true);
+    try {
+      // Assuming branch_id 1 for now as per dashboard defaults
+      await API.post('/channel-manager/sync?branch_id=1');
+      toast.success("Full synchronization queued");
+    } catch (error) {
+      console.error("Error triggering manual sync:", error);
+      toast.error("Failed to trigger synchronization");
+    } finally {
+      setIsSyncing(false);
     }
   };
 
@@ -238,6 +254,23 @@ const BookingCalendar = ({ rooms, bookings, roomTypeObjects }) => {
                 className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isAiosellActive ? 'translate-x-6' : 'translate-x-1'}`}
               />
             </button>
+            
+            {/* Resync Button */}
+            {isAiosellActive && (
+              <button
+                onClick={handleResync}
+                disabled={isSyncing}
+                title="Force Full Sync with OTAs"
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-all active:scale-95 ${
+                  isSyncing 
+                    ? 'bg-indigo-50 text-indigo-400 border-indigo-100 cursor-not-allowed' 
+                    : 'bg-white text-indigo-600 border-gray-100 hover:border-indigo-200 hover:shadow-sm'
+                }`}
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+                <span className="text-[10px] font-bold uppercase tracking-wider">Sync Now</span>
+              </button>
+            )}
           </div>
         </div>
 

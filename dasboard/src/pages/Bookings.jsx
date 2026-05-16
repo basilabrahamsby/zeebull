@@ -3143,9 +3143,7 @@ const BookingFormModal = ({
         className="bg-white/95 backdrop-blur-xl rounded-[1.5rem] shadow-[0_32px_64px_-16px_rgba(0,0,0,0.2)] w-full max-w-6xl max-h-[95vh] overflow-hidden flex flex-col border border-white/20 relative"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="bg-red-600 text-white py-2 px-4 text-center text-[10px] font-bold uppercase tracking-widest z-[100]">
-          System Update Verification Active - New Financial Layout Applied
-        </div>
+
         {/* Animated Background Gradients */}
         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-rose-500 z-50"></div>
         <div className="absolute -top-24 -right-24 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
@@ -3357,7 +3355,7 @@ const BookingFormModal = ({
                     <div className="space-y-4 flex-1">
                       <div className="flex items-center justify-between">
                         <h3 className="text-base font-bold text-slate-800 tracking-tight">Configuration</h3>
-                        <div className="text-[9px] font-bold bg-indigo-100 text-indigo-600 px-2 py-0.5 rounded-full uppercase tracking-tight shadow-sm">Soft Allocation Active</div>
+
                       </div>
 
                       <div className="space-y-4">

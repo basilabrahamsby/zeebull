@@ -27,6 +27,10 @@ class _ManagerServiceAssignmentScreenState extends State<ManagerServiceAssignmen
   List<dynamic> _itemsUsedReport = []; // Tab: Items Used
   List<dynamic> _serviceRequests = []; // Tab: Service Requests
   
+  // Filters
+  String _assignmentFilter = 'all'; // all, pending, in_progress, completed
+  String _requestFilter = 'all'; // all, pending, in_progress, completed
+  
   // Helpers
   List<dynamic> _employees = [];
   List<dynamic> _rooms = [];
@@ -63,12 +67,12 @@ class _ManagerServiceAssignmentScreenState extends State<ManagerServiceAssignmen
     try {
       // Parallel Fetch
       final results = await Future.wait([
-         api.dio.get('/services'),                          // 0: Available Services
+         api.dio.get('/services?limit=100'),                // 0: Available Services
          api.dio.get('/services/assigned?limit=100'),       // 1: Assigned Services
          api.dio.get('/reports/services/detailed-usage'),   // 2: Usage Report & Stats
          api.dio.get('/service-requests?limit=100'),        // 3: Service Requests (Tasks)
          api.getEmployees(),                                // 4: Employees
-         api.getRooms(),                                    // 5: Rooms
+         api.getRooms(queryParameters: {'status': 'Checked-in'}),           // 5: Rooms
          api.dio.get('${ApiConstants.inventoryItems}?limit=1000'), // 6: Inventory Items
          api.dio.get('${ApiConstants.locations}?limit=100'),       // 7: Locations
       ]);
@@ -554,6 +558,9 @@ class _ManagerServiceAssignmentScreenState extends State<ManagerServiceAssignmen
   }
 
   Widget _buildGlassDropdown<T>({required String label, required T? value, required List<DropdownMenuItem<T>> items, required ValueChanged<T?> onChanged}) {
+    // Ensure value is valid — if not in items list, reset to null to avoid broken dropdown state
+    final validValue = items.any((item) => item.value == value) ? value : null;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       decoration: BoxDecoration(
@@ -562,17 +569,36 @@ class _ManagerServiceAssignmentScreenState extends State<ManagerServiceAssignmen
         border: Border.all(color: Colors.white.withOpacity(0.1)),
       ),
       child: DropdownButtonHideUnderline(
-        child: DropdownButtonFormField<T>(
-          value: value,
+        child: DropdownButton<T>(
+          value: validValue,
+          isExpanded: true,
+          hint: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(label, style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1)),
+              if (items.isEmpty)
+                Text("NO OPTIONS AVAILABLE", style: TextStyle(color: Colors.white24, fontSize: 11, fontWeight: FontWeight.bold)),
+            ],
+          ),
           items: items,
-          onChanged: onChanged,
+          onChanged: items.isEmpty ? null : onChanged,
           dropdownColor: AppColors.onyx.withOpacity(0.95),
           style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
-          decoration: InputDecoration(
-            labelText: label,
-            labelStyle: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1),
-            border: InputBorder.none,
-          ),
+          selectedItemBuilder: validValue == null ? null : (ctx) => items.map((item) => Align(
+            alignment: Alignment.centerLeft,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(label, style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1)),
+                DefaultTextStyle(
+                  style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                  child: item.child,
+                ),
+              ],
+            ),
+          )).toList(),
         ),
       ),
     );
@@ -848,6 +874,10 @@ class _ManagerServiceAssignmentScreenState extends State<ManagerServiceAssignmen
                 padding: const EdgeInsets.all(12),
                 child: ListTile(
                     dense: true,
+                    onTap: () {
+                        // Open assignment modal with this service pre-selected
+                        _showAssignServiceModal(preSelectedServiceId: s['id']);
+                    },
                     leading: Container(
                       width: 44, height: 44,
                       decoration: BoxDecoration(color: AppColors.accent.withOpacity(0.1), borderRadius: BorderRadius.circular(14), border: Border.all(color: AppColors.accent.withOpacity(0.2))),
@@ -866,16 +896,27 @@ class _ManagerServiceAssignmentScreenState extends State<ManagerServiceAssignmen
   Widget _buildAssignmentsList() {
     if (_assignedServices.isEmpty) return _buildEmptyState("ACTIVE ASSIGNMENTS", Icons.assignment_ind_outlined);
 
-    return ListView.builder(
-        padding: const EdgeInsets.all(20),
-        itemCount: _assignedServices.length,
-        itemBuilder: (ctx, i) {
-            final a = _assignedServices[i];
-            final serviceName = (a['service'] != null ? a['service']['name'] : 'UNKNOWN SERVICE').toString().toUpperCase();
-            final roomObj = a['room'];
-            final roomNum = roomObj != null ? (roomObj['room_number'] ?? roomObj['number'] ?? '?') : '?';
-            final empName = (a['employee'] != null ? a['employee']['name'] : 'UNASSIGNED').toString().toUpperCase();
-            final status = a['status']?.toString() ?? 'pending';
+    final filtered = _assignedServices.where((a) {
+        if (_assignmentFilter == 'all') return true;
+        return (a['status'] ?? 'pending') == _assignmentFilter;
+    }).toList();
+
+    return Column(
+      children: [
+        _buildFilterBar(_assignmentFilter, (val) => setState(() => _assignmentFilter = val)),
+        Expanded(
+          child: filtered.isEmpty 
+            ? _buildEmptyState("NO $_assignmentFilter.toUpperCase() ASSIGNMENTS", Icons.assignment_ind_outlined)
+            : ListView.builder(
+                padding: const EdgeInsets.all(20),
+                itemCount: filtered.length,
+                itemBuilder: (ctx, i) {
+                    final a = filtered[i];
+                    final serviceName = (a['service'] != null ? a['service']['name'] : 'UNKNOWN SERVICE').toString().toUpperCase();
+                    final roomObj = a['room'];
+                    final roomNum = roomObj != null ? (roomObj['room_number'] ?? roomObj['number'] ?? '?') : '?';
+                    final empName = (a['employee'] != null ? a['employee']['name'] : 'UNASSIGNED').toString().toUpperCase();
+                    final status = a['status']?.toString() ?? 'pending';
 
             return Container(
                 margin: const EdgeInsets.only(bottom: 12),
@@ -902,6 +943,9 @@ class _ManagerServiceAssignmentScreenState extends State<ManagerServiceAssignmen
                 ),
             );
         },
+    ),
+        ),
+      ],
     );
   }
 
@@ -919,9 +963,9 @@ class _ManagerServiceAssignmentScreenState extends State<ManagerServiceAssignmen
   }
 
 
-  void _showAssignServiceModal() {
+  void _showAssignServiceModal({int? preSelectedServiceId}) {
     int? selectedRoomId;
-    int? selectedServiceId;
+    int? selectedServiceId = preSelectedServiceId;
     int? selectedEmployeeId;
     final notesController = TextEditingController();
 
@@ -987,10 +1031,12 @@ class _ManagerServiceAssignmentScreenState extends State<ManagerServiceAssignmen
           'notes': notes,
           'status': 'assigned' // Initial status
         });
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Service Assigned Successfully")));
-        _loadData(); // Refresh
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Service Assigned Successfully")));
+          _loadData(); // Refresh
+        }
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Failed to assign: $e")));
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Failed to assign: $e")));
       }
   }
 
@@ -1208,19 +1254,37 @@ class _ManagerServiceAssignmentScreenState extends State<ManagerServiceAssignmen
   Widget _buildRequestsList() {
     if (_serviceRequests.isEmpty) return _buildEmptyState("SERVICE REQUESTS", Icons.notifications_none);
 
-    return ListView.builder(
-        padding: const EdgeInsets.all(20),
-        itemCount: _serviceRequests.length,
-        itemBuilder: (ctx, i) {
-            final r = _serviceRequests[i];
-            final status = r['status'] ?? 'pending';
+    final filtered = _serviceRequests.where((r) {
+        if (_requestFilter == 'all') return true;
+        return (r['status'] ?? 'pending') == _requestFilter;
+    }).toList();
+
+    return Column(
+      children: [
+        _buildFilterBar(_requestFilter, (val) => setState(() => _requestFilter = val)),
+        Expanded(
+          child: filtered.isEmpty 
+            ? _buildEmptyState("NO $_requestFilter.toUpperCase() REQUESTS", Icons.notifications_none)
+            : ListView.builder(
+                padding: const EdgeInsets.all(20),
+                itemCount: filtered.length,
+                itemBuilder: (ctx, i) {
+                    final r = filtered[i];
+                    final status = r['status'] ?? 'pending';
             
             return Container(
               margin: const EdgeInsets.only(bottom: 12),
               child: OnyxGlassCard(
                   padding: const EdgeInsets.all(8),
                   child: ListTile(
-                      dense: true,
+                      onTap: () {
+                          if (status == 'pending' || r['employee_id'] == null) {
+                              _showRequestAssignment(r['id']);
+                          } else {
+                              // Show status update menu or something? 
+                              // For now, let's just make it easier to trigger the popup
+                          }
+                      },
                       leading: Container(
                         width: 44, height: 44,
                         decoration: BoxDecoration(color: Colors.orangeAccent.withOpacity(0.1), borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.orangeAccent.withOpacity(0.2))),
@@ -1228,12 +1292,27 @@ class _ManagerServiceAssignmentScreenState extends State<ManagerServiceAssignmen
                         child: const Icon(Icons.bolt, color: Colors.orangeAccent, size: 20),
                       ),
                       title: Text("ROOM ${r['room_number'] ?? '?'}", style: const TextStyle(fontWeight: FontWeight.w900, color: Colors.white, fontSize: 13, letterSpacing: 0.5)),
-                      subtitle: Text((r['description'] ?? r['request_type'] ?? 'REQUEST').toString().toUpperCase(), style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text((r['description'] ?? r['request_type'] ?? 'REQUEST').toString().toUpperCase(), style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                          if (r['employee_name'] != null)
+                            Text("ASSIGNED: ${r['employee_name'].toString().toUpperCase()}", style: TextStyle(color: AppColors.accent, fontSize: 8, fontWeight: FontWeight.w900)),
+                        ],
+                      ),
                       trailing: PopupMenuButton<String>(
-                          onSelected: (val) => _updateRequestStatus(r['id'], val),
+                          onSelected: (val) {
+                              if (val == 'assign') {
+                                  _showRequestAssignment(r['id']);
+                              } else {
+                                  _updateRequestStatus(r['id'], val);
+                              }
+                          },
                           color: AppColors.onyx.withOpacity(0.9),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: const BorderSide(color: Colors.white10)),
                           itemBuilder: (context) => [
+                              _buildPopupItem('assign', 'ASSIGN STAFF', Icons.person_add, AppColors.accent),
+                              const PopupMenuDivider(height: 1),
                               _buildPopupItem('in_progress', 'IN PROGRESS', Icons.play_arrow, Colors.blueAccent),
                               _buildPopupItem('completed', 'COMPLETED', Icons.check_circle, Colors.greenAccent),
                               _buildPopupItem('cancelled', 'REJECT/CANCEL', Icons.cancel, Colors.redAccent),
@@ -1244,6 +1323,43 @@ class _ManagerServiceAssignmentScreenState extends State<ManagerServiceAssignmen
               ),
             );
         },
+    ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFilterBar(String current, Function(String) onSelect) {
+    return Container(
+      height: 40,
+      margin: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        children: [
+           _filterChip('all', 'ALL', current == 'all', onSelect),
+           _filterChip('pending', 'PENDING', current == 'pending', onSelect),
+           _filterChip('assigned', 'ASSIGNED', current == 'assigned', onSelect),
+           _filterChip('in_progress', 'IN PROGRESS', current == 'in_progress', onSelect),
+           _filterChip('completed', 'COMPLETED', current == 'completed', onSelect),
+        ],
+      ),
+    );
+  }
+
+  Widget _filterChip(String id, String label, bool isSelected, Function(String) onSelect) {
+    return GestureDetector(
+      onTap: () => onSelect(id),
+      child: Container(
+        margin: const EdgeInsets.only(right: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.accent.withOpacity(0.2) : Colors.white.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: isSelected ? AppColors.accent : Colors.white10),
+        ),
+        alignment: Alignment.center,
+        child: Text(label, style: TextStyle(color: isSelected ? AppColors.accent : Colors.white38, fontWeight: FontWeight.bold, fontSize: 9, letterSpacing: 1)),
+      ),
     );
   }
 
@@ -1269,40 +1385,90 @@ class _ManagerServiceAssignmentScreenState extends State<ManagerServiceAssignmen
            bool isFoodOrder = request['food_order_id'] != null || 
                               (request['description'] ?? '').toString().toLowerCase().contains('food order');
            
-           if (isFoodOrder) {
-               final paymentStatus = await showDialog<String>(
-                   context: context,
-                   builder: (context) => OnyxGlassDialog(
-                       title: "ORDER VALIDATION",
-                       children: [
-                         const Text(
-                           "CONFIRM THE SETTLEMENT STATUS FOR THIS DELIVERY REQUEST.",
-                           textAlign: TextAlign.center,
-                           style: TextStyle(color: Colors.white24, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1),
-                         ),
-                       ],
-                       actions: [
-                           TextButton(
-                               onPressed: () => Navigator.pop(context, null),
-                               child: const Text("CANCEL", style: TextStyle(color: Colors.white24, fontWeight: FontWeight.w900, letterSpacing: 1)),
-                           ),
-                           TextButton(
-                               onPressed: () => Navigator.pop(context, 'unpaid'),
-                               child: const Text("MARK UNPAID", style: TextStyle(color: Colors.orangeAccent, fontWeight: FontWeight.w900, fontSize: 11, letterSpacing: 0.5)),
-                           ),
-                           ElevatedButton(
-                               onPressed: () => Navigator.pop(context, 'paid'),
-                               style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent, foregroundColor: AppColors.onyx),
-                               child: const Text("MARK PAID", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11, letterSpacing: 0.5)),
-                           ),
-                       ],
-                   ),
-               );
+            if (isFoodOrder) {
+                String? selectedPaymentStatus;
+                String? selectedPaymentMethod;
+                final paymentMethods = ['Cash', 'Card', 'UPI', 'Bank Transfer'];
 
-               if (paymentStatus == null) return; // User cancelled
-               _performUpdate(id, status, billingStatus: paymentStatus);
-               return;
-           }
+                final result = await showDialog<Map<String, String>?>(
+                    context: context,
+                    builder: (context) => StatefulBuilder(
+                      builder: (context, setModalState) => OnyxGlassDialog(
+                          title: "ORDER VALIDATION",
+                          children: [
+                            const Text(
+                              "CONFIRM THE SETTLEMENT STATUS FOR THIS DELIVERY REQUEST.",
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: Colors.white24, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1),
+                            ),
+                            const SizedBox(height: 24),
+                            
+                            // Status Selection
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _buildChoiceChip("UNPAID", selectedPaymentStatus == 'unpaid', () => setModalState(() => selectedPaymentStatus = 'unpaid'), Colors.orangeAccent),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: _buildChoiceChip("PAID", selectedPaymentStatus == 'paid', () => setModalState(() => selectedPaymentStatus = 'paid'), Colors.greenAccent),
+                                ),
+                              ],
+                            ),
+                            
+                            if (selectedPaymentStatus == 'paid') ...[
+                              const SizedBox(height: 24),
+                              const Text("SELECT PAYMENT MODE:", style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1)),
+                              const SizedBox(height: 12),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: paymentMethods.map((m) {
+                                  final isSelected = selectedPaymentMethod == m;
+                                  return GestureDetector(
+                                    onTap: () => setModalState(() => selectedPaymentMethod = m),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                      decoration: BoxDecoration(
+                                        color: isSelected ? AppColors.accent.withOpacity(0.1) : Colors.white.withOpacity(0.03),
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(color: isSelected ? AppColors.accent.withOpacity(0.5) : Colors.white10),
+                                      ),
+                                      child: Text(
+                                        m.toUpperCase(),
+                                        style: TextStyle(
+                                          color: isSelected ? AppColors.accent : Colors.white70,
+                                          fontWeight: FontWeight.w900,
+                                          fontSize: 10,
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
+                            ],
+                          ],
+                          actions: [
+                              TextButton(
+                                  onPressed: () => Navigator.pop(context, null),
+                                  child: const Text("CANCEL", style: TextStyle(color: Colors.white24, fontWeight: FontWeight.w900, letterSpacing: 1)),
+                              ),
+                              ElevatedButton(
+                                  onPressed: selectedPaymentStatus == null || (selectedPaymentStatus == 'paid' && selectedPaymentMethod == null) 
+                                    ? null 
+                                    : () => Navigator.pop(context, {'status': selectedPaymentStatus!, 'method': selectedPaymentMethod ?? 'Cash'}),
+                                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent, foregroundColor: AppColors.onyx),
+                                  child: const Text("CONFIRM", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11, letterSpacing: 0.5)),
+                              ),
+                          ],
+                      ),
+                    ),
+                );
+
+                if (result == null) return; // User cancelled
+                _performUpdate(id, status, billingStatus: result['status'], paymentMethod: result['method']);
+                return;
+            }
 
            // 2. Assigned Service Inventory Return Check (ID > 2000000)
            if (id > 2000000) {
@@ -1422,16 +1588,85 @@ class _ManagerServiceAssignmentScreenState extends State<ManagerServiceAssignmen
       _performUpdate(id, status);
   }
 
-  Future<void> _performUpdate(int id, String status, {String? billingStatus}) async {
+  void _showRequestAssignment(int requestId) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          decoration: BoxDecoration(color: AppColors.onyx.withOpacity(0.95), borderRadius: const BorderRadius.vertical(top: Radius.circular(32)), border: Border.all(color: Colors.white10)),
+          height: MediaQuery.of(context).size.height * 0.7,
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text("ASSIGN STAFF", style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: 1.5)),
+                  IconButton(icon: const Icon(Icons.close, color: Colors.white38), onPressed: () => Navigator.pop(ctx)),
+                ],
+              ),
+              const SizedBox(height: 24),
+              if (_employees.isEmpty) _buildEmptyState("NO EMPLOYEES AVAILABLE", Icons.people_outline)
+              else Expanded(
+                child: ListView.builder(
+                  itemCount: _employees.length,
+                  itemBuilder: (context, index) {
+                    final emp = _employees[index];
+                    final isOnline = emp['on_duty'] == true || emp['is_clocked_in'] == true;
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      child: OnyxGlassCard(
+                        padding: EdgeInsets.zero,
+                        child: ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: isOnline ? Colors.greenAccent.withOpacity(0.1) : Colors.white.withOpacity(0.05),
+                            child: Text(emp['name'][0].toUpperCase(), style: TextStyle(color: isOnline ? Colors.greenAccent : Colors.white24, fontWeight: FontWeight.w900)),
+                          ),
+                          title: Text(emp['name'].toString().toUpperCase(), style: TextStyle(fontWeight: FontWeight.w900, color: isOnline ? Colors.white : Colors.white38, fontSize: 13, letterSpacing: 0.5)),
+                          subtitle: Text("${emp['role']} • ${emp['status'] ?? (isOnline ? 'ACTIVE' : 'OFFLINE')}".toUpperCase(), style: TextStyle(fontSize: 9, color: isOnline ? Colors.greenAccent.withOpacity(0.5) : Colors.white10, fontWeight: FontWeight.bold)),
+                          trailing: isOnline ? const Icon(Icons.check_circle_outline, color: Colors.greenAccent, size: 20) : null,
+                          onTap: () async {
+                            try {
+                               await context.read<ApiService>().dio.put('/service-requests/$requestId', data: {'employee_id': emp['id'], 'status': 'assigned'});
+                               if (mounted) {
+                                   Navigator.pop(ctx);
+                                   _loadData();
+                                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Task assigned successfully"), backgroundColor: Colors.green));
+                               }
+                            } catch (e) {
+                               if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Failed to assign: $e"), backgroundColor: Colors.redAccent));
+                            }
+                          },
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _performUpdate(int id, String status, {String? billingStatus, String? paymentMethod}) async {
       try {
           final data = <String, dynamic>{'status': status};
           if (billingStatus != null) data['billing_status'] = billingStatus;
+          if (paymentMethod != null) data['payment_method'] = paymentMethod;
 
           await context.read<ApiService>().dio.put('/service-requests/$id', data: data);
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Request updated to $status")));
-          _loadData();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Request updated to $status")));
+            _loadData();
+          }
       } catch (e) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Failed to update: $e")));
+          if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Failed to update: $e")));
       }
   }
 
@@ -1486,6 +1721,31 @@ class _ManagerServiceAssignmentScreenState extends State<ManagerServiceAssignmen
          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Failed update: $e")));
        }
      }
+  }
+
+  Widget _buildChoiceChip(String label, bool isSelected, VoidCallback onSelected, Color activeColor) {
+    return GestureDetector(
+      onTap: onSelected,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: isSelected ? activeColor.withOpacity(0.1) : Colors.white.withOpacity(0.03),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: isSelected ? activeColor.withOpacity(0.5) : Colors.white10),
+        ),
+        child: Center(
+          child: Text(
+            label,
+            style: TextStyle(
+              color: isSelected ? activeColor : Colors.white24,
+              fontWeight: FontWeight.w900,
+              fontSize: 11,
+              letterSpacing: 1,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   String _formatDate(dynamic date) {

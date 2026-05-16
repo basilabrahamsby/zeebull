@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:orchid_employee/core/constants/app_colors.dart';
 import 'package:orchid_employee/presentation/screens/waiter/menu_order_screen.dart';
 import 'package:orchid_employee/presentation/providers/auth_provider.dart';
+import 'package:orchid_employee/presentation/providers/room_provider.dart';
+import 'package:orchid_employee/data/models/room_model.dart';
 import 'package:orchid_employee/presentation/widgets/onyx_glass_card.dart';
 import 'package:provider/provider.dart';
 
@@ -13,16 +15,26 @@ class WaiterDashboard extends StatefulWidget {
 }
 
 class _WaiterDashboardState extends State<WaiterDashboard> {
-  // Mock data for tables
-  final List<TableStatus> _tables = List.generate(12, (index) => TableStatus(
-    id: "T-${index + 1}",
-    number: index + 1,
-    status: index % 3 == 0 ? 'Occupied' : 'Available',
-    capacity: 4,
-  ));
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<RoomProvider>().fetchRooms();
+      context.read<RoomProvider>().fetchRoomStats();
+      context.read<RoomProvider>().fetchRoomTypes();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
+    final roomProvider = context.watch<RoomProvider>();
+    final rooms = roomProvider.rooms;
+    final stats = roomProvider.roomStats;
+    
+    final available = stats['available']?.toString() ?? "0";
+    final occupied = stats['occupied']?.toString() ?? "0";
+    final total = rooms.length.toString();
+
     return Scaffold(
       backgroundColor: AppColors.onyx,
       body: CustomScrollView(
@@ -77,9 +89,11 @@ class _WaiterDashboardState extends State<WaiterDashboard> {
                   const SizedBox(height: 12),
                    Row(
                     children: [
-                      _QuickStat(label: "AVAILABLE", value: "8", color: Colors.greenAccent),
+                      _QuickStat(label: "TOTAL TABLES", value: total, color: Colors.white),
                       const SizedBox(width: 24),
-                      _QuickStat(label: "OCCUPIED", value: "4", color: AppColors.accent),
+                      _QuickStat(label: "AVAIL TABLES", value: available, color: Colors.greenAccent),
+                      const SizedBox(width: 24),
+                      _QuickStat(label: "OCCUPIED", value: occupied, color: AppColors.accent),
                     ],
                   ),
                 ],
@@ -93,7 +107,7 @@ class _WaiterDashboardState extends State<WaiterDashboard> {
               padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
-                  const Expanded(
+                  Expanded(
                     child: TextField(
                       style: TextStyle(color: Colors.white, fontSize: 14),
                       decoration: InputDecoration(
@@ -104,7 +118,7 @@ class _WaiterDashboardState extends State<WaiterDashboard> {
                         filled: true,
                         contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.all(Radius.circular(16)),
+                          borderRadius: BorderRadius.circular(16),
                           borderSide: BorderSide.none,
                         ),
                       ),
@@ -117,8 +131,8 @@ class _WaiterDashboardState extends State<WaiterDashboard> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: IconButton(
-                      icon: const Icon(Icons.filter_list, color: Colors.white),
-                      onPressed: () {},
+                      icon: const Icon(Icons.add_box_rounded, color: AppColors.accent),
+                      onPressed: () => _showCreateTableDialog(),
                     ),
                   ),
                 ],
@@ -126,25 +140,28 @@ class _WaiterDashboardState extends State<WaiterDashboard> {
             ),
           ),
 
-          // Table Grid
-          SliverPadding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            sliver: SliverGrid(
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                childAspectRatio: 0.85,
-              ),
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  final table = _tables[index];
-                  return _buildTableCard(table);
-                },
-                childCount: _tables.length,
+          // Table/Room Grid
+          if (roomProvider.isLoading && rooms.isEmpty)
+            const SliverFillRemaining(child: Center(child: CircularProgressIndicator(color: AppColors.accent)))
+          else
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              sliver: SliverGrid(
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                  childAspectRatio: 0.85,
+                ),
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                    final room = rooms[index];
+                    return _buildRoomCard(room);
+                  },
+                  childCount: rooms.length,
+                ),
               ),
             ),
-          ),
 
           const SliverToBoxAdapter(child: SizedBox(height: 80)),
         ],
@@ -162,8 +179,9 @@ class _WaiterDashboardState extends State<WaiterDashboard> {
       ),
     );
   }
-  Widget _buildTableCard(TableStatus table) {
-    final bool isOccupied = table.status == 'Occupied';
+
+  Widget _buildRoomCard(dynamic room) {
+    final bool isOccupied = room.status == 'Booked' || room.status == 'checked_in' || room.status == 'Occupied';
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       child: OnyxGlassCard(
@@ -182,7 +200,7 @@ class _WaiterDashboardState extends State<WaiterDashboard> {
                     color: (isOccupied ? AppColors.accent : Colors.greenAccent).withOpacity(0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Icon(Icons.table_restaurant_rounded, 
+                  child: Icon(Icons.meeting_room_rounded, 
                     color: isOccupied ? AppColors.accent : Colors.greenAccent, size: 20),
                 ),
                 Container(
@@ -191,22 +209,22 @@ class _WaiterDashboardState extends State<WaiterDashboard> {
                     color: (isOccupied ? AppColors.accent : Colors.greenAccent).withOpacity(0.1),
                     borderRadius: BorderRadius.circular(20),
                   ),
-                  child: Text(table.status.toUpperCase(), 
+                  child: Text(room.status.toUpperCase(), 
                     style: TextStyle(color: isOccupied ? AppColors.accent : Colors.greenAccent, 
                       fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
                 ),
               ],
             ),
             const SizedBox(height: 16),
-            Text("TABLE ${table.number}", 
+            Text("TABLE ${room.roomNumber}", 
               style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16)),
-            Text("${table.capacity} SEATS", 
+            Text(room.type ?? "Standard", 
               style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 10, fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => MenuOrderScreen(tableId: table.id))),
+                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => MenuOrderScreen(tableId: "Table ${room.roomNumber}"))),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.white.withOpacity(0.05),
                   foregroundColor: Colors.white,
@@ -217,6 +235,82 @@ class _WaiterDashboardState extends State<WaiterDashboard> {
                 child: Text(isOccupied ? "VIEW ORDER" : "NEW ORDER", 
                   style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 1)),
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showCreateTableDialog() {
+    final roomProvider = context.read<RoomProvider>();
+    final numberController = TextEditingController();
+    int? selectedTypeId;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          backgroundColor: AppColors.onyx,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          title: const Text("CREATE NEW TABLE", style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: numberController,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  hintText: "Table Number (e.g. T101)",
+                  hintStyle: const TextStyle(color: Colors.white24),
+                  filled: true,
+                  fillColor: Colors.white10,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                ),
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<int>(
+                value: selectedTypeId,
+                dropdownColor: AppColors.onyx,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  hintText: "Select Category",
+                  hintStyle: const TextStyle(color: Colors.white24),
+                  filled: true,
+                  fillColor: Colors.white10,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                ),
+                items: roomProvider.roomTypes.map((type) => DropdownMenuItem(
+                  value: type.id,
+                  child: Text(type.name, style: const TextStyle(color: Colors.white)),
+                )).toList(),
+                onChanged: (val) => setState(() => selectedTypeId = val),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("CANCEL", style: TextStyle(color: Colors.white38, fontWeight: FontWeight.bold)),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (numberController.text.isEmpty || selectedTypeId == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please fill all fields")));
+                  return;
+                }
+                final success = await roomProvider.createRoom({
+                  "number": numberController.text,
+                  "room_type_id": selectedTypeId,
+                  "status": "Available",
+                });
+                if (success && context.mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Table created successfully")));
+                }
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+              child: const Text("CREATE", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             ),
           ],
         ),

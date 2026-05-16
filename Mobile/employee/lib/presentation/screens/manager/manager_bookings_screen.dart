@@ -420,15 +420,23 @@ class _ManagerBookingsScreenState extends State<ManagerBookingsScreen> with Sing
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
+                                Row(
+                                  children: [
+                                    _buildFinanceSmallInfo('ADVANCE', double.tryParse((b['advance_deposit'] ?? 0).toString()) ?? 0, Colors.greenAccent),
+                                    const SizedBox(width: 16),
+                                    _buildFinanceSmallInfo('BALANCE', (double.tryParse((b['total_amount'] ?? 0).toString()) ?? 0) - (double.tryParse((b['advance_deposit'] ?? 0).toString()) ?? 0), Colors.orangeAccent),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
                                 Text(
                                   'TOTAL VALUE', 
-                                  style: TextStyle(fontSize: 9, color: Colors.white.withOpacity(0.3), fontWeight: FontWeight.w900, letterSpacing: 1)
+                                  style: TextStyle(fontSize: 8, color: Colors.white.withOpacity(0.3), fontWeight: FontWeight.w900, letterSpacing: 1.5)
                                 ),
                                 Text(
                                   NumberFormat.currency(symbol: '₹', decimalDigits: 0).format(
                                     double.tryParse((b['total_amount'] ?? 0).toString()) ?? 0
                                   ),
-                                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w100, color: Colors.white, letterSpacing: -0.5),
+                                  style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w200, color: Colors.white, letterSpacing: -1),
                                 ),
                               ],
                             ),
@@ -464,6 +472,13 @@ class _ManagerBookingsScreenState extends State<ManagerBookingsScreen> with Sing
                                     children: [
                                       _buildGridActionButton(Icons.delete_outline, Colors.redAccent.withOpacity(0.5), () => _deleteBooking(b['id'], b['guest_name']), isActive: true),
                                       _buildGridActionButton(
+                                        Icons.verified, 
+                                        Colors.greenAccent, 
+                                        () => _showConfirmBookingDialog(b), 
+                                        isActive: b['status']?.toString().toLowerCase() == 'booked' || b['status']?.toString().toLowerCase() == 'confirmed',
+                                        isPrimary: b['status']?.toString().toLowerCase() == 'booked'
+                                      ),
+                                      _buildGridActionButton(
                                         Icons.email_outlined, 
                                         Colors.blueAccent.withOpacity(0.5), 
                                         () {
@@ -485,7 +500,6 @@ class _ManagerBookingsScreenState extends State<ManagerBookingsScreen> with Sing
                                         },
                                         isActive: (statusLabel == "CHECKED-IN" || statusLabel == "CHECKEDIN")
                                       ),
-                                      const SizedBox(width: 42), // Spacer to align with top row's 4th button
                                     ],
                                   ),
                                 ],
@@ -502,6 +516,20 @@ class _ManagerBookingsScreenState extends State<ManagerBookingsScreen> with Sing
           );
         },
       ),
+    );
+  }
+
+  Widget _buildFinanceSmallInfo(String label, double amount, Color color) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 7, fontWeight: FontWeight.w900, letterSpacing: 1)),
+        const SizedBox(height: 2),
+        Text(
+          NumberFormat.currency(symbol: '₹', decimalDigits: 0).format(amount),
+          style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w900),
+        ),
+      ],
     );
   }
 
@@ -1056,7 +1084,6 @@ class _ManagerBookingsScreenState extends State<ManagerBookingsScreen> with Sing
 
   void _showCreateBookingDialog() async {
     final api = context.read<ApiService>();
-    List<dynamic> availableRooms = [];
     List<dynamic> availablePackages = [];
     
     // Show premium loader
@@ -1068,22 +1095,15 @@ class _ManagerBookingsScreenState extends State<ManagerBookingsScreen> with Sing
 
     try {
       final results = await Future.wait([
-        api.dio.get('/rooms', queryParameters: {'status': 'Available'}),
         api.getPackages(),
       ]);
       
       Navigator.pop(context); // Dismiss loader
 
-      if (results[0].statusCode == 200) availableRooms = results[0].data as List;
-      if (results[1].statusCode == 200) availablePackages = results[1].data as List;
+      if (results[0].statusCode == 200) availablePackages = results[0].data as List;
     } catch (e) {
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Sync Error: $e"), backgroundColor: Colors.red));
-      return;
-    }
-
-    if (availableRooms.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Operational Blocker: No rooms available")));
       return;
     }
 
@@ -1092,6 +1112,8 @@ class _ManagerBookingsScreenState extends State<ManagerBookingsScreen> with Sing
     final phoneController = TextEditingController();
     final adultsController = TextEditingController(text: "1");
     final childrenController = TextEditingController(text: "0");
+    final numRoomsController = TextEditingController(text: "1");
+    final tariffController = TextEditingController();
     
     int? selectedRoomTypeId;
     List<dynamic> availableRoomTypes = [];
@@ -1182,6 +1204,8 @@ class _ManagerBookingsScreenState extends State<ManagerBookingsScreen> with Sing
                       
                       _buildGlassInput(guestNameController, "GUEST NAME *", Icons.person_outline),
                       const SizedBox(height: 24),
+                      _buildGlassInput(tariffController, "ROOM TARIFF (BASE)", Icons.money, keyboard: TextInputType.number),
+                      const SizedBox(height: 24),
                       _buildGlassInput(emailController, "EMAIL ADDRESS", Icons.email_outlined, keyboard: TextInputType.emailAddress),
                       const SizedBox(height: 24),
                       _buildGlassInput(phoneController, "PHONE NUMBER", Icons.phone_outlined, keyboard: TextInputType.phone),
@@ -1213,6 +1237,9 @@ class _ManagerBookingsScreenState extends State<ManagerBookingsScreen> with Sing
                           )).toList(),
                           onChanged: (v) => setState(() => selectedPackageId = v),
                         ),
+
+                      const SizedBox(height: 32),
+                      _buildGlassInput(numRoomsController, "NUMBER OF ROOMS", Icons.meeting_room_outlined, keyboard: TextInputType.number),
 
                       const SizedBox(height: 32),
                       Row(
@@ -1275,17 +1302,19 @@ class _ManagerBookingsScreenState extends State<ManagerBookingsScreen> with Sing
                                   'status': 'confirmed',
                                 });
                               } else {
-                                await api.createBooking({
-                                  'guest_name': guestNameController.text.toUpperCase(),
-                                  'guest_email': emailController.text,
-                                  'guest_mobile': phoneController.text,
-                                  'room_type_id': selectedRoomTypeId,
-                                  'check_in': checkInDate?.toIso8601String().split('T')[0],
-                                  'check_out': checkOutDate?.toIso8601String().split('T')[0],
-                                  'adults': int.tryParse(adultsController.text) ?? 1,
-                                  'children': int.tryParse(childrenController.text) ?? 0,
-                                  'status': 'confirmed',
-                                });
+                                  await api.createBooking({
+                                    'guest_name': guestNameController.text.toUpperCase(),
+                                    'guest_email': emailController.text,
+                                    'guest_mobile': phoneController.text,
+                                    'room_type_id': selectedRoomTypeId,
+                                    'check_in': checkInDate?.toIso8601String().split('T')[0],
+                                    'check_out': checkOutDate?.toIso8601String().split('T')[0],
+                                    'adults': int.tryParse(adultsController.text) ?? 1,
+                                    'children': int.tryParse(childrenController.text) ?? 0,
+                                    'num_rooms': int.tryParse(numRoomsController.text) ?? 1,
+                                    'room_rate': double.tryParse(tariffController.text) ?? 0.0,
+                                    'status': 'confirmed',
+                                  });
                               }
                               Navigator.pop(ctx);
                               _loadBookings();
@@ -1968,6 +1997,234 @@ class _ManagerBookingsScreenState extends State<ManagerBookingsScreen> with Sing
             )
           ],
         ),
+      ),
+    );
+  }
+
+  Future<void> _showConfirmBookingDialog(dynamic booking) async {
+    final isPackage = booking['is_package'] ?? false;
+    final totalAmount = double.tryParse((booking['total_amount'] ?? 0).toString()) ?? 0.0;
+    final previousAdvance = double.tryParse((booking['advance_deposit'] ?? 0).toString()) ?? 0.0;
+    
+    List<Map<String, dynamic>> payments = [
+      {'amount': TextEditingController(text: "0"), 'method': 'Cash'}
+    ];
+    bool isSubmitting = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSubState) {
+          double newPaymentTotal = 0;
+          for (var p in payments) {
+            newPaymentTotal += double.tryParse(p['amount'].text) ?? 0;
+          }
+          final balanceDue = totalAmount - previousAdvance - newPaymentTotal;
+
+          return BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+            child: Container(
+              height: MediaQuery.of(context).size.height * 0.85,
+              decoration: BoxDecoration(
+                color: AppColors.onyx.withOpacity(0.95),
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+                border: Border.all(color: Colors.white10),
+              ),
+              child: Column(
+                children: [
+                  const SizedBox(height: 12),
+                  Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(2))),
+                  const SizedBox(height: 24),
+                  
+                  Expanded(
+                    child: ListView(
+                      padding: const EdgeInsets.symmetric(horizontal: 32),
+                      children: [
+                        const Text(
+                          "RECORDING ADVANCE PAYMENT",
+                          style: TextStyle(color: AppColors.accent, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 2),
+                        ),
+                        const Text(
+                          "CONFIRM BOOKING",
+                          style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: 0.5),
+                        ),
+                        const SizedBox(height: 32),
+
+                        OnyxGlassCard(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  _buildFinanceDetail("BOOKING VALUE", totalAmount, Colors.white),
+                                  _buildFinanceDetail("PREVIOUS ADVANCE", previousAdvance, Colors.greenAccent),
+                                ],
+                              ),
+                              const Divider(color: Colors.white10, height: 32),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  _buildFinanceDetail("NEW PAYMENT", newPaymentTotal, AppColors.accent),
+                                  _buildFinanceDetail("BALANCE DUE", balanceDue, balanceDue > 0 ? Colors.orangeAccent : Colors.greenAccent),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(height: 32),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text("PAYMENT BREAKDOWN", style: TextStyle(color: Colors.white30, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1)),
+                            TextButton.icon(
+                              onPressed: () => setSubState(() => payments.add({'amount': TextEditingController(text: "0"), 'method': 'Cash'})),
+                              icon: const Icon(Icons.add, size: 14, color: AppColors.accent),
+                              label: const Text("ADD METHOD", style: TextStyle(color: AppColors.accent, fontSize: 9, fontWeight: FontWeight.w900)),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+
+                        ...payments.asMap().entries.map((entry) {
+                          int idx = entry.key;
+                          var p = entry.value;
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  flex: 2,
+                                  child: _buildSimpleGlassInput(p['amount'], "AMOUNT", (v) => setSubState(() {})),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  flex: 2,
+                                  child: _buildSimpleGlassDropdown(
+                                    p['method'], 
+                                    "METHOD", 
+                                    ["Cash", "UPI", "Card", "Bank Transfer"],
+                                    (v) => setSubState(() => p['method'] = v)
+                                  ),
+                                ),
+                                if (payments.length > 1)
+                                  IconButton(
+                                    icon: const Icon(Icons.remove_circle_outline, color: Colors.redAccent, size: 20),
+                                    onPressed: () => setSubState(() => payments.removeAt(idx)),
+                                  ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+
+                        const SizedBox(height: 48),
+
+                        SizedBox(
+                          height: 64,
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.accent,
+                              foregroundColor: AppColors.onyx,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                            ),
+                            onPressed: isSubmitting ? null : () async {
+                              setSubState(() => isSubmitting = true);
+                              try {
+                                final api = context.read<ApiService>();
+                                final payload = {
+                                  'payments': payments.map((p) => {
+                                    'amount': double.tryParse(p['amount'].text) ?? 0,
+                                    'method': p['method'].toLowerCase(),
+                                  }).toList(),
+                                  'notes': 'Recorded via Mobile App'
+                                };
+
+                                final res = await api.confirmBooking(booking['id'], payload, isPackage: isPackage);
+                                if (res.statusCode == 200) {
+                                  Navigator.pop(ctx);
+                                  _loadBookings();
+                                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("BOOKING CONFIRMED & ADVANCE RECORDED"), backgroundColor: Colors.greenAccent));
+                                }
+                              } catch (e) {
+                                ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text("CONFIRMATION FAILED: $e"), backgroundColor: Colors.redAccent));
+                              } finally {
+                                setSubState(() => isSubmitting = false);
+                              }
+                            },
+                            child: isSubmitting 
+                              ? const CircularProgressIndicator(color: AppColors.onyx)
+                              : const Text("CONFIRM & RECORD PAYMENT", style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 2)),
+                          ),
+                        ),
+                        const SizedBox(height: 80),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+      ),
+    );
+  }
+
+  Widget _buildFinanceDetail(String label, double value, Color color) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 1)),
+        const SizedBox(height: 4),
+        Text(
+          NumberFormat.currency(symbol: '₹', decimalDigits: 0).format(value),
+          style: TextStyle(color: color, fontSize: 18, fontWeight: FontWeight.w900),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSimpleGlassInput(TextEditingController controller, String label, ValueChanged<String> onChanged) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.white10)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(color: Colors.white24, fontSize: 8, fontWeight: FontWeight.bold)),
+          TextField(
+            controller: controller,
+            onChanged: onChanged,
+            keyboardType: TextInputType.number,
+            style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+            decoration: const InputDecoration(isDense: true, border: InputBorder.none, contentPadding: EdgeInsets.symmetric(vertical: 8)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSimpleGlassDropdown(String value, String label, List<String> options, ValueChanged<String?> onChanged) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.white10)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(color: Colors.white24, fontSize: 8, fontWeight: FontWeight.bold)),
+          DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: value,
+              isDense: true,
+              dropdownColor: AppColors.onyx,
+              items: options.map((o) => DropdownMenuItem(value: o, child: Text(o, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)))).toList(),
+              onChanged: onChanged,
+            ),
+          ),
+        ],
       ),
     );
   }

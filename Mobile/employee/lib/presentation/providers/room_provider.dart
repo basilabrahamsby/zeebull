@@ -94,4 +94,17 @@ class RoomProvider with ChangeNotifier {
     }
     return false;
   }
+
+  Future<bool> createRoom(Map<String, dynamic> data) async {
+    try {
+      final response = await _apiService.createRoom(data);
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        fetchRooms();
+        return true;
+      }
+    } catch (e) {
+      print("Error creating room: $e");
+    }
+    return false;
+  }
 }

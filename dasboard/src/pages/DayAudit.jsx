@@ -94,6 +94,7 @@ export default function DayAudit() {
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState("today"); // 'today' | 'history' | 'report'
 
   // Historical Report
   const [selectedAudit, setSelectedAudit] = useState(null);
@@ -153,15 +154,22 @@ export default function DayAudit() {
           const isOutflow = type === "expense" || type === "purchase_payment" || type === "vendor_payment";
           const amount = tx.total_amount || 0;
           
-          const isCash = tx.lines?.some(l => 
-            l.debit?.toLowerCase().includes("cash") || 
-            l.credit?.toLowerCase().includes("cash")
-          );
+          const isCash = tx.lines?.some(l => {
+            const d = l.debit?.toLowerCase() || "";
+            const c = l.credit?.toLowerCase() || "";
+            // Primary cash ledgers: "Cash in Hand", "Petty Cash"
+            return (d.includes("cash") && !d.includes("bank")) || 
+                   (c.includes("cash") && !c.includes("bank"));
+          });
 
-          const isBank = tx.lines?.some(l => 
-            l.debit?.toLowerCase().includes("bank") || 
-            l.credit?.toLowerCase().includes("bank")
-          );
+          const isBank = tx.lines?.some(l => {
+            const d = l.debit?.toLowerCase() || "";
+            const c = l.credit?.toLowerCase() || "";
+            // Primary bank ledgers: "Bank Account", "UPI", "Online"
+            return d.includes("bank") || c.includes("bank") || 
+                   d.includes("upi") || c.includes("upi") ||
+                   d.includes("online") || c.includes("online");
+          });
 
           // We only track actual cash/bank movements for expected balances
           // Pure accounting entries like 'purchase' (AP) or 'waste' are ignored
@@ -254,6 +262,7 @@ export default function DayAudit() {
       const txRes = await API.get(`/day-audit/${audit.id}/transactions`);
       setSelectedAudit(audit);
       setHistoricalTransactions(txRes.data || []);
+      setActiveTab("report");
     } catch (err) {
       toast.error("Failed to load audit transactions");
     } finally {
@@ -264,17 +273,22 @@ export default function DayAudit() {
   // ── Helpers ────────────────────────────────────────────────────────────────
 
   const isCashTransaction = (tx) => {
-    return tx.lines?.some(l => 
-      l.debit?.toLowerCase().includes("cash") || 
-      l.credit?.toLowerCase().includes("cash")
-    );
+    return tx.lines?.some(l => {
+      const d = l.debit?.toLowerCase() || "";
+      const c = l.credit?.toLowerCase() || "";
+      return (d.includes("cash") && !d.includes("bank")) || 
+             (c.includes("cash") && !c.includes("bank"));
+    });
   };
 
   const isBankTransaction = (tx) => {
-    return tx.lines?.some(l => 
-      l.debit?.toLowerCase().includes("bank") || 
-      l.credit?.toLowerCase().includes("bank")
-    );
+    return tx.lines?.some(l => {
+      const d = l.debit?.toLowerCase() || "";
+      const c = l.credit?.toLowerCase() || "";
+      return d.includes("bank") || c.includes("bank") || 
+             d.includes("upi") || c.includes("upi") ||
+             d.includes("online") || c.includes("online");
+    });
   };
 
   const cashTransactions = transactions.filter(isCashTransaction);
@@ -284,6 +298,27 @@ export default function DayAudit() {
     const cash = txs.filter(isCashTransaction);
     const acc = txs.filter(isBankTransaction);
     return { cash, acc };
+  };
+
+  const getDebitCredit = (tx, mode = "cash") => {
+    if (!tx.lines) return { debit: 0, credit: 0 };
+    const isTarget = (name) => {
+      if (!name) return false;
+      const n = name.toLowerCase();
+      if (mode === "cash") {
+        return n.includes("cash") && !n.includes("bank");
+      } else {
+        return n.includes("bank") || n.includes("upi") || n.includes("online");
+      }
+    };
+    
+    let debit = 0;
+    let credit = 0;
+    tx.lines.forEach(l => {
+      if (isTarget(l.debit)) debit += l.amount;
+      if (isTarget(l.credit)) credit += l.amount;
+    });
+    return { debit, credit };
   };
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -318,7 +353,41 @@ export default function DayAudit() {
 
   return (
     <DashboardLayout>
-      <div className="max-w-6xl mx-auto space-y-6 pb-10">
+      <style>
+        {`
+          @media print {
+            /* Hide everything by default */
+            body * {
+              visibility: hidden;
+            }
+            /* Show only the print root and its children */
+            #print-root, #print-root * {
+              visibility: visible;
+            }
+            #print-root {
+              position: absolute;
+              left: 0;
+              top: 0;
+              width: 100% !important;
+            }
+            /* Explicitly hide unwanted elements even if they are children of print-root */
+            .no-print, .no-print * {
+              display: none !important;
+              visibility: hidden !important;
+            }
+            /* Optimize for paper */
+            @page {
+              size: auto;
+              margin: 10mm;
+            }
+            * {
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
+          }
+        `}
+      </style>
+      <div id="print-root" className="max-w-6xl mx-auto space-y-6 pb-10">
 
         {/* ── Header ── */}
         <div className="flex items-start justify-between">
@@ -334,13 +403,52 @@ export default function DayAudit() {
           </div>
           <button
             onClick={fetchAll}
-            className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors no-print"
           >
             <RefreshCw size={15} /> Refresh
           </button>
         </div>
 
-        {/* ── Business Day Status Banner ── */}
+        {/* ── Tabs Navigation ── */}
+        <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-2xl w-fit no-print">
+          <button
+            onClick={() => setActiveTab("today")}
+            className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${
+              activeTab === "today" 
+                ? "bg-white text-indigo-600 shadow-sm" 
+                : "text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            Today's Audit
+          </button>
+          <button
+            onClick={() => setActiveTab("history")}
+            className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${
+              activeTab === "history" 
+                ? "bg-white text-indigo-600 shadow-sm" 
+                : "text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            Audit History
+          </button>
+          {selectedAudit && (
+            <button
+              onClick={() => setActiveTab("report")}
+              className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${
+                activeTab === "report" 
+                  ? "bg-white text-indigo-600 shadow-sm" 
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              Detailed Report
+            </button>
+          )}
+        </div>
+
+        {/* ── Tab: Today's Audit ── */}
+        {activeTab === "today" && (
+          <div className="space-y-6">
+            {/* ── Business Day Status Banner ── */}
         <div className={`rounded-2xl p-6 flex items-center justify-between ${isOpen ? "bg-emerald-500" : "bg-gray-800"}`}>
           <div className="flex items-center gap-4">
             <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${isOpen ? "bg-emerald-400" : "bg-gray-700"}`}>
@@ -415,28 +523,33 @@ export default function DayAudit() {
                     <th className="px-6 py-3 text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100">Number</th>
                     <th className="px-6 py-3 text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100">Time</th>
                     <th className="px-6 py-3 text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100">Description</th>
-                    <th className="px-6 py-3 text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100 text-right">Amount</th>
+                    <th className="px-6 py-3 text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100 text-right">Debit</th>
+                    <th className="px-6 py-3 text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100 text-right">Credit</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {cashTransactions.length === 0 ? (
                     <tr>
-                      <td colSpan="5" className="px-6 py-10 text-center text-gray-400 italic">No cash transactions recorded today.</td>
+                      <td colSpan="6" className="px-6 py-10 text-center text-gray-400 italic">No cash transactions recorded today.</td>
                     </tr>
                   ) : (
-                    cashTransactions.map((tx) => (
-                      <tr key={tx.id} className="hover:bg-gray-50/30 transition-colors">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase bg-emerald-100 text-emerald-700">
-                            {tx.reference_type || "General"}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-600">{tx.entry_number}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatTime(tx.entry_date)}</td>
-                        <td className="px-6 py-4 text-sm text-gray-600 max-w-xs truncate" title={tx.description}>{tx.description}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-800 text-right">{formatCurrency(tx.total_amount)}</td>
-                      </tr>
-                    ))
+                    cashTransactions.map((tx) => {
+                      const { debit, credit } = getDebitCredit(tx, "cash");
+                      return (
+                        <tr key={tx.id} className="hover:bg-gray-50/30 transition-colors">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase bg-emerald-100 text-emerald-700">
+                              {tx.reference_type || "General"}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-600">{tx.entry_number}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatTime(tx.entry_date)}</td>
+                          <td className="px-6 py-4 text-sm text-gray-600 max-w-xs truncate" title={tx.description}>{tx.description}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-emerald-600 text-right">{debit > 0 ? formatCurrency(debit) : "—"}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-rose-600 text-right">{credit > 0 ? formatCurrency(credit) : "—"}</td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
@@ -463,33 +576,38 @@ export default function DayAudit() {
                     <th className="px-6 py-3 text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100">Number</th>
                     <th className="px-6 py-3 text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100">Time</th>
                     <th className="px-6 py-3 text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100">Description</th>
-                    <th className="px-6 py-3 text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100 text-right">Amount</th>
+                    <th className="px-6 py-3 text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100 text-right">Debit</th>
+                    <th className="px-6 py-3 text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100 text-right">Credit</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {accountTransactions.length === 0 ? (
                     <tr>
-                      <td colSpan="5" className="px-6 py-10 text-center text-gray-400 italic">No bank transactions recorded today.</td>
+                      <td colSpan="6" className="px-6 py-10 text-center text-gray-400 italic">No bank transactions recorded today.</td>
                     </tr>
                   ) : (
-                    accountTransactions.map((tx) => (
-                      <tr key={tx.id} className="hover:bg-gray-50/30 transition-colors">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${
-                            tx.reference_type === "CHECKOUT" ? "bg-emerald-100 text-emerald-700" :
-                            tx.reference_type === "purchase" ? "bg-amber-100 text-amber-700" :
-                            tx.reference_type === "consumption" ? "bg-indigo-100 text-indigo-700" :
-                            "bg-gray-100 text-gray-700"
-                          }`}>
-                            {tx.reference_type || "General"}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-600">{tx.entry_number}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatTime(tx.entry_date)}</td>
-                        <td className="px-6 py-4 text-sm text-gray-600 max-w-xs truncate" title={tx.description}>{tx.description}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-800 text-right">{formatCurrency(tx.total_amount)}</td>
-                      </tr>
-                    ))
+                    accountTransactions.map((tx) => {
+                      const { debit, credit } = getDebitCredit(tx, "bank");
+                      return (
+                        <tr key={tx.id} className="hover:bg-gray-50/30 transition-colors">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${
+                              tx.reference_type === "CHECKOUT" ? "bg-emerald-100 text-emerald-700" :
+                              tx.reference_type === "purchase" ? "bg-amber-100 text-amber-700" :
+                              tx.reference_type === "consumption" ? "bg-indigo-100 text-indigo-700" :
+                              "bg-gray-100 text-gray-700"
+                            }`}>
+                              {tx.reference_type || "General"}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-600">{tx.entry_number}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatTime(tx.entry_date)}</td>
+                          <td className="px-6 py-4 text-sm text-gray-600 max-w-xs truncate" title={tx.description}>{tx.description}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-indigo-600 text-right">{debit > 0 ? formatCurrency(debit) : "—"}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-rose-600 text-right">{credit > 0 ? formatCurrency(credit) : "—"}</td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
@@ -519,9 +637,13 @@ export default function DayAudit() {
             )}
           </div>
         )}
+      </div>
+    )}
 
-        {/* ── Audit History ── */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+    {/* ── Tab: Audit History ── */}
+    {activeTab === "history" && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
             <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
               <History size={20} className="text-indigo-500" />
@@ -587,207 +709,31 @@ export default function DayAudit() {
             </div>
           )}
         </div>
+      </div>
+    )}
 
-        {/* ── MODAL: Historical Report ── */}
-        {selectedAudit && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
-            <div className="bg-slate-50 rounded-3xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
-              {/* Report Header */}
-              <div className="bg-white px-8 py-6 border-b border-gray-200 flex items-center justify-between">
-                <div>
-                  <h3 className="text-2xl font-black text-gray-800 tracking-tight flex items-center gap-3">
-                    <History className="text-indigo-600" size={28} />
-                    Audit Report: {formatDate(selectedAudit.business_date)}
-                    {selectedAudit.status === "open" && (
-                      <span className="ml-2 px-2 py-0.5 bg-emerald-500 text-white text-[10px] font-black uppercase rounded-md animate-pulse">
-                        LIVE
-                      </span>
-                    )}
-                  </h3>
-                  <div className="flex items-center gap-4 mt-1">
-                    <span className="text-xs font-bold px-2 py-0.5 bg-gray-100 text-gray-600 rounded uppercase">ID: #{selectedAudit.id}</span>
-                    <span className="text-xs text-gray-400">Opened: {formatTime(selectedAudit.opened_at)}</span>
-                    <span className="text-xs text-gray-400">Closed: {formatTime(selectedAudit.closed_at)}</span>
-                  </div>
-                </div>
-                <button 
-                  onClick={() => setSelectedAudit(null)}
-                  className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-200 transition-all"
-                >
-                  <XCircle size={20} />
-                </button>
-              </div>
-
-              <div className="flex-1 overflow-y-auto p-8 space-y-8">
-                {/* 1. Summary Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
-                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">Revenue Breakdown</p>
-                    <div className="space-y-3">
-                      <div className="flex justify-between items-center text-sm">
-                        <span className="text-gray-500">Room Revenue</span>
-                        <span className="font-bold text-gray-800">{formatCurrency(selectedAudit.total_room_revenue)}</span>
-                      </div>
-                      <div className="flex justify-between items-center text-sm">
-                        <span className="text-gray-500">Food Revenue</span>
-                        <span className="font-bold text-gray-800">{formatCurrency(selectedAudit.total_food_revenue)}</span>
-                      </div>
-                      <div className="flex justify-between items-center text-sm">
-                        <span className="text-gray-500">Service Revenue</span>
-                        <span className="font-bold text-gray-800">{formatCurrency(selectedAudit.total_service_revenue)}</span>
-                      </div>
-                      <div className="pt-3 border-t border-dashed flex justify-between items-center text-base">
-                        <span className="font-bold text-gray-700">Total Revenue</span>
-                        <span className="font-black text-indigo-600">{formatCurrency(selectedAudit.total_room_revenue + selectedAudit.total_food_revenue + selectedAudit.total_service_revenue)}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
-                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">Cash Reconciliation</p>
-                    <div className="space-y-3">
-                      <div className="flex justify-between items-center text-sm">
-                        <span className="text-gray-500">Opening Cash</span>
-                        <span className="font-bold text-gray-800">{formatCurrency(selectedAudit.opening_cash_balance)}</span>
-                      </div>
-                      <div className="flex justify-between items-center text-sm">
-                        <span className="text-gray-500">Expected Closing</span>
-                        <span className="font-bold text-gray-800">{formatCurrency(selectedAudit.system_expected_cash)}</span>
-                      </div>
-                      <div className="flex justify-between items-center text-sm">
-                        <span className="text-gray-500">Actual Closing</span>
-                        <span className={`font-bold ${selectedAudit.status === 'open' ? 'text-gray-400 italic' : 'text-emerald-600'}`}>
-                          {selectedAudit.status === 'open' ? 'In Progress' : formatCurrency(selectedAudit.closing_cash_balance)}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
-                    <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-4">Account Reconciliation</p>
-                    <div className="space-y-3">
-                      <div className="flex justify-between items-center text-sm">
-                        <span className="text-gray-500">Opening Account</span>
-                        <span className="font-bold text-gray-800">{formatCurrency(selectedAudit.opening_account_balance)}</span>
-                      </div>
-                      <div className="flex justify-between items-center text-sm">
-                        <span className="text-gray-500">Expected Closing</span>
-                        <span className="font-bold text-gray-800">{formatCurrency(selectedAudit.system_expected_account)}</span>
-                      </div>
-                      <div className="flex justify-between items-center text-sm">
-                        <span className="text-gray-500">Actual Closing</span>
-                        <span className={`font-bold ${selectedAudit.status === 'open' ? 'text-gray-400 italic' : 'text-indigo-600'}`}>
-                          {selectedAudit.status === 'open' ? 'In Progress' : formatCurrency(selectedAudit.closing_account_balance)}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
-                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">Other Metrics</p>
-                    <div className="space-y-3 text-sm">
-                      <div className="flex justify-between items-center">
-                        <span className="text-gray-500">GST Collected</span>
-                        <span className="font-bold text-indigo-500">{formatCurrency(selectedAudit.total_gst_collected)}</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-gray-500">Inventory Purchases</span>
-                        <span className="font-bold text-rose-500">{formatCurrency(selectedAudit.total_purchases)}</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-gray-500">Daily Expenses</span>
-                        <span className="font-bold text-rose-500">{formatCurrency(selectedAudit.total_expenses)}</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-gray-500">Rooms Occupied</span>
-                        <span className="font-bold text-gray-800">{selectedAudit.rooms_occupied}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {selectedAudit.override_reason && (
-                  <div className="p-4 bg-amber-50 rounded-xl text-sm text-amber-800 leading-relaxed border border-amber-100">
-                    <strong>Balance Override Reason:</strong> {selectedAudit.override_reason}
-                  </div>
-                )}
-
-                {/* 2. Transaction Tables */}
-                <div className="space-y-6">
-                  {/* Cash Table */}
-                  <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
-                    <div className="px-6 py-3 bg-emerald-50 border-b border-gray-100 flex items-center justify-between">
-                      <h4 className="text-xs font-black text-emerald-700 uppercase tracking-widest flex items-center gap-2">
-                        <Banknote size={14} /> Cash Transaction Log
-                      </h4>
-                      <span className="text-[10px] font-bold text-emerald-600 bg-white px-2 py-0.5 rounded-full">{splitTransactions(historicalTransactions).cash.length} entries</span>
-                    </div>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left text-xs">
-                        <thead>
-                          <tr className="bg-gray-50/50">
-                            <th className="px-6 py-3 font-black text-gray-400 uppercase tracking-widest">Type</th>
-                            <th className="px-6 py-3 font-black text-gray-400 uppercase tracking-widest">Time</th>
-                            <th className="px-6 py-3 font-black text-gray-400 uppercase tracking-widest">Description</th>
-                            <th className="px-6 py-3 font-black text-gray-400 uppercase tracking-widest text-right">Amount</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-50">
-                          {splitTransactions(historicalTransactions).cash.map(tx => (
-                            <tr key={tx.id} className="hover:bg-gray-50/30">
-                              <td className="px-6 py-3 font-bold text-gray-700">{tx.reference_type}</td>
-                              <td className="px-6 py-3 text-gray-500 whitespace-nowrap">{formatTime(tx.entry_date)}</td>
-                              <td className="px-6 py-3 text-gray-600 truncate max-w-md">{tx.description}</td>
-                              <td className="px-6 py-3 text-right font-bold text-gray-800">{formatCurrency(tx.total_amount)}</td>
-                            </tr>
-                          ))}
-                          {splitTransactions(historicalTransactions).cash.length === 0 && (
-                            <tr><td colSpan="4" className="px-6 py-8 text-center text-gray-400 italic">No cash transactions this day.</td></tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-
-                  {/* Account Table */}
-                  <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
-                    <div className="px-6 py-3 bg-indigo-50 border-b border-gray-100 flex items-center justify-between">
-                      <h4 className="text-xs font-black text-indigo-700 uppercase tracking-widest flex items-center gap-2">
-                        <TrendingUp size={14} /> Account/Bank Transaction Log
-                      </h4>
-                      <span className="text-[10px] font-bold text-indigo-600 bg-white px-2 py-0.5 rounded-full">{splitTransactions(historicalTransactions).acc.length} entries</span>
-                    </div>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left text-xs">
-                        <thead>
-                          <tr className="bg-gray-50/50">
-                            <th className="px-6 py-3 font-black text-gray-400 uppercase tracking-widest">Type</th>
-                            <th className="px-6 py-3 font-black text-gray-400 uppercase tracking-widest">Time</th>
-                            <th className="px-6 py-3 font-black text-gray-400 uppercase tracking-widest">Description</th>
-                            <th className="px-6 py-3 font-black text-gray-400 uppercase tracking-widest text-right">Amount</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-50">
-                          {splitTransactions(historicalTransactions).acc.map(tx => (
-                            <tr key={tx.id} className="hover:bg-gray-50/30">
-                              <td className="px-6 py-3 font-bold text-gray-700">{tx.reference_type}</td>
-                              <td className="px-6 py-3 text-gray-500 whitespace-nowrap">{formatTime(tx.entry_date)}</td>
-                              <td className="px-6 py-3 text-gray-600 truncate max-w-md">{tx.description}</td>
-                              <td className="px-6 py-3 text-right font-bold text-gray-800">{formatCurrency(tx.total_amount)}</td>
-                            </tr>
-                          ))}
-                          {splitTransactions(historicalTransactions).acc.length === 0 && (
-                            <tr><td colSpan="4" className="px-6 py-8 text-center text-gray-400 italic">No bank transactions this day.</td></tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
+        {/* ── Tab: Detailed Report ── */}
+        {activeTab === "report" && selectedAudit && (
+          <div className="space-y-6 animate-in fade-in duration-500 print-area">
+            {/* Report Header */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 flex items-center justify-between">
+              <div>
+                <h3 className="text-2xl font-black text-gray-800 tracking-tight flex items-center gap-3">
+                  <History className="text-indigo-600" size={28} />
+                  Audit Report: {formatDate(selectedAudit.business_date)}
+                  {selectedAudit.status === "open" && (
+                    <span className="ml-2 px-2 py-0.5 bg-emerald-500 text-white text-[10px] font-black uppercase rounded-md animate-pulse">
+                      LIVE
+                    </span>
+                  )}
+                </h3>
+                <div className="flex items-center gap-4 mt-1">
+                  <span className="text-xs font-bold px-2 py-0.5 bg-gray-100 text-gray-600 rounded uppercase">ID: #{selectedAudit.id}</span>
+                  <span className="text-xs text-gray-400">Opened: {formatTime(selectedAudit.opened_at)}</span>
+                  {selectedAudit.closed_at && <span className="text-xs text-gray-400">Closed: {formatTime(selectedAudit.closed_at)}</span>}
                 </div>
               </div>
-
-              {/* Modal Footer */}
-              <div className="bg-white px-8 py-5 border-t border-gray-200 flex justify-end gap-3">
+              <div className="flex gap-3 no-print">
                 <button 
                   onClick={() => window.print()}
                   className="px-6 py-2.5 border border-gray-200 rounded-xl text-gray-600 font-bold hover:bg-gray-50 transition-all flex items-center gap-2"
@@ -795,15 +741,194 @@ export default function DayAudit() {
                   Print Report
                 </button>
                 <button 
-                  onClick={() => setSelectedAudit(null)}
-                  className="px-8 py-2.5 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-all"
+                  onClick={() => setActiveTab("history")}
+                  className="px-6 py-2.5 bg-gray-100 text-gray-600 font-bold rounded-xl hover:bg-gray-200 transition-all"
                 >
-                  Close
+                  Back to History
                 </button>
+              </div>
+            </div>
+
+            <div className="space-y-8">
+              {/* 1. Summary Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">Revenue Breakdown</p>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-gray-500">Room Revenue</span>
+                      <span className="font-bold text-gray-800">{formatCurrency(selectedAudit.total_room_revenue)}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-gray-500">Food Revenue</span>
+                      <span className="font-bold text-gray-800">{formatCurrency(selectedAudit.total_food_revenue)}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-gray-500">Service Revenue</span>
+                      <span className="font-bold text-gray-800">{formatCurrency(selectedAudit.total_service_revenue)}</span>
+                    </div>
+                    <div className="pt-3 border-t border-dashed flex justify-between items-center text-base">
+                      <span className="font-bold text-gray-700">Total Revenue</span>
+                      <span className="font-black text-indigo-600">{formatCurrency(selectedAudit.total_room_revenue + selectedAudit.total_food_revenue + selectedAudit.total_service_revenue)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">Cash Reconciliation</p>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-gray-500">Opening Cash</span>
+                      <span className="font-bold text-gray-800">{formatCurrency(selectedAudit.opening_cash_balance)}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-gray-500">Expected Closing</span>
+                      <span className="font-bold text-gray-800">{formatCurrency(selectedAudit.system_expected_cash)}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-gray-500">Actual Closing</span>
+                      <span className={`font-bold ${selectedAudit.status === 'open' ? 'text-gray-400 italic' : 'text-emerald-600'}`}>
+                        {selectedAudit.status === 'open' ? 'In Progress' : formatCurrency(selectedAudit.closing_cash_balance)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+                  <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-4">Account Reconciliation</p>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-gray-500">Opening Account</span>
+                      <span className="font-bold text-gray-800">{formatCurrency(selectedAudit.opening_account_balance)}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-gray-500">Expected Closing</span>
+                      <span className="font-bold text-gray-800">{formatCurrency(selectedAudit.system_expected_account)}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-gray-500">Actual Closing</span>
+                      <span className={`font-bold ${selectedAudit.status === 'open' ? 'text-gray-400 italic' : 'text-indigo-600'}`}>
+                        {selectedAudit.status === 'open' ? 'In Progress' : formatCurrency(selectedAudit.closing_account_balance)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">Other Metrics</p>
+                  <div className="space-y-3 text-sm">
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-500">GST Collected</span>
+                      <span className="font-bold text-indigo-500">{formatCurrency(selectedAudit.total_gst_collected)}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-500">Inv. Purchases</span>
+                      <span className="font-bold text-rose-500">{formatCurrency(selectedAudit.total_purchases)}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-500">Daily Expenses</span>
+                      <span className="font-bold text-rose-500">{formatCurrency(selectedAudit.total_expenses)}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-500">Rooms Occupied</span>
+                      <span className="font-bold text-gray-800">{selectedAudit.rooms_occupied}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {selectedAudit.override_reason && (
+                <div className="p-4 bg-amber-50 rounded-xl text-sm text-amber-800 leading-relaxed border border-amber-100">
+                  <strong>Balance Override Reason:</strong> {selectedAudit.override_reason}
+                </div>
+              )}
+
+              {/* 2. Transaction Tables */}
+              <div className="space-y-6">
+                {/* Cash Table */}
+                <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
+                  <div className="px-6 py-3 bg-emerald-50 border-b border-gray-100 flex items-center justify-between">
+                    <h4 className="text-xs font-black text-emerald-700 uppercase tracking-widest flex items-center gap-2">
+                      <Banknote size={14} /> Cash Transaction Log
+                    </h4>
+                    <span className="text-[10px] font-bold text-emerald-600 bg-white px-2 py-0.5 rounded-full">{splitTransactions(historicalTransactions).cash.length} entries</span>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="bg-gray-50/50">
+                          <th className="px-6 py-3 font-black text-gray-400 uppercase tracking-widest">Type</th>
+                          <th className="px-6 py-3 font-black text-gray-400 uppercase tracking-widest">Time</th>
+                          <th className="px-6 py-3 font-black text-gray-400 uppercase tracking-widest">Description</th>
+                          <th className="px-6 py-3 font-black text-gray-400 uppercase tracking-widest text-right">Debit</th>
+                          <th className="px-6 py-3 font-black text-gray-400 uppercase tracking-widest text-right">Credit</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {splitTransactions(historicalTransactions).cash.map(tx => {
+                          const { debit, credit } = getDebitCredit(tx, "cash");
+                          return (
+                            <tr key={tx.id} className="hover:bg-gray-50/30">
+                              <td className="px-6 py-3 font-bold text-gray-700">{tx.reference_type}</td>
+                              <td className="px-6 py-3 text-gray-500 whitespace-nowrap">{formatTime(tx.entry_date)}</td>
+                              <td className="px-6 py-3 text-gray-600 truncate max-w-md">{tx.description}</td>
+                              <td className="px-6 py-3 text-right font-bold text-emerald-600">{debit > 0 ? formatCurrency(debit) : "—"}</td>
+                              <td className="px-6 py-3 text-right font-bold text-rose-600">{credit > 0 ? formatCurrency(credit) : "—"}</td>
+                            </tr>
+                          );
+                        })}
+                        {splitTransactions(historicalTransactions).cash.length === 0 && (
+                          <tr><td colSpan="5" className="px-6 py-8 text-center text-gray-400 italic">No cash transactions this day.</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Account Table */}
+                <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
+                  <div className="px-6 py-3 bg-indigo-50 border-b border-gray-100 flex items-center justify-between">
+                    <h4 className="text-xs font-black text-indigo-700 uppercase tracking-widest flex items-center gap-2">
+                      <TrendingUp size={14} /> Account/Bank Transaction Log
+                    </h4>
+                    <span className="text-[10px] font-bold text-indigo-600 bg-white px-2 py-0.5 rounded-full">{splitTransactions(historicalTransactions).acc.length} entries</span>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="bg-gray-50/50">
+                          <th className="px-6 py-3 font-black text-gray-400 uppercase tracking-widest">Type</th>
+                          <th className="px-6 py-3 font-black text-gray-400 uppercase tracking-widest">Time</th>
+                          <th className="px-6 py-3 font-black text-gray-400 uppercase tracking-widest">Description</th>
+                          <th className="px-6 py-3 font-black text-gray-400 uppercase tracking-widest text-right">Debit</th>
+                          <th className="px-6 py-3 font-black text-gray-400 uppercase tracking-widest text-right">Credit</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {splitTransactions(historicalTransactions).acc.map(tx => {
+                          const { debit, credit } = getDebitCredit(tx, "bank");
+                          return (
+                            <tr key={tx.id} className="hover:bg-gray-50/30">
+                              <td className="px-6 py-3 font-bold text-gray-700">{tx.reference_type}</td>
+                              <td className="px-6 py-3 text-gray-500 whitespace-nowrap">{formatTime(tx.entry_date)}</td>
+                              <td className="px-6 py-3 text-gray-600 truncate max-w-md">{tx.description}</td>
+                              <td className="px-6 py-3 text-right font-bold text-indigo-600">{debit > 0 ? formatCurrency(debit) : "—"}</td>
+                              <td className="px-6 py-3 text-right font-bold text-rose-600">{credit > 0 ? formatCurrency(credit) : "—"}</td>
+                            </tr>
+                          );
+                        })}
+                        {splitTransactions(historicalTransactions).acc.length === 0 && (
+                          <tr><td colSpan="5" className="px-6 py-8 text-center text-gray-400 italic">No bank transactions this day.</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         )}
+
 
         {/* ── MODAL: Open Day ── */}
         {showOpenForm && (
