@@ -3297,7 +3297,6 @@ const BookingFormModal = ({
                             onChange={handleChange}
                             placeholder="alexander@resort.com"
                             className="w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 focus:bg-white transition-all outline-none font-bold text-slate-700 text-sm"
-                            required
                           />
                         </div>
                       </div>
@@ -3732,6 +3731,47 @@ const Bookings = () => {
   const [bookingTab, setBookingTab] = useState("room"); // "room" or "package"
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
   const [bookingToConfirm, setBookingToConfirm] = useState(null);
+
+  const handleBookFromCalendar = (roomTypeName, dateStr) => {
+    const rtObj = roomTypeObjects.find(rt => rt.name === roomTypeName);
+    const checkInDate = new Date(dateStr);
+    const checkOutDate = new Date(checkInDate);
+    checkOutDate.setDate(checkInDate.getDate() + 1);
+
+    const formattedCheckIn = dateStr;
+    const formattedCheckOut = checkOutDate.toISOString().split('T')[0];
+
+    setFormData({
+      guestName: "",
+      guestMobile: "",
+      guestEmail: "",
+      room_type_id: rtObj ? String(rtObj.id) : "",
+      roomNumbers: [],
+      checkIn: formattedCheckIn,
+      checkOut: formattedCheckOut,
+      adults: 1,
+      children: 0,
+      num_rooms: 1,
+      source: "Admin",
+      custom_room_rate: "",
+    });
+
+    setPackageBookingForm({
+      package_id: "",
+      guest_name: "",
+      guest_email: "",
+      guest_mobile: "",
+      check_in: formattedCheckIn,
+      check_out: formattedCheckOut,
+      adults: 2,
+      children: 0,
+      room_ids: [],
+      source: "Admin",
+    });
+
+    setBookingTab("room");
+    setIsBookingModalOpen(true);
+  };
 
   // Map of roomId -> room for robust display when API omits nested room payloads
   const roomIdToRoom = useMemo(() => {
@@ -6601,6 +6641,7 @@ const Bookings = () => {
             rooms={allRooms}
             bookings={calendarBookings}
             roomTypeObjects={roomTypeObjects}
+            onBookRoom={handleBookFromCalendar}
           />
         )}
 

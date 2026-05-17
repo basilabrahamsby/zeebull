@@ -36,7 +36,7 @@ class BookingCreate(BaseModel):
     external_id: Optional[str] = None
     guest_name: str
     guest_mobile: str
-    guest_email: EmailStr
+    guest_email: Optional[EmailStr] = None
     check_in: date
     check_out: date
     adults: int
@@ -44,6 +44,12 @@ class BookingCreate(BaseModel):
     num_rooms: int = 1
     branch_id: Optional[int] = None
     custom_room_rate: Optional[float] = None
+
+    @validator('guest_email', pre=True)
+    def blank_email_to_none(cls, v):
+        if v == "" or v is None:
+            return None
+        return v
 
     @validator('check_out')
     def validate_booking_duration(cls, v, values):

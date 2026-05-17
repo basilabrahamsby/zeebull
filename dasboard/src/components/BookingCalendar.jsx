@@ -8,13 +8,14 @@ import {
   Clock, 
   Info,
   Globe,
-  RefreshCw
+  RefreshCw,
+  Plus
 } from 'lucide-react';
 
 import API from '../services/api';
 import toast from 'react-hot-toast';
 
-const BookingCalendar = ({ rooms, bookings, roomTypeObjects }) => {
+const BookingCalendar = ({ rooms, bookings, roomTypeObjects, onBookRoom }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewDays, setViewDays] = useState(14); // Number of days to show
   const [selectedCell, setSelectedCell] = useState(null); // { groupName, date, bookings }
@@ -420,13 +421,10 @@ const BookingCalendar = ({ rooms, bookings, roomTypeObjects }) => {
                     return (
                       <button 
                         key={idx} 
-                        disabled={activeBookingsCount === 0}
                         onClick={() => setSelectedCell({ groupName: group.name, date, bookings: activeBookings })}
                         className={`w-32 h-24 flex-shrink-0 border-r border-gray-100 p-2 flex flex-col items-center justify-center gap-1 transition-all ${
                           isToday(date) ? 'bg-indigo-50/10' : ''
-                        } ${isSoldOut ? 'bg-rose-50/30' : 'bg-white'} ${
-                          activeBookingsCount > 0 ? 'hover:bg-indigo-50/5 cursor-pointer shadow-sm hover:scale-[1.02] active:scale-[0.98]' : 'cursor-default'
-                        }`}
+                        } ${isSoldOut ? 'bg-rose-50/30' : 'bg-white'} hover:bg-indigo-50/5 cursor-pointer shadow-sm hover:scale-[1.02] active:scale-[0.98]`}
                       >
                         <div className={`text-xl font-black ${isSoldOut ? 'text-rose-600' : 'text-indigo-600'}`}>
                            {availability}
@@ -490,19 +488,45 @@ const BookingCalendar = ({ rooms, bookings, roomTypeObjects }) => {
                   {selectedCell.groupName} • {new Date(selectedCell.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
                 </p>
               </div>
-              <button 
-                onClick={() => setSelectedCell(null)}
-                className="p-2 hover:bg-gray-100 rounded-xl transition-colors text-gray-400 hover:text-gray-600 font-bold text-sm cursor-pointer"
-              >
-                ✕
-              </button>
+              <div className="flex items-center gap-3">
+                {onBookRoom && selectedCell.groupName !== "All Categories" && (
+                  <button
+                    onClick={() => {
+                      onBookRoom(selectedCell.groupName, formatDate(selectedCell.date));
+                      setSelectedCell(null);
+                    }}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-md active:scale-95 flex items-center gap-1.5"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Book Room
+                  </button>
+                )}
+                <button 
+                  onClick={() => setSelectedCell(null)}
+                  className="p-2 hover:bg-gray-100 rounded-xl transition-colors text-gray-400 hover:text-gray-600 font-bold text-sm cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
 
             {/* List */}
             <div className="p-6 overflow-y-auto flex-1 flex flex-col gap-4">
               {selectedCell.bookings.length === 0 ? (
-                <div className="text-center py-8 text-gray-400 font-medium">
-                  No active bookings for this date.
+                <div className="text-center py-8 flex flex-col items-center justify-center gap-4">
+                  <span className="text-gray-400 font-medium">No active bookings for this date.</span>
+                  {onBookRoom && selectedCell.groupName !== "All Categories" && (
+                    <button
+                      onClick={() => {
+                        onBookRoom(selectedCell.groupName, formatDate(selectedCell.date));
+                        setSelectedCell(null);
+                      }}
+                      className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-md active:scale-95 flex items-center gap-2"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Create New Booking
+                    </button>
+                  )}
                 </div>
               ) : (
                 selectedCell.bookings.map((b, bIdx) => (
