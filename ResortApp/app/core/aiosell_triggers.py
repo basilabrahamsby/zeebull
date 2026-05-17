@@ -5,7 +5,7 @@ import logging
 from app.database import SessionLocal
 from app.models.room import RoomType, Room
 from app.models.booking import Booking, BookingRoom
-from app.models.booking import Booking, BookingRoom
+from app.models.Package import PackageBooking, PackageBookingRoom
 from app.core.aiosell_client import push_inventory, push_rate, batch_push_inventory, batch_push_rates
 from app.utils.aiosell_config import is_aiosell_active
 
@@ -79,7 +79,21 @@ def _calculate_availability_for_date(db: Session, room_type_id: int, target_date
         
         soft_remainder += max(0, (b.num_rooms or 1) - num_assigned_this_type)
 
-    total_bookings = assigned_overlaps + soft_remainder
+    # 4. Package Hard allocations
+    assigned_packages = db.query(PackageBookingRoom).join(PackageBooking).join(Room).filter(
+        Room.room_type_id == room_type_id,
+        PackageBooking.branch_id == effective_branch,
+        PackageBooking.status.in_(ACTIVE_STATUSES),
+        PackageBooking.check_in <= target_date,
+        PackageBooking.check_out > target_date
+    ).count()
+
+    # 5. Package Soft allocations (Note: Packages generally use hard-assigned rooms 
+    # but we count them here if any unassigned remainder exists, similar to regular bookings)
+    # However, since PackageBooking doesn't have a direct room_type_id, we primarily
+    # rely on assigned rooms. If there are future soft-package types, they would go here.
+    
+    total_bookings = assigned_overlaps + soft_remainder + assigned_packages
 
     # Physical availability (internal view)
     physical_available = max(0, capacity - total_bookings)

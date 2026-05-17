@@ -5,7 +5,8 @@ from app.schemas.foodorder import FoodOrderItemOut
 
 class ServiceRequestCreate(BaseModel):
     food_order_id: Optional[int] = None  # Nullable for cleaning/other non-food requests
-    room_id: int
+    room_id: Optional[int] = None
+    table_id: Optional[int] = None
     employee_id: Optional[int] = None
     request_type: str = "delivery"
     description: Optional[str] = None
@@ -19,11 +20,13 @@ class ServiceRequestUpdate(BaseModel):
     payment_mode: Optional[str] = None
     return_location_id: Optional[int] = None
     pickup_location_id: Optional[int] = None
+    inventory_returns: Optional[List[dict]] = None
 
 class ServiceRequestOut(BaseModel):
     id: int
     food_order_id: Optional[int] = None
-    room_id: int
+    room_id: Optional[int] = None
+    table_id: Optional[int] = None
     employee_id: Optional[int] = None
     request_type: str
     description: Optional[str] = None
@@ -37,6 +40,7 @@ class ServiceRequestOut(BaseModel):
     food_order_total: Optional[float] = None
     food_order_status: Optional[str] = None
     room_number: Optional[str] = None
+    table_number: Optional[str] = None
     employee_name: Optional[str] = None
     food_order_billing_status: Optional[str] = None
     food_items: Optional[List[FoodOrderItemOut]] = None

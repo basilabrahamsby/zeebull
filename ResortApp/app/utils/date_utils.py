@@ -195,25 +195,30 @@ def ist_to_utc(ist_dt: datetime) -> datetime:
 
 def format_iso_z(dt: Union[datetime, Union[datetime, date, None]]) -> Optional[str]:
     """
-    Safely format a date or datetime object as an ISO string with a 'Z' suffix.
-    Ensures that date objects include a time part to avoid parsing errors in clients like Flutter.
+    Safely format a date or datetime object as an offset-naive local ISO string (without 'Z').
+    Ensures timezone-aware objects are converted to local system timezone first, then made naive.
     """
     from datetime import date as dt_date
     if dt is None:
         return None
     
     if isinstance(dt, datetime):
-        # If it already has Z or timezone offset, don't add Z
-        iso = dt.isoformat()
-        if 'Z' in iso or '+' in iso or (iso.count('-') > 2): # Very basic check
-             return iso
-        return iso + "Z"
+        # Convert to local system timezone if aware
+        if dt.tzinfo is not None:
+            dt = dt.astimezone(get_ist_timezone())
+        # Strip timezone to make it naive local
+        return dt.replace(tzinfo=None).isoformat()
     
     if isinstance(dt, dt_date):
-        # Convert date to datetime at midnight to ensure valid ISO format for parsers expecting time
-        return datetime.combine(dt, datetime.min.time()).isoformat() + "Z"
+        # Convert date to datetime at midnight to ensure valid ISO format
+        return datetime.combine(dt, datetime.min.time()).isoformat()
     
-    return str(dt) + "Z"
+    # Strip Z or offsets if passed as string
+    val = str(dt)
+    if val.endswith('Z'):
+        val = val[:-1]
+    return val
+
 
 
 

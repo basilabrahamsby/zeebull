@@ -580,8 +580,7 @@ class _RequestCardState extends State<_RequestCard> {
                       width: double.infinity,
                       child: ElevatedButton.icon(
                         onPressed: () {
-                            final desc = request.description.toLowerCase();
-                            if (desc.contains("checkout") || request.type.toLowerCase() == 'checkout') {
+                            if (request.type.toLowerCase() == 'checkout_verification' || request.type.toLowerCase() == 'checkout') {
                                showDialog(
                                  context: context,
                                  builder: (_) => CheckoutVerificationDialog(

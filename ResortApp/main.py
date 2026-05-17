@@ -82,6 +82,7 @@ from app.api import (
     rate_plan,
     calendar,
     day_audit,
+    restaurant_table,
 )
 from app.api.settings import router as settings_router
 from app.api import reports_module
@@ -358,6 +359,7 @@ app.include_router(gst_reports.router, prefix="/api", tags=["GST Reports"])
 app.include_router(reports_module.router, prefix="/api", tags=["Reports Module"])
 app.include_router(attendance.router, prefix="/api", tags=["Attendance"])
 app.include_router(day_audit.router, prefix="/api", tags=["Day Audit"])
+app.include_router(restaurant_table.router, prefix="/api", tags=["Restaurant Tables"])
 app.include_router(notification.router, prefix="/api/notifications", tags=["Notifications"])
 app.include_router(service_report.router, prefix="/api", tags=["Service Reports"])
 app.include_router(activity_logs.router, prefix="/api/activity-logs", tags=["Activity Logs"])

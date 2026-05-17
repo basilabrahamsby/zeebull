@@ -42,22 +42,64 @@ def update_room_statuses(db: Session, branch_id: int = None):
             
             # 2. Bulk fetch active check-ins (Checked-in status takes precedence)
             checked_in_rooms = set()
+            from app.models.checkout import Checkout
+            from sqlalchemy.orm import joinedload
             
+            # Fetch all checkouts for active regular bookings to exclude checked out rooms in multi-room bookings
+            active_booking_ids = [b_id for (b_id,) in db.query(Booking.id).filter(
+                Booking.status.in_(['checked-in', 'checked_in', 'Checked-in'])
+            ).all()]
+            
+            checkouts = db.query(Checkout.room_number, Checkout.booking_id).filter(
+                Checkout.booking_id.in_(active_booking_ids)
+            ).all()
+            
+            checked_out_rooms_by_booking = {}
+            for room_num_str, b_id in checkouts:
+                if room_num_str and b_id:
+                    if b_id not in checked_out_rooms_by_booking:
+                        checked_out_rooms_by_booking[b_id] = set()
+                    checked_out_rooms_by_booking[b_id].update([r.strip() for r in room_num_str.split(',')])
+
+            # Fetch all checkouts for active package bookings to exclude checked out rooms
+            active_pkg_booking_ids = [pb_id for (pb_id,) in db.query(PackageBooking.id).filter(
+                PackageBooking.status.in_(['checked-in', 'checked_in', 'Checked-in'])
+            ).all()]
+            
+            pkg_checkouts = db.query(Checkout.room_number, Checkout.package_booking_id).filter(
+                Checkout.package_booking_id.in_(active_pkg_booking_ids)
+            ).all()
+            
+            checked_out_rooms_by_pkg_booking = {}
+            for room_num_str, pb_id in pkg_checkouts:
+                if room_num_str and pb_id:
+                    if pb_id not in checked_out_rooms_by_pkg_booking:
+                        checked_out_rooms_by_pkg_booking[pb_id] = set()
+                    checked_out_rooms_by_pkg_booking[pb_id].update([r.strip() for r in room_num_str.split(',')])
+
             # Regular bookings
-            active_checkins = db.query(BookingRoom.room_id).join(Booking).filter(
+            active_checkins = db.query(BookingRoom).options(joinedload(BookingRoom.room)).join(Booking).filter(
                 BookingRoom.room_id.in_(room_ids),
                 Booking.status.in_(['checked-in', 'checked_in', 'Checked-in'])
             ).all()
-            for r in active_checkins:
-                checked_in_rooms.add(r.room_id)
+            for br in active_checkins:
+                room_num = br.room.number if br.room else None
+                b_id = br.booking_id
+                if room_num and b_id in checked_out_rooms_by_booking and room_num in checked_out_rooms_by_booking[b_id]:
+                    continue
+                checked_in_rooms.add(br.room_id)
                 
             # Package bookings
-            pkg_checkins = db.query(PackageBookingRoom.room_id).join(PackageBooking).filter(
+            pkg_checkins = db.query(PackageBookingRoom).options(joinedload(PackageBookingRoom.room)).join(PackageBooking).filter(
                 PackageBookingRoom.room_id.in_(room_ids),
                 PackageBooking.status.in_(['checked-in', 'checked_in', 'Checked-in'])
             ).all()
-            for r in pkg_checkins:
-                checked_in_rooms.add(r.room_id)
+            for pbr in pkg_checkins:
+                room_num = pbr.room.number if pbr.room else None
+                pb_id = pbr.package_booking_id
+                if room_num and pb_id in checked_out_rooms_by_pkg_booking and room_num in checked_out_rooms_by_pkg_booking[pb_id]:
+                    continue
+                checked_in_rooms.add(pbr.room_id)
                 
             # 3. Bulk fetch active reservations (Booked status for today)
             booked_rooms = set()

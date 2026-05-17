@@ -8,7 +8,7 @@ import 'package:intl/intl.dart';
 import '../../../presentation/providers/auth_provider.dart';
 import '../../../presentation/providers/attendance_provider.dart';
 
-import '../../../presentation/widgets/app_drawer.dart';
+import '../../../presentation/widgets/app_drawer.dart' show AppDrawer;
 
 class KOTScreen extends StatefulWidget {
   const KOTScreen({super.key});
@@ -424,7 +424,7 @@ class _KOTScreenState extends State<KOTScreen> {
                             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                           ),
                           Text(
-                            "Order #${kot.id} • ${kot.roomNumber}",
+                            "Order #${kot.id} • ${kot.displayLocation}",
                             style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
                           ),
                         ],
@@ -652,7 +652,7 @@ class _KOTScreenState extends State<KOTScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text("Assign Delivery Staff", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                      Text("Order #${kot.id} • ${kot.roomNumber}", style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+                      Text("Order #${kot.id} • ${kot.displayLocation}", style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
                     ],
                   ),
                 ],
@@ -988,7 +988,7 @@ class _KOTScreenState extends State<KOTScreen> {
                       Row(
                         children: [
                           Text(
-                            kot.roomNumber,
+                            kot.displayLocation,
                             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                           ),
                           const SizedBox(width: 8),

@@ -9,7 +9,8 @@ class ServiceRequest(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     food_order_id = Column(Integer, ForeignKey("food_orders.id"), nullable=True)  # Nullable for cleaning/other non-food requests
-    room_id = Column(Integer, ForeignKey("rooms.id"), nullable=False)
+    room_id = Column(Integer, ForeignKey("rooms.id"), nullable=True)
+    table_id = Column(Integer, ForeignKey("restaurant_tables.id"), nullable=True)
     employee_id = Column(Integer, ForeignKey("employees.id", ondelete="SET NULL"), nullable=True)
     request_type = Column(String, default="delivery")  # "delivery" or other types
     description = Column(Text, nullable=True)  # Delivery request details
@@ -29,6 +30,7 @@ class ServiceRequest(Base):
     # Relationships
     food_order = relationship("FoodOrder", foreign_keys=[food_order_id])
     room = relationship("Room", foreign_keys=[room_id])
+    table = relationship("RestaurantTable", foreign_keys=[table_id])
     employee = relationship("Employee", foreign_keys=[employee_id], back_populates="service_requests")
     pickup_location = relationship("Location", foreign_keys=[pickup_location_id])
 

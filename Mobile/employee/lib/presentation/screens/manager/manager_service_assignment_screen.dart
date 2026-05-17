@@ -405,7 +405,10 @@ class _ManagerServiceAssignmentScreenState extends State<ManagerServiceAssignmen
             _buildGlassDropdown<int>(
                 label: "TARGET ROOM",
                 value: selectedRoom,
-                items: _rooms.map<DropdownMenuItem<int>>((r) => DropdownMenuItem(value: r['id'], child: Text("ROOM ${r['number'] ?? r['room_number']}", style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)))).toList(),
+                items: _rooms.where((r) {
+                  final status = (r['status'] ?? '').toString().toLowerCase();
+                  return status == 'checked-in' || status == 'checked_in' || status == 'occupied';
+                }).map<DropdownMenuItem<int>>((r) => DropdownMenuItem(value: r['id'], child: Text("ROOM ${r['number'] ?? r['room_number']}", style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)))).toList(),
                 onChanged: (v) => setState(() => selectedRoom = v),
             ),
             const SizedBox(height: 16),
@@ -979,7 +982,10 @@ class _ManagerServiceAssignmentScreenState extends State<ManagerServiceAssignmen
                _buildGlassDropdown<int>(
                  label: "SELECT TARGET ROOM",
                  value: selectedRoomId,
-                 items: _rooms.map<DropdownMenuItem<int>>((r) => DropdownMenuItem(value: r['id'], child: Text("ROOM ${r['room_number']}", style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)))).toList(),
+                 items: _rooms.where((r) {
+                   final status = (r['status'] ?? '').toString().toLowerCase();
+                   return status == 'checked-in' || status == 'checked_in' || status == 'occupied';
+                 }).map<DropdownMenuItem<int>>((r) => DropdownMenuItem(value: r['id'], child: Text("ROOM ${r['room_number']}", style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)))).toList(),
                  onChanged: (v) => setModalState(() => selectedRoomId = v),
                ),
                const SizedBox(height: 16),
@@ -1079,8 +1085,6 @@ class _ManagerServiceAssignmentScreenState extends State<ManagerServiceAssignmen
 
        if (hasInventory && items != null) {
            int? selectedLocId;
-           // Controllers for each item to allow specific return quantities
-           // Map<int, TextEditingController>
            final Map<int, TextEditingController> qtyControllers = {};
            for (var item in items) {
              qtyControllers[item['id']] = TextEditingController(); 
@@ -1170,16 +1174,78 @@ class _ManagerServiceAssignmentScreenState extends State<ManagerServiceAssignmen
                       }
                   }
               }
-              _performAssignmentUpdate(id, status, returnLocationId: selectedLocId, itemReturns: itemReturns, items: items);
+
+              // Ask for settlement
+              final settlement = await _showSettlementDialog();
+              if (settlement != null) {
+                _performAssignmentUpdate(id, status, 
+                  returnLocationId: selectedLocId, 
+                  itemReturns: itemReturns, 
+                  items: items,
+                  billingStatus: settlement['status'],
+                  paymentMethod: settlement['mode'],
+                );
+              }
            }
            return;
        }
+
+       // Simple completion case
+       final settlement = await _showSettlementDialog();
+       if (settlement != null) {
+         _performAssignmentUpdate(id, status, 
+           billingStatus: settlement['status'], 
+           paymentMethod: settlement['mode']
+         );
+       }
+       return;
      }
 
      _performAssignmentUpdate(id, status);
-  }
+   }
 
-
+   Future<Map<String, String>?> _showSettlementDialog() async {
+     if (!mounted) return null;
+     
+     return await showDialog<Map<String, String>?>(
+       context: context,
+       builder: (ctx) => OnyxGlassDialog(
+         title: "SERVICE SETTLEMENT",
+         children: [
+           const Text("RECORD PAYMENT STATUS FOR THIS COMPLETED SERVICE.", 
+             textAlign: TextAlign.center,
+             style: TextStyle(color: Colors.white24, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1)),
+         ],
+         actions: [
+           TextButton(
+             onPressed: () => Navigator.pop(ctx, {'status': 'unpaid'}), 
+             child: const Text("UNPAID / ROOM BILL", style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w900, fontSize: 10))
+           ),
+           ElevatedButton(
+             onPressed: () async {
+               final mode = await showDialog<String>(
+                 context: ctx,
+                 builder: (pctx) => SimpleDialog(
+                   backgroundColor: AppColors.onyx,
+                   title: const Text("SELECT PAYMENT MODE", style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+                   children: [
+                     SimpleDialogOption(onPressed: () => Navigator.pop(pctx, 'Cash'), child: const Text("CASH", style: TextStyle(color: Colors.white))),
+                     SimpleDialogOption(onPressed: () => Navigator.pop(pctx, 'Card'), child: const Text("CARD", style: TextStyle(color: Colors.white))),
+                     SimpleDialogOption(onPressed: () => Navigator.pop(pctx, 'UPI'), child: const Text("UPI", style: TextStyle(color: Colors.white))),
+                   ],
+                 ),
+               );
+               if (mode != null) {
+                 Navigator.pop(ctx, {'status': 'paid', 'mode': mode});
+               }
+             },
+             style: ElevatedButton.styleFrom(backgroundColor: AppColors.success, foregroundColor: AppColors.onyx),
+             child: const Text("PAID", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 10)),
+           ),
+         ],
+       ),
+     );
+   }
 
   Future<void> _deleteAssignment(int id) async {
     final confirm = await showDialog<bool>(
@@ -1577,7 +1643,17 @@ class _ManagerServiceAssignmentScreenState extends State<ManagerServiceAssignmen
                         }
                     }
 
-                    _performAssignmentUpdate(id - 2000000, status, returnLocationId: selectedLocId, itemReturns: itemReturns, items: items);
+                    // Ask for settlement
+                    final settlement = await _showSettlementDialog();
+                    if (settlement != null) {
+                        _performAssignmentUpdate(id - 2000000, status, 
+                            returnLocationId: selectedLocId, 
+                            itemReturns: itemReturns, 
+                            items: items,
+                            billingStatus: settlement['status'],
+                            paymentMethod: settlement['mode']
+                        );
+                    }
                  }
                  return;
               }
@@ -1585,7 +1661,14 @@ class _ManagerServiceAssignmentScreenState extends State<ManagerServiceAssignmen
 
       }
 
-      _performUpdate(id, status);
+       if (status == 'completed') {
+           final settlement = await _showSettlementDialog();
+           if (settlement != null) {
+               _performUpdate(id, status, billingStatus: settlement['status'], paymentMethod: settlement['mode']);
+           }
+           return;
+       }
+       _performUpdate(id, status);
   }
 
   void _showRequestAssignment(int requestId) {
@@ -1670,9 +1753,12 @@ class _ManagerServiceAssignmentScreenState extends State<ManagerServiceAssignmen
       }
   }
 
-  Future<void> _performAssignmentUpdate(int id, String status, {int? returnLocationId, Map<int, double>? itemReturns, List<dynamic>? items}) async {
+  Future<void> _performAssignmentUpdate(int id, String status, {int? returnLocationId, Map<int, double>? itemReturns, List<dynamic>? items, String? billingStatus, String? paymentMethod}) async {
      try {
        final data = <String, dynamic>{'status': status};
+       if (billingStatus != null) data['billing_status'] = billingStatus;
+       if (paymentMethod != null) data['payment_method'] = paymentMethod;
+       
        if (returnLocationId != null) {
           data['return_location_id'] = returnLocationId;
           

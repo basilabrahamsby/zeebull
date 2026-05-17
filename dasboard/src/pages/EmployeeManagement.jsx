@@ -643,6 +643,18 @@ const LeaveManagement = () => {
   );
 };
 
+const formatTime12h = (timeStr) => {
+  if (!timeStr) return '-';
+  const parts = timeStr.split(':');
+  if (parts.length < 2) return timeStr;
+  let hour = parseInt(parts[0], 10);
+  const minute = parts[1];
+  const ampm = hour >= 12 ? 'PM' : 'AM';
+  hour = hour % 12;
+  hour = hour ? hour : 12; // the hour '0' should be '12'
+  return `${hour}:${minute} ${ampm}`;
+};
+
 const AttendanceTracking = () => {
   const { role: userRole, isSuperadmin } = usePermissions();
   const isAdminOrManager = isSuperadmin || ['super_admin', 'superadmin', 'admin', 'manager'].includes(userRole);
@@ -857,8 +869,11 @@ const AttendanceTracking = () => {
       let status = 'Absent';
       let statusDescription = '';
 
-      // Determine status based on total working hours
-      if (totalHours >= 8) {
+      // Determine status based on total working hours or open sessions
+      if (data.openLogs.length > 0) {
+        status = 'Active';
+        statusDescription = 'Clocked In (Session in progress)';
+      } else if (totalHours >= 8) {
         status = 'Present';
         statusDescription = 'Full Day Present (8+ hours)';
       } else if (totalHours >= 4 && totalHours < 8) {
@@ -894,6 +909,7 @@ const AttendanceTracking = () => {
 
   const getStatusColor = (status) => {
     if (status === 'Present') return 'bg-green-100 text-green-800 border-green-300';
+    if (status === 'Active') return 'bg-emerald-100 text-emerald-800 border-emerald-300';
     if (status === 'Half Day') return 'bg-yellow-100 text-yellow-800 border-yellow-300';
     if (status === 'Partial') return 'bg-orange-100 text-orange-800 border-orange-300';
     return 'bg-red-100 text-red-800 border-red-300';
@@ -921,10 +937,11 @@ const AttendanceTracking = () => {
 
             {/* Status Indicator */}
             {(() => {
-              const hasOpenClockIn = workLogs.some(log => log.check_out_time === null || log.check_out_time === undefined);
+              const openLog = workLogs.find(log => log.check_out_time === null || log.check_out_time === undefined);
+              const hasOpenClockIn = !!openLog;
               return (
                 <div className={`p-2 rounded-md text-center text-sm font-semibold ${hasOpenClockIn ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
-                  Status: {hasOpenClockIn ? '🟢 Clocked In' : '⚪ Not Clocked In'}
+                  Status: {hasOpenClockIn ? `🟢 Clocked In (at ${formatTime12h(openLog.check_in_time)})` : '⚪ Not Clocked In'}
                 </div>
               );
             })()}
@@ -1181,9 +1198,9 @@ const AttendanceTracking = () => {
                                           const hours = log.duration_hours || 0;
                                           return (
                                             <tr key={logIndex} className={`border-b last:border-b-0 ${isOpen ? 'bg-orange-50' : ''}`}>
-                                              <td className="py-2 px-3 font-medium">{log.check_in_time || 'N/A'}</td>
+                                              <td className="py-2 px-3 font-medium">{formatTime12h(log.check_in_time)}</td>
                                               <td className="py-2 px-3">
-                                                {log.check_out_time || (
+                                                {log.check_out_time ? formatTime12h(log.check_out_time) : (
                                                   <span className="text-orange-600 font-medium">In Progress...</span>
                                                 )}
                                               </td>

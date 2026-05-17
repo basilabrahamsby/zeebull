@@ -152,11 +152,11 @@ class ManagementProvider with ChangeNotifier {
     }
   }
 
-  Future<Map<String, dynamic>?> requestCheckout(String roomNumber, {String? branchId}) async {
+  Future<Map<String, dynamic>?> requestCheckout(String roomNumber, {String? branchId, String checkoutMode = 'single'}) async {
     final originalBranch = _branchId;
     try {
       if (branchId != null) _apiService.setBranchContext(branchId);
-      final response = await _apiService.createCheckoutRequest(roomNumber);
+      final response = await _apiService.createCheckoutRequest(roomNumber, mode: checkoutMode);
       if (response.statusCode == 200) {
         return response.data;
       }
@@ -180,11 +180,11 @@ class ManagementProvider with ChangeNotifier {
     return null;
   }
 
-  Future<Map<String, dynamic>?> getCheckoutRequestStatus(String roomNumber, {String? branchId}) async {
+  Future<Map<String, dynamic>?> getCheckoutRequestStatus(String roomNumber, {String? branchId, String checkoutMode = 'single'}) async {
     final originalBranch = _branchId;
     try {
       if (branchId != null) _apiService.setBranchContext(branchId);
-      final response = await _apiService.getCheckoutRequestStatus(roomNumber);
+      final response = await _apiService.getCheckoutRequestStatus(roomNumber, mode: checkoutMode);
       if (response.statusCode == 200) {
         return response.data;
       }
@@ -206,11 +206,11 @@ class ManagementProvider with ChangeNotifier {
     }
   }
 
-  Future<Map<String, dynamic>?> getBillSummary(String roomNumber, {String? branchId}) async {
+  Future<Map<String, dynamic>?> getBillSummary(String roomNumber, {String? branchId, String checkoutMode = 'single'}) async {
     final originalBranch = _branchId;
     try {
       if (branchId != null) _apiService.setBranchContext(branchId);
-      final response = await _apiService.getBillSummary(roomNumber);
+      final response = await _apiService.getBillSummary(roomNumber, mode: checkoutMode);
       if (response.statusCode == 200) {
         return response.data;
       }

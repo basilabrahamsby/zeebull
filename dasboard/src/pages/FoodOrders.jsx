@@ -145,7 +145,7 @@ export default function FoodOrders() {
   const statusColors = {
     pending: "bg-yellow-100 text-yellow-800",
     in_progress: "bg-blue-100 text-blue-800",
-    completed: "bg-green-100 text-green-800",
+    ready: "bg-purple-100 text-purple-800",
     completed: "bg-green-100 text-green-800",
     cancelled: "bg-red-100 text-red-800",
     scheduled: "bg-orange-100 text-orange-800",
@@ -2572,6 +2572,7 @@ export default function FoodOrders() {
                     <option value="">All Status</option>
                     <option value="pending">Pending</option>
                     <option value="in_progress">In Progress</option>
+                    <option value="ready">Ready</option>
                     <option value="completed">Completed</option>
                     <option value="cancelled">Cancelled</option>
                     <option value="scheduled">Scheduled</option>
@@ -2838,6 +2839,7 @@ export default function FoodOrders() {
                           >
                             <option value="pending">Pending</option>
                             <option value="in_progress">In Progress</option>
+                            <option value="ready">Ready</option>
                             <option value="completed">Completed</option>
                             <option value="cancelled">Cancelled</option>
                           </select>

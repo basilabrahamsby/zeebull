@@ -195,15 +195,28 @@ def get_bookings(
         if room_id:
             query = query.join(BookingRoom).filter(BookingRoom.room_id == room_id)
         
-        # Apply ordering
+        # Apply ordering - Default to Checked-in first
+        from sqlalchemy import case
+        status_priority = case(
+            (Booking.status.ilike('checked-in'), 1),
+            (Booking.status.ilike('booked'), 2),
+            (Booking.status.ilike('confirmed'), 2),
+            (Booking.status.ilike('checked-out'), 3),
+            (Booking.status.ilike('cancelled'), 4),
+            else_=5
+        )
+
         if order_by == "id" and order == "desc":
-            query = query.order_by(Booking.id.desc())
+            query = query.order_by(status_priority, Booking.id.desc())
         elif order_by == "id" and order == "asc":
-            query = query.order_by(Booking.id.asc())
+            query = query.order_by(status_priority, Booking.id.asc())
         elif order_by == "check_in" and order == "desc":
-            query = query.order_by(Booking.check_in.desc())
+            query = query.order_by(status_priority, Booking.check_in.desc())
         elif order_by == "check_in" and order == "asc":
-            query = query.order_by(Booking.check_in.asc())
+            query = query.order_by(status_priority, Booking.check_in.asc())
+        else:
+            # Default fallback
+            query = query.order_by(status_priority, Booking.id.desc())
         
         regular_bookings = query.offset(skip).limit(limit).all()
         
@@ -502,6 +515,7 @@ def _fetch_inventory(db: Session, room_ids: List[int], check_in: Union[date, dat
         if key not in aggregated:
             is_fixed = d.item.is_asset_fixed if d.item else False
             aggregated[key] = {
+                "item_id": d.item_id,
                 "item_name": d.item.name if d.item else "Unknown",
                 "quantity": 0.0,
                 "complimentary_qty": 0.0,
@@ -548,6 +562,7 @@ def _fetch_inventory(db: Session, room_ids: List[int], check_in: Union[date, dat
             if key not in aggregated:
                 is_fixed = m.item.is_asset_fixed if m.item else True
                 aggregated[key] = {
+                    "item_id": m.item_id,
                     "item_name": m.item.name if m.item else "Unknown Asset",
                     "quantity": m.quantity or 1.0,
                     "complimentary_qty": m.quantity or 1.0,
@@ -583,6 +598,7 @@ def _fetch_inventory(db: Session, room_ids: List[int], check_in: Union[date, dat
             if not already_present:
                 is_fixed = s.item.is_asset_fixed if s.item else False
                 aggregated[f"stock_{item_id}"] = {
+                    "item_id": s.item_id,
                     "item_name": s.item.name if s.item else "Unknown",
                     "quantity": s.quantity,
                     "complimentary_qty": s.quantity,
@@ -599,7 +615,8 @@ def _fetch_inventory(db: Session, room_ids: List[int], check_in: Union[date, dat
                     "type": "asset" if is_fixed else "consumable"
                 }
 
-    return list(aggregated.values())
+    # Filter out items with zero or negative quantity (returned items)
+    return [item for item in aggregated.values() if item["quantity"] > 0]
 
 # ----------------------------------------------------------------
 # GET Detailed view for a SINGLE booking (regular or package)
@@ -1025,6 +1042,9 @@ def create_booking(
         if (effective_overlaps + rooms_requested) > capacity:
             raise HTTPException(status_code=400, detail=f"No rooms of type '{room_type.name}' available for selected dates (Available: {max(0, capacity - effective_overlaps)}, Requested: {rooms_requested}).")
 
+        num_rooms_val = booking.num_rooms or 1
+        stored_room_rate = (booking.custom_room_rate / num_rooms_val) if (booking.custom_room_rate and booking.custom_room_rate > 0) else 0.0
+
         db_booking = Booking(
             guest_name=booking.guest_name,
             guest_mobile=booking.guest_mobile,
@@ -1039,8 +1059,8 @@ def create_booking(
             user_id=guest_user_id,
             branch_id=branch_id,
             status="Booked",
-            num_rooms=booking.num_rooms or 1,
-            room_rate=booking.custom_room_rate or 0.0
+            num_rooms=num_rooms_val,
+            room_rate=stored_room_rate
         )
         
         db.add(db_booking)
@@ -1085,6 +1105,9 @@ def create_booking(
                 room = next(r for r in selected_rooms if r.id == room_id)
                 raise HTTPException(status_code=400, detail=f"Room {room.number} is unavailable.")
 
+        num_rooms_val = num_rooms
+        stored_room_rate = (booking.custom_room_rate / num_rooms_val) if (booking.custom_room_rate and booking.custom_room_rate > 0) else 0.0
+
         db_booking = Booking(
             guest_name=booking.guest_name,
             guest_mobile=booking.guest_mobile,
@@ -1098,8 +1121,8 @@ def create_booking(
             user_id=guest_user_id,
             branch_id=branch_id,
             status="Booked",
-            num_rooms=num_rooms,
-            room_rate=booking.custom_room_rate or 0.0
+            num_rooms=num_rooms_val,
+            room_rate=stored_room_rate
         )
         # Use first room's type as primary type if none provided
         if not db_booking.room_type_id and selected_rooms:
@@ -1134,7 +1157,8 @@ def create_booking(
         room_count = len(booking_full.booking_rooms) or booking_full.num_rooms or 1
         if booking.custom_room_rate and booking.custom_room_rate > 0:
             nights = max(1, (booking_full.check_out - booking_full.check_in).days)
-            total_amt = booking.custom_room_rate * nights * room_count
+            # Custom rate is now treated as "Total per night for all rooms"
+            total_amt = booking.custom_room_rate * nights
         elif booking_full.room_type_id and booking_full.check_in and booking_full.check_out:
             total_amt = calculate_dynamic_booking_price(db, booking_full.room_type_id, booking_full.check_in, booking_full.check_out, room_count)
     except Exception as e:

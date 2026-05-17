@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
@@ -113,6 +114,8 @@ class _KitchenDashboardState extends State<KitchenDashboard> {
             k.status.toLowerCase() == 'pending' || k.status.toLowerCase() == 'accepted').toList();
           final cookingOrders = kitchen.activeKots.where((k) => 
             k.status.toLowerCase() == 'cooking' || k.status.toLowerCase() == 'preparing').toList();
+          final readyOrders = kitchen.activeKots.where((k) => 
+            k.status.toLowerCase() == 'ready' || k.status.toLowerCase() == 'served').toList();
           
           return Column(
             children: [
@@ -137,11 +140,12 @@ class _KitchenDashboardState extends State<KitchenDashboard> {
                         const SizedBox(height: 24),
                         _buildLiveOrdersHeader(pendingOrders.length),
                         const SizedBox(height: 12),
-                        if (pendingOrders.isEmpty && cookingOrders.isEmpty)
+                        if (pendingOrders.isEmpty && cookingOrders.isEmpty && readyOrders.isEmpty)
                           _buildEmptyState()
                         else ...[
                           ...pendingOrders.map((kot) => _buildOrderRequestCard(kot, isNew: true, isOnDuty: attendance.isClockedIn)),
                           ...cookingOrders.map((kot) => _buildOrderRequestCard(kot, isNew: false, isOnDuty: attendance.isClockedIn)),
+                          ...readyOrders.map((kot) => _buildOrderRequestCard(kot, isNew: false, isReady: true, isOnDuty: attendance.isClockedIn)),
                         ],
                         const SizedBox(height: 24),
                         _buildQuickActions(context),
@@ -337,14 +341,16 @@ class _KitchenDashboardState extends State<KitchenDashboard> {
     );
   }
 
-  Widget _buildOrderRequestCard(dynamic kot, {required bool isNew, required bool isOnDuty}) {
+  Widget _buildOrderRequestCard(dynamic kot, {required bool isNew, bool isReady = false, required bool isOnDuty}) {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       elevation: 0,
       child: Container(
          decoration: BoxDecoration(
-           border: isNew ? Border.all(color: Colors.red.withOpacity(0.3), width: 1.5) : null,
+           border: isReady 
+               ? Border.all(color: Colors.green.withOpacity(0.5), width: 1.5)
+               : (isNew ? Border.all(color: Colors.red.withOpacity(0.3), width: 1.5) : null),
            borderRadius: BorderRadius.circular(16),
          ),
          child: Padding(
@@ -359,14 +365,21 @@ class _KitchenDashboardState extends State<KitchenDashboard> {
                     children: [
                       Row(
                         children: [
-                          if (isNew) 
+                          if (isReady)
+                            Container(
+                              margin: const EdgeInsets.only(right: 8),
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(color: Colors.green, borderRadius: BorderRadius.circular(4)),
+                              child: const Text("READY", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                            )
+                          else if (isNew) 
                             Container(
                               margin: const EdgeInsets.only(right: 8),
                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                               decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(4)),
                               child: const Text("NEW", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                             ),
-                          Text(kot.roomNumber, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                          Text(kot.displayLocation, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                           if (kot.billingStatus != null) ...[
                             const SizedBox(width: 8),
                             Container(
@@ -375,7 +388,7 @@ class _KitchenDashboardState extends State<KitchenDashboard> {
                                  color: kot.billingStatus?.toLowerCase() == 'paid' ? Colors.green.shade50 : Colors.grey.shade50,
                                  borderRadius: BorderRadius.circular(4),
                                  border: Border.all(color: kot.billingStatus?.toLowerCase() == 'paid' ? Colors.green.shade200 : Colors.grey.shade200),
-                               ),
+                                ),
                                child: Text(
                                  kot.billingStatus!.toUpperCase(),
                                  style: TextStyle(
@@ -414,7 +427,7 @@ class _KitchenDashboardState extends State<KitchenDashboard> {
                       onPressed: isOnDuty ? () => _showOrderActionDialog(context, kot) : null,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: isOnDuty 
-                            ? (isNew ? Colors.blue.shade600 : Colors.green.shade600)
+                            ? (isReady ? Colors.teal.shade600 : (isNew ? Colors.blue.shade600 : Colors.green.shade600))
                             : Colors.grey.shade400,
                         foregroundColor: Colors.white,
                         elevation: 0,
@@ -422,7 +435,7 @@ class _KitchenDashboardState extends State<KitchenDashboard> {
                       ),
                       child: Text(
                         isOnDuty 
-                            ? (isNew ? "START COOKING" : "MARK READY")
+                            ? (isReady ? "MARK COMPLETED" : (isNew ? "START COOKING" : "MARK READY"))
                             : "CLOCK IN TO START"
                       ),
                     ),
@@ -438,6 +451,7 @@ class _KitchenDashboardState extends State<KitchenDashboard> {
 
   void _showOrderActionDialog(BuildContext context, dynamic kot) {
     final bool isNew = kot.status == 'pending';
+    final bool isReady = kot.status == 'ready';
     final kitchen = context.read<KitchenProvider>();
 
     showModalBottomSheet(
@@ -465,7 +479,7 @@ class _KitchenDashboardState extends State<KitchenDashboard> {
               Container(
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
                 decoration: BoxDecoration(
-                  color: isNew ? Colors.orange.shade50 : Colors.green.shade50,
+                  color: isReady ? Colors.teal.shade50 : (isNew ? Colors.orange.shade50 : Colors.green.shade50),
                   borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
                 ),
                 child: Row(
@@ -473,11 +487,11 @@ class _KitchenDashboardState extends State<KitchenDashboard> {
                     Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: isNew ? Colors.orange : Colors.green,
+                        color: isReady ? Colors.teal : (isNew ? Colors.orange : Colors.green),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Icon(
-                        isNew ? Icons.soup_kitchen : Icons.check_circle,
+                        isReady ? Icons.check_circle_outline : (isNew ? Icons.soup_kitchen : Icons.check_circle),
                         color: Colors.white, size: 24,
                       ),
                     ),
@@ -487,11 +501,11 @@ class _KitchenDashboardState extends State<KitchenDashboard> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            isNew ? "Accept & Start Cooking" : "Mark as Ready",
+                            isReady ? "Mark as Completed" : (isNew ? "Accept & Start Cooking" : "Mark as Ready"),
                             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                           ),
                           Text(
-                            "Room ${kot.roomNumber ?? 'N/A'} • ${kot.items.length} item(s)",
+                            "${kot.displayLocation} • ${kot.items.length} item(s)",
                             style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
                           ),
                         ],
@@ -724,25 +738,29 @@ class _KitchenDashboardState extends State<KitchenDashboard> {
                     Expanded(
                       flex: 2,
                       child: ElevatedButton.icon(
-                        icon: Icon(isNew ? Icons.soup_kitchen : Icons.check_circle),
-                        label: Text(isNew ? "START COOKING" : "MARK READY"),
+                        icon: Icon(isReady ? Icons.check_circle_outline : (isNew ? Icons.soup_kitchen : Icons.check_circle)),
+                        label: Text(isReady ? "MARK COMPLETED" : (isNew ? "START COOKING" : "MARK READY")),
                         onPressed: () async {
-                          final newStatus = isNew ? 'preparing' : 'ready';
-                          final success = await kitchen.updateStatus(kot.id, newStatus);
-                          if (ctx.mounted) {
-                            Navigator.pop(ctx);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(success ? "Order updated to ${newStatus.toUpperCase()}" : "Failed to update order"),
-                                backgroundColor: success ? Colors.green : Colors.red,
-                                behavior: SnackBarBehavior.floating,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                              ),
-                            );
+                          if (isReady) {
+                            _showPaymentSelection(context, kot, kitchen);
+                          } else {
+                            final newStatus = isNew ? 'preparing' : 'ready';
+                            final success = await kitchen.updateStatus(kot.id, newStatus);
+                            if (ctx.mounted) {
+                              Navigator.pop(ctx);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(success ? "Order updated to ${newStatus.toUpperCase()}" : "Failed to update order"),
+                                  backgroundColor: success ? Colors.green : Colors.red,
+                                  behavior: SnackBarBehavior.floating,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                              );
+                            }
                           }
                         },
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: isNew ? Colors.orange.shade600 : Colors.green.shade600,
+                          backgroundColor: isReady ? Colors.teal.shade600 : (isNew ? Colors.orange.shade600 : Colors.green.shade600),
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -985,5 +1003,115 @@ class _KitchenDashboardState extends State<KitchenDashboard> {
     if (clockInTime == null) return "0h 0m";
     final diff = DateTime.now().difference(clockInTime);
     return "${diff.inHours}h ${diff.inMinutes % 60}m";
+  }
+
+  void _showPaymentSelection(BuildContext context, dynamic kot, KitchenProvider kitchen) {
+    String paymentStatus = 'unpaid';
+    String paymentMethod = 'Cash';
+    final paymentMethods = ['Cash', 'Card', 'UPI', 'Room Bill', 'Complimentary'];
+
+    showDialog(
+      context: context,
+      builder: (ctx) => BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+        child: StatefulBuilder(
+          builder: (context, setModalState) {
+            return AlertDialog(
+              backgroundColor: const Color(0xFF1A1A1A),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24), side: const BorderSide(color: Colors.white10)),
+              title: const Text("COMPLETE ORDER", style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16)),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text("SELECT FINAL SETTLEMENT STATUS:", style: TextStyle(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 24),
+                  _buildSettlementTile(setModalState, "UNPAID (Charge to Room)", 'unpaid', paymentStatus, (v) => setModalState(() => paymentStatus = v)),
+                  _buildSettlementTile(setModalState, "PAID", 'paid', paymentStatus, (v) => setModalState(() => paymentStatus = v)),
+                  
+                  if (paymentStatus == 'paid') ...[
+                    const SizedBox(height: 24),
+                    const Text("PAYMENT MODE:", style: TextStyle(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.05),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.white10),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: paymentMethod,
+                          dropdownColor: const Color(0xFF1A1A1A),
+                          isExpanded: true,
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                          items: paymentMethods.map((m) => DropdownMenuItem(value: m, child: Text(m.toUpperCase()))).toList(),
+                          onChanged: (v) => setModalState(() => paymentMethod = v!),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text("CANCEL", style: TextStyle(color: Colors.white38, fontWeight: FontWeight.bold)),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    final success = await kitchen.updateStatus(
+                      kot.id, 
+                      'completed', 
+                      billingStatus: paymentStatus,
+                      paymentMethod: paymentStatus == 'paid' ? paymentMethod : 'Room Bill'
+                    );
+                    if (ctx.mounted) {
+                      Navigator.pop(ctx); // Close Dialog
+                      if (context.mounted) Navigator.pop(context); // Close BottomSheet
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(success ? "Order marked as COMPLETED" : "Failed to update order"),
+                          backgroundColor: success ? Colors.green : Colors.red,
+                        ),
+                      );
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.teal,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text("CONFIRM"),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSettlementTile(StateSetter setModalState, String label, String value, String groupValue, Function(String) onChanged) {
+    final bool isSelected = value == groupValue;
+    return InkWell(
+      onTap: () => onChanged(value),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.teal.withOpacity(0.1) : Colors.white.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: isSelected ? Colors.teal : Colors.white10),
+        ),
+        child: Row(
+          children: [
+            Icon(isSelected ? Icons.check_circle : Icons.circle_outlined, color: isSelected ? Colors.teal : Colors.white38, size: 20),
+            const SizedBox(width: 12),
+            Text(label, style: TextStyle(color: isSelected ? Colors.white : Colors.white70, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+          ],
+        ),
+      ),
+    );
   }
 }

@@ -4,7 +4,7 @@ import 'package:orchid_employee/presentation/providers/auth_provider.dart';
 import 'package:orchid_employee/core/constants/app_colors.dart';
 import 'package:orchid_employee/presentation/screens/housekeeping/room_list_screen.dart';
 import 'package:orchid_employee/presentation/screens/housekeeping/housekeeping_dashboard.dart';
-import 'package:orchid_employee/presentation/widgets/app_drawer.dart';
+import 'package:orchid_employee/presentation/widgets/app_drawer.dart' show AppDrawer;
 import 'package:orchid_employee/presentation/screens/waiter/waiter_dashboard.dart';
 import 'package:orchid_employee/presentation/screens/kitchen/kitchen_dashboard.dart';
 import 'package:orchid_employee/presentation/screens/maintenance/maintenance_dashboard.dart';
@@ -15,6 +15,8 @@ import 'package:orchid_employee/presentation/screens/manager/manager_staff_scree
 import 'package:orchid_employee/presentation/screens/manager/manager_inventory_screen.dart';
 import 'package:orchid_employee/presentation/screens/manager/financial_reports_screen.dart';
 import 'package:orchid_employee/presentation/screens/waiter/menu_order_screen.dart';
+import 'package:orchid_employee/presentation/screens/waiter/waiter_service_screen.dart';
+
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -100,7 +102,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   bool _shouldShowBottomBar(UserRole role) {
-    return role == UserRole.manager || role == UserRole.housekeeping || role == UserRole.waiter;
+    return role == UserRole.manager || role == UserRole.housekeeping || role == UserRole.waiter || role == UserRole.maintenance || role == UserRole.kitchen;
   }
 
   List<Widget> _getPagesForRole(UserRole role) {
@@ -108,6 +110,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       case UserRole.manager:
         return [
           const ManagerDashboardScreen(),
+          const WaiterServiceScreen(), // Managers can see all services here
           ManagerStaffScreen(),
           ManagerInventoryScreen(),
           FinancialReportsScreen(),
@@ -115,19 +118,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
       case UserRole.housekeeping:
         return [
           const HousekeepingDashboard(),
+          const WaiterServiceScreen(),
           RoomListScreen(),
           NotificationsScreen(),
         ];
       case UserRole.waiter:
         return [
           const WaiterDashboard(),
+          const WaiterServiceScreen(),
           MenuOrderScreen(),
           NotificationsScreen(),
         ];
       case UserRole.kitchen:
-        return [const KitchenDashboard()];
+        return [
+          const KitchenDashboard(),
+          const WaiterServiceScreen(),
+          NotificationsScreen(),
+        ];
       case UserRole.maintenance:
-        return [const MaintenanceDashboard()];
+        return [
+          const MaintenanceDashboard(),
+          const WaiterServiceScreen(),
+          NotificationsScreen(),
+        ];
       default:
         return [const Center(child: Text("Welcome!"))];
     }
@@ -137,6 +150,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (role == UserRole.manager) {
       return const [
         BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: "Dash"),
+        BottomNavigationBarItem(icon: Icon(Icons.room_service_rounded), label: "Tasks"),
         BottomNavigationBarItem(icon: Icon(Icons.people), label: "Staff"),
         BottomNavigationBarItem(icon: Icon(Icons.inventory), label: "Stock"),
         BottomNavigationBarItem(icon: Icon(Icons.analytics), label: "Finance"),
@@ -144,24 +158,52 @@ class _DashboardScreenState extends State<DashboardScreen> {
     } else if (role == UserRole.housekeeping) {
       return const [
         BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: "Home"),
+        BottomNavigationBarItem(icon: Icon(Icons.room_service_rounded), label: "Tasks"),
         BottomNavigationBarItem(icon: Icon(Icons.bed), label: "Rooms"),
         BottomNavigationBarItem(icon: Icon(Icons.notifications), label: "Alerts"),
       ];
     } else if (role == UserRole.waiter) {
       return const [
         BottomNavigationBarItem(icon: Icon(Icons.table_bar), label: "Tables"),
+        BottomNavigationBarItem(icon: Icon(Icons.room_service_rounded), label: "Services"),
         BottomNavigationBarItem(icon: Icon(Icons.add_shopping_cart), label: "Order"),
+        BottomNavigationBarItem(icon: Icon(Icons.notifications), label: "Alerts"),
+      ];
+    } else if (role == UserRole.maintenance) {
+      return const [
+        BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: "Home"),
+        BottomNavigationBarItem(icon: Icon(Icons.room_service_rounded), label: "Tasks"),
+        BottomNavigationBarItem(icon: Icon(Icons.notifications), label: "Alerts"),
+      ];
+    } else if (role == UserRole.kitchen) {
+      return const [
+        BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: "Orders"),
+        BottomNavigationBarItem(icon: Icon(Icons.room_service_rounded), label: "Tasks"),
         BottomNavigationBarItem(icon: Icon(Icons.notifications), label: "Alerts"),
       ];
     }
     return [];
+
   }
 
   String _getTitleForIndex(UserRole role, int index) {
     if (role == UserRole.manager) {
-      return ["Dashboard", "Staff Management", "Inventory Control", "Financial Analytics"][index];
+      return ["Dashboard", "Service Tasks", "Staff Management", "Inventory Control", "Financial Analytics"][index];
+    }
+    if (role == UserRole.housekeeping) {
+      return ["Dashboard", "Assigned Tasks", "Room Management", "Notifications"][index];
+    }
+    if (role == UserRole.maintenance) {
+      return ["Dashboard", "Assigned Tasks", "Notifications"][index];
+    }
+    if (role == UserRole.kitchen) {
+      return ["Dashboard", "Assigned Tasks", "Notifications"][index];
+    }
+    if (role == UserRole.waiter) {
+      return ["Restaurant Status", "Assigned Services", "New Order", "Notifications"][index];
     }
     return "Dashboard";
+
   }
 
   Widget _buildNotificationButton() {

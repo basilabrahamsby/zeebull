@@ -570,6 +570,29 @@ def create_rcm_journal_entry(
     pass
 
 
+def generate_rcm_self_invoice_number(db: Session) -> str:
+    """
+    Generate unique RCM self-invoice number (e.g., SLF-2026-000123)
+    """
+    from datetime import date
+    from sqlalchemy import func
+    from app.models.expense import Expense
+    
+    today = date.today()
+    year = today.year
+    month = today.month
+    
+    # Get count of RCM self-invoices this month
+    count = db.query(Expense).filter(
+        func.extract('year', Expense.date) == year,
+        func.extract('month', Expense.date) == month,
+        Expense.self_invoice_number.isnot(None)
+    ).count()
+    
+    self_invoice_number = f"SLF-{year}-{str(count + 1).zfill(6)}"
+    return self_invoice_number
+
+
 def create_expense_journal_entry(
     db: Session,
     expense_id: int,

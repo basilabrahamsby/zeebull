@@ -14,8 +14,8 @@ def zip_dir(directory_path, zip_path, arcroot=""):
                 zipf.write(abs_path, zip_arc_path)
     print(f"Created {zip_path}")
 
-# Dashboard - Use the new build directory
-zip_dir('dasboard/build_new', 'dashboard_update.zip')
+# Dashboard - Use the standard build directory
+zip_dir('dasboard/build', 'dashboard_update.zip')
 
 # Backend
 os.makedirs('temp_deploy_fix/app/api', exist_ok=True)
@@ -26,6 +26,8 @@ os.makedirs('temp_deploy_fix/app/schemas', exist_ok=True)
 # Copy updated files
 shutil.copy('ResortApp/app/api/room.py', 'temp_deploy_fix/app/api/room.py')
 shutil.copy('ResortApp/app/api/checkout.py', 'temp_deploy_fix/app/api/checkout.py')
+shutil.copy('ResortApp/app/api/channel_manager.py', 'temp_deploy_fix/app/api/channel_manager.py')
+shutil.copy('ResortApp/app/api/booking.py', 'temp_deploy_fix/app/api/booking.py')
 shutil.copy('ResortApp/app/core/aiosell_triggers.py', 'temp_deploy_fix/app/core/aiosell_triggers.py')
 shutil.copy('ResortApp/app/models/room.py', 'temp_deploy_fix/app/models/room.py')
 shutil.copy('ResortApp/app/schemas/room_type.py', 'temp_deploy_fix/app/schemas/room_type.py')

@@ -5,10 +5,13 @@ import 'package:orchid_employee/core/constants/app_colors.dart';
 import 'package:orchid_employee/presentation/widgets/onyx_glass_card.dart';
 import 'package:intl/intl.dart';
 import 'dart:async';
+import 'dart:ui' as ui;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:orchid_employee/core/constants/app_constants.dart';
 import 'package:orchid_employee/core/constants/api_constants.dart';
+import 'package:orchid_employee/data/services/api_service.dart';
+import 'package:orchid_employee/presentation/providers/service_request_provider.dart';
 
 class ManagerCheckoutWorkflow extends StatefulWidget {
   final String? initialRoomNumber;
@@ -28,11 +31,13 @@ class _ManagerCheckoutWorkflowState extends State<ManagerCheckoutWorkflow> {
   Map<String, dynamic>? _billData;
   Timer? _pollTimer;
   String? _activeBranchId;
+  int? _activeRoomId;
   
   String _paymentMethod = "Cash";
   double _discount = 0;
   
   bool _isLoading = false;
+  String _checkoutMode = "single";
   final format = NumberFormat.currency(symbol: "₹", decimalDigits: 0);
 
   @override
@@ -69,12 +74,15 @@ class _ManagerCheckoutWorkflowState extends State<ManagerCheckoutWorkflow> {
     );
     
     _activeBranchId = matchingRoom?['branch_id']?.toString();
+    final rawId = matchingRoom?['id'];
+    _activeRoomId = rawId is int ? rawId : int.tryParse(rawId?.toString() ?? '');
     print("🏢 Detected Branch ID for Room $roomNum: $_activeBranchId");
 
     setState(() => _isLoading = true);
     final data = await context.read<ManagementProvider>().requestCheckout(
       roomNum, 
-      branchId: _activeBranchId
+      branchId: _activeBranchId,
+      checkoutMode: _checkoutMode,
     );
     
     if (mounted) {
@@ -96,14 +104,20 @@ class _ManagerCheckoutWorkflowState extends State<ManagerCheckoutWorkflow> {
     _pollTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
       final statusData = await context.read<ManagementProvider>().getCheckoutRequestStatus(
         _roomController.text,
-        branchId: _activeBranchId
+        branchId: _activeBranchId,
+        checkoutMode: _checkoutMode,
       );
       
       if (statusData != null) {
-        final bool isChecked = statusData['inventory_checked'] == true;
+        final bool isChecked = statusData['inventory_checked'] == true || statusData['room_inventory_checked'] == true;
         final String? status = statusData['status'];
+        final String? roomStatus = statusData['room_status'];
         
-        if (isChecked || status == 'completed' || status == 'inventory_checked') {
+        if (isChecked || 
+            status == 'completed' || 
+            status == 'inventory_checked' || 
+            roomStatus == 'completed' || 
+            roomStatus == 'inventory_checked') {
           timer.cancel();
           _fetchBillSummary();
         }
@@ -115,7 +129,8 @@ class _ManagerCheckoutWorkflowState extends State<ManagerCheckoutWorkflow> {
     if (mounted) setState(() => _isLoading = true);
     final data = await context.read<ManagementProvider>().getBillSummary(
       _roomController.text,
-      branchId: _activeBranchId
+      branchId: _activeBranchId,
+      checkoutMode: _checkoutMode,
     );
     if (mounted) {
       setState(() {
@@ -135,6 +150,7 @@ class _ManagerCheckoutWorkflowState extends State<ManagerCheckoutWorkflow> {
         'payment_method': _paymentMethod,
         'discount_amount': _discount,
         'amount_paid': (charges['total_due'] ?? charges['grand_total'] ?? 0.0) + (charges['total_gst'] ?? 0.0) - _discount - (charges['advance_deposit'] ?? 0.0),
+        'checkout_mode': _checkoutMode,
       },
       branchId: _activeBranchId
     );
@@ -326,6 +342,64 @@ class _ManagerCheckoutWorkflowState extends State<ManagerCheckoutWorkflow> {
               decoration: const InputDecoration(border: InputBorder.none, hintText: "...", hintStyle: TextStyle(color: Colors.white12)),
             ),
           ),
+          const SizedBox(height: 24),
+          const Text("CHECKOUT MODE", style: TextStyle(color: AppColors.accent, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 2)),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: InkWell(
+                  onTap: () => setState(() => _checkoutMode = "single"),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    decoration: BoxDecoration(
+                      color: _checkoutMode == "single" ? AppColors.accent : Colors.white.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: _checkoutMode == "single" ? AppColors.accent : Colors.white10),
+                    ),
+                    child: Center(
+                      child: Text(
+                        "SINGLE ROOM",
+                        style: TextStyle(
+                          color: _checkoutMode == "single" ? AppColors.onyx : Colors.white,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 11,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: InkWell(
+                  onTap: () => setState(() => _checkoutMode = "multiple"),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    decoration: BoxDecoration(
+                      color: _checkoutMode == "multiple" ? AppColors.accent : Colors.white.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: _checkoutMode == "multiple" ? AppColors.accent : Colors.white10),
+                    ),
+                    child: Center(
+                      child: Text(
+                        "ENTIRE BOOKING",
+                        style: TextStyle(
+                          color: _checkoutMode == "multiple" ? AppColors.onyx : Colors.white,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 11,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
           if (_checkedInRooms.isNotEmpty) ...[
             const SizedBox(height: 24),
             const Text("SUGGESTIONS", style: TextStyle(color: AppColors.accent, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 2)),
@@ -386,6 +460,8 @@ class _ManagerCheckoutWorkflowState extends State<ManagerCheckoutWorkflow> {
             textAlign: TextAlign.center,
             style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 13, height: 1.5),
           ),
+          const SizedBox(height: 24),
+          _buildSecondaryButton(Icons.person_add, "ASSIGN STAFF FOR AUDIT", _showAssignStaffModal),
           const SizedBox(height: 48),
           OnyxGlassCard(
             padding: const EdgeInsets.all(20),
@@ -411,15 +487,31 @@ class _ManagerCheckoutWorkflowState extends State<ManagerCheckoutWorkflow> {
     if (_billData == null) return const Center(child: CircularProgressIndicator(color: AppColors.accent));
     
     final charges = _billData!['charges'] ?? {};
-    // Use standardized keys or fallback to aliased keys from backend
-    final subtotal = (charges['room_charges'] ?? charges['rent'] ?? 0.0) + (charges['package_charges'] ?? 0.0);
-    final food = (charges['food_charges'] ?? charges['food'] ?? 0.0);
-    final services = (charges['service_charges'] ?? charges['services'] ?? 0.0);
-    final penalties = (charges['inventory_charges'] ?? 0.0) + (charges['asset_damage_charges'] ?? 0.0) + (charges['consumables_charges'] ?? charges['penalties'] ?? 0.0);
-    final gst = (charges['total_gst'] ?? charges['gst'] ?? 0.0);
-    final advance = (charges['advance_deposit'] ?? 0.0);
     
-    final grandTotal = (charges['total_due'] ?? charges['grand_total'] ?? 0.0) + (charges['total_gst'] ?? 0.0) - _discount - advance;
+    // Extract individual charges dynamically
+    final roomCharges = double.tryParse(charges['room_charges']?.toString() ?? '') ?? double.tryParse(charges['rent']?.toString() ?? '') ?? 0.0;
+    final packageCharges = double.tryParse(charges['package_charges']?.toString() ?? '') ?? 0.0;
+    final foodCharges = double.tryParse(charges['food_charges']?.toString() ?? '') ?? double.tryParse(charges['food']?.toString() ?? '') ?? 0.0;
+    final serviceCharges = double.tryParse(charges['service_charges']?.toString() ?? '') ?? double.tryParse(charges['services']?.toString() ?? '') ?? 0.0;
+    final consumablesCharges = double.tryParse(charges['consumables_charges']?.toString() ?? '') ?? 0.0;
+    final inventoryCharges = double.tryParse(charges['inventory_charges']?.toString() ?? '') ?? 0.0;
+    final assetDamageCharges = double.tryParse(charges['asset_damage_charges']?.toString() ?? '') ?? 0.0;
+
+    // Extract individual GST components
+    final roomGst = double.tryParse(charges['room_gst']?.toString() ?? '') ?? 0.0;
+    final packageGst = double.tryParse(charges['package_gst']?.toString() ?? '') ?? 0.0;
+    final foodGst = double.tryParse(charges['food_gst']?.toString() ?? '') ?? 0.0;
+    final serviceGst = double.tryParse(charges['service_gst']?.toString() ?? '') ?? 0.0;
+    final consumablesGst = double.tryParse(charges['consumables_gst']?.toString() ?? '') ?? 0.0;
+    final inventoryGst = double.tryParse(charges['inventory_gst']?.toString() ?? '') ?? 0.0;
+    final assetDamageGst = double.tryParse(charges['asset_damage_gst']?.toString() ?? '') ?? 0.0;
+
+    final subtotal = double.tryParse(charges['total_due']?.toString() ?? '') ?? double.tryParse(charges['subtotal']?.toString() ?? '') ?? 0.0;
+    final totalGst = double.tryParse(charges['total_gst']?.toString() ?? '') ?? double.tryParse(charges['gst']?.toString() ?? '') ?? 0.0;
+    final advance = double.tryParse(charges['advance_deposit']?.toString() ?? '') ?? 0.0;
+    
+    final totalBill = subtotal + totalGst;
+    final grandTotal = totalBill - _discount - advance;
     
     return Column(
       children: [
@@ -461,17 +553,35 @@ class _ManagerCheckoutWorkflowState extends State<ManagerCheckoutWorkflow> {
                 padding: const EdgeInsets.all(24),
                 child: Column(
                   children: [
-                    _buildSummaryRow("Room Rent", format.format(subtotal)),
-                    if (food > 0) _buildSummaryRow("Food & Beverages", format.format(food)),
-                    if (services > 0) _buildSummaryRow("Service Requests", format.format(services)),
-                    if (penalties > 0) _buildSummaryRow("Inventory Penalties", format.format(penalties)),
+                    if (roomCharges > 0) _buildSummaryRow("Room Charges", format.format(roomCharges)),
+                    if (packageCharges > 0) _buildSummaryRow("Package Charges", format.format(packageCharges)),
+                    if (foodCharges > 0) _buildSummaryRow("Food Charges", format.format(foodCharges)),
+                    if (serviceCharges > 0) _buildSummaryRow("Service Charges", format.format(serviceCharges)),
+                    if (consumablesCharges > 0) _buildSummaryRow("Consumables Charges", format.format(consumablesCharges)),
+                    if (inventoryCharges > 0) _buildSummaryRow("Inventory/Rental Charges", format.format(inventoryCharges)),
+                    if (assetDamageCharges > 0) _buildSummaryRow("Asset Damage Charges", format.format(assetDamageCharges)),
                     const Divider(color: Colors.white10, height: 32),
-                    _buildSummaryRow("Subtotal", format.format((charges['total_due'] ?? charges['subtotal'] ?? 0))),
-                    _buildSummaryRow("GST", format.format(gst)),
+                    _buildSummaryRow("Subtotal", format.format(subtotal)),
+                    
+                    // Detailed GST Breakdown
+                    if (roomGst > 0) _buildSummaryRow("  Room GST", "+ ${format.format(roomGst)}"),
+                    if (packageGst > 0) _buildSummaryRow("  Package GST", "+ ${format.format(packageGst)}"),
+                    if (foodGst > 0) _buildSummaryRow("  Food GST (5%)", "+ ${format.format(foodGst)}"),
+                    if (serviceGst > 0) _buildSummaryRow("  Service GST", "+ ${format.format(serviceGst)}"),
+                    if (consumablesGst > 0) _buildSummaryRow("  Consumables GST (5%)", "+ ${format.format(consumablesGst)}"),
+                    if (inventoryGst > 0) _buildSummaryRow("  Inventory GST", "+ ${format.format(inventoryGst)}"),
+                    if (assetDamageGst > 0) _buildSummaryRow("  Damage GST", "+ ${format.format(assetDamageGst)}"),
+                    
+                    _buildSummaryRow("Total GST", format.format(totalGst)),
+                    _buildSummaryRow("Total Bill", format.format(totalBill)),
                     if (_discount > 0) _buildSummaryRow("Discount", "- ${format.format(_discount)}"),
                     if (advance > 0) _buildSummaryRow("Advance Paid", "- ${format.format(advance)}"),
                     const Divider(color: Colors.white10, height: 32),
-                    _buildSummaryRow("GRAND TOTAL", format.format(grandTotal), isTotal: true),
+                    _buildSummaryRow(
+                      grandTotal >= 0 ? "NET PAYABLE" : "REFUND AMOUNT", 
+                      format.format(grandTotal.abs()), 
+                      isTotal: true
+                    ),
                   ],
                 ),
               ),
@@ -586,23 +696,59 @@ class _ManagerCheckoutWorkflowState extends State<ManagerCheckoutWorkflow> {
     text += "Dates: ${_billData!['check_in']} to ${_billData!['check_out']}\n";
     text += "--------------------------------\n";
     
-    final subtotal = (charges['room_charges'] ?? charges['rent'] ?? 0.0) + (charges['package_charges'] ?? 0.0);
-    text += "Room Rent: ${format.format(subtotal)}\n";
+    // Extract individual charges
+    final roomCharges = double.tryParse(charges['room_charges']?.toString() ?? '') ?? double.tryParse(charges['rent']?.toString() ?? '') ?? 0.0;
+    final packageCharges = double.tryParse(charges['package_charges']?.toString() ?? '') ?? 0.0;
+    final foodCharges = double.tryParse(charges['food_charges']?.toString() ?? '') ?? double.tryParse(charges['food']?.toString() ?? '') ?? 0.0;
+    final serviceCharges = double.tryParse(charges['service_charges']?.toString() ?? '') ?? double.tryParse(charges['services']?.toString() ?? '') ?? 0.0;
+    final consumablesCharges = double.tryParse(charges['consumables_charges']?.toString() ?? '') ?? 0.0;
+    final inventoryCharges = double.tryParse(charges['inventory_charges']?.toString() ?? '') ?? 0.0;
+    final assetDamageCharges = double.tryParse(charges['asset_damage_charges']?.toString() ?? '') ?? 0.0;
+
+    // Extract individual GST components
+    final roomGst = double.tryParse(charges['room_gst']?.toString() ?? '') ?? 0.0;
+    final packageGst = double.tryParse(charges['package_gst']?.toString() ?? '') ?? 0.0;
+    final foodGst = double.tryParse(charges['food_gst']?.toString() ?? '') ?? 0.0;
+    final serviceGst = double.tryParse(charges['service_gst']?.toString() ?? '') ?? 0.0;
+    final consumablesGst = double.tryParse(charges['consumables_gst']?.toString() ?? '') ?? 0.0;
+    final inventoryGst = double.tryParse(charges['inventory_gst']?.toString() ?? '') ?? 0.0;
+    final assetDamageGst = double.tryParse(charges['asset_damage_gst']?.toString() ?? '') ?? 0.0;
+
+    final subtotal = double.tryParse(charges['total_due']?.toString() ?? '') ?? double.tryParse(charges['subtotal']?.toString() ?? '') ?? 0.0;
+    final totalGst = double.tryParse(charges['total_gst']?.toString() ?? '') ?? double.tryParse(charges['gst']?.toString() ?? '') ?? 0.0;
+    final advance = double.tryParse(charges['advance_deposit']?.toString() ?? '') ?? 0.0;
     
-    final food = (charges['food_charges'] ?? charges['food'] ?? 0.0);
-    if (food > 0) text += "Food: ${format.format(food)}\n";
+    final totalBill = subtotal + totalGst;
+    final grandTotal = totalBill - _discount - advance;
+
+    if (roomCharges > 0) text += "Room Charges: ${format.format(roomCharges)}\n";
+    if (packageCharges > 0) text += "Package Charges: ${format.format(packageCharges)}\n";
+    if (foodCharges > 0) text += "Food Charges: ${format.format(foodCharges)}\n";
+    if (serviceCharges > 0) text += "Service Charges: ${format.format(serviceCharges)}\n";
+    if (consumablesCharges > 0) text += "Consumables Charges: ${format.format(consumablesCharges)}\n";
+    if (inventoryCharges > 0) text += "Inventory/Rental Charges: ${format.format(inventoryCharges)}\n";
+    if (assetDamageCharges > 0) text += "Asset Damage Charges: ${format.format(assetDamageCharges)}\n";
     
-    final gst = (charges['total_gst'] ?? charges['gst'] ?? 0.0);
-    text += "GST: ${format.format(gst)}\n";
-    
-    if (_discount > 0) text += "Discount: -${format.format(_discount)}\n";
-    
-    final advance = (charges['advance_deposit'] ?? 0.0);
-    if (advance > 0) text += "Advance Paid: -${format.format(advance)}\n";
-    
-    final total = (charges['total_due'] ?? charges['grand_total'] ?? 0.0) + gst - _discount - advance;
     text += "--------------------------------\n";
-    text += "*GRAND TOTAL: ${format.format(total)}*\n";
+    text += "Subtotal: ${format.format(subtotal)}\n";
+
+    // GST Breakdown
+    if (roomGst > 0) text += "  Room GST: ${format.format(roomGst)}\n";
+    if (packageGst > 0) text += "  Package GST: ${format.format(packageGst)}\n";
+    if (foodGst > 0) text += "  Food GST (5%): ${format.format(foodGst)}\n";
+    if (serviceGst > 0) text += "  Service GST: ${format.format(serviceGst)}\n";
+    if (consumablesGst > 0) text += "  Consumables GST (5%): ${format.format(consumablesGst)}\n";
+    if (inventoryGst > 0) text += "  Inventory GST: ${format.format(inventoryGst)}\n";
+    if (assetDamageGst > 0) text += "  Damage GST: ${format.format(assetDamageGst)}\n";
+    
+    text += "Total GST: ${format.format(totalGst)}\n";
+    text += "Total Bill: ${format.format(totalBill)}\n";
+    if (_discount > 0) text += "Discount: -${format.format(_discount)}\n";
+    if (advance > 0) text += "Advance Paid: -${format.format(advance)}\n";
+    text += "--------------------------------\n";
+    
+    final label = grandTotal >= 0 ? "NET PAYABLE" : "REFUND AMOUNT";
+    text += "*$label: ${format.format(grandTotal.abs())}*\n";
     text += "--------------------------------\n";
     text += "Thank you for staying with us!";
     
@@ -676,5 +822,148 @@ class _ManagerCheckoutWorkflowState extends State<ManagerCheckoutWorkflow> {
         child: _isLoading ? const CircularProgressIndicator(color: AppColors.onyx) : Text(text, style: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.5)),
       ),
     );
+  }
+
+  void _showAssignStaffModal() async {
+    showDialog(context: context, builder: (_) => const Center(child: CircularProgressIndicator(color: AppColors.accent)));
+    try {
+      // 1. Resolve active room ID dynamically if it is null
+      if (_activeRoomId == null) {
+        final roomNum = _roomController.text.trim();
+        
+        // Try suggestions first
+        final matchingRoom = _checkedInRooms.firstWhere(
+          (r) => r['number'].toString().trim() == roomNum,
+          orElse: () => null,
+        );
+        
+        if (matchingRoom != null) {
+          _activeBranchId = matchingRoom['branch_id']?.toString();
+          final rawId = matchingRoom['id'];
+          _activeRoomId = rawId is int ? rawId : int.tryParse(rawId?.toString() ?? '');
+        } else {
+          // Fallback to fetch from all rooms
+          final rooms = await context.read<ManagementProvider>().getRooms();
+          final dbRoom = rooms.firstWhere(
+            (r) => r['number'].toString().trim() == roomNum,
+            orElse: () => null,
+          );
+          if (dbRoom != null) {
+            _activeBranchId = dbRoom['branch_id']?.toString();
+            final rawId = dbRoom['id'];
+            _activeRoomId = rawId is int ? rawId : int.tryParse(rawId?.toString() ?? '');
+          }
+        }
+      }
+
+      final employeesResp = await context.read<ApiService>().getEmployees();
+      if (!mounted) return;
+      Navigator.pop(context); // close loading
+      
+      final employees = employeesResp.data as List? ?? [];
+      int? selectedEmployeeId;
+      
+      showModalBottomSheet(
+        context: context,
+        backgroundColor: Colors.transparent,
+        builder: (ctx) => BackdropFilter(
+          filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: StatefulBuilder(
+            builder: (context, setModalState) => Container(
+              decoration: BoxDecoration(color: AppColors.onyx.withOpacity(0.95), borderRadius: const BorderRadius.vertical(top: Radius.circular(32)), border: Border.all(color: Colors.white10)),
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text("ASSIGN STAFF FOR AUDIT", style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16)),
+                  const SizedBox(height: 24),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.white10)),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<int>(
+                        value: selectedEmployeeId,
+                        dropdownColor: AppColors.onyx,
+                        isExpanded: true,
+                        hint: const Text("SELECT EMPLOYEE", style: TextStyle(color: Colors.white38, fontSize: 12, fontWeight: FontWeight.bold)),
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                        items: employees.map((e) => DropdownMenuItem<int>(value: e['id'], child: Text(e['name'].toString().toUpperCase()))).toList(),
+                        onChanged: (v) => setModalState(() => selectedEmployeeId = v),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                  SizedBox(
+                    width: double.infinity, height: 50,
+                    child: ElevatedButton(
+                      onPressed: () async {
+                        if (selectedEmployeeId == null) {
+                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please select an employee")));
+                           return;
+                        }
+                        if (_activeRoomId == null) {
+                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Room ID missing, cannot create task")));
+                           return;
+                        }
+                        
+                        Navigator.pop(ctx);
+                        
+                        // Show loading screen during request submissions
+                        showDialog(
+                          context: context,
+                          barrierDismissible: false,
+                          builder: (context) => const Center(child: CircularProgressIndicator(color: AppColors.accent)),
+                        );
+
+                        try {
+                          // A. Sync employee assignment to the CheckoutRequest model
+                          final api = context.read<ApiService>();
+                          final checkoutRequestId = _requestData?['request_id'];
+                          if (checkoutRequestId != null) {
+                             await api.dio.put('/bill/checkout-request/$checkoutRequestId/assign', queryParameters: {
+                               'employee_id': selectedEmployeeId,
+                             });
+                          }
+                          
+                          // B. Create the ServiceRequest for Housekeeping lists
+                          final provider = context.read<ServiceRequestProvider>();
+                          await provider.createServiceRequest(
+                            roomId: _activeRoomId!,
+                            type: 'room_cleaning',
+                            description: 'Inventory Audit for Checkout - Room ${_roomController.text}',
+                            priority: 'Urgent',
+                            employeeId: selectedEmployeeId,
+                          );
+                          
+                          if (context.mounted) {
+                             Navigator.pop(context); // Close loading dialog
+                             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Audit task assigned successfully!"), backgroundColor: Colors.green));
+                          }
+                        } catch (e) {
+                          if (context.mounted) {
+                             Navigator.pop(context); // Close loading dialog
+                             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Failed to assign staff: $e"), backgroundColor: Colors.red));
+                          }
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent, foregroundColor: AppColors.onyx, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
+                      child: const Text("ASSIGN & NOTIFY", style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1)),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // close loading
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error fetching employees: $e")));
+      }
+    }
   }
 }

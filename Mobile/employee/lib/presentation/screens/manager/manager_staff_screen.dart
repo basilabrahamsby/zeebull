@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:orchid_employee/presentation/providers/management_provider.dart';
 import 'package:orchid_employee/presentation/providers/leave_provider.dart';
 import 'package:orchid_employee/presentation/providers/auth_provider.dart';
+import 'package:orchid_employee/presentation/providers/attendance_provider.dart';
 import 'package:orchid_employee/data/services/api_service.dart';
 import 'package:intl/intl.dart';
 import 'package:orchid_employee/presentation/widgets/skeleton_loaders.dart';
@@ -1036,43 +1037,78 @@ class _ManagerStaffScreenState extends State<ManagerStaffScreen> with SingleTick
                       // LIVE STATUS CARD
                       OnyxGlassCard(
                         padding: const EdgeInsets.all(20),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(color: Colors.greenAccent.withOpacity(0.1), shape: BoxShape.circle),
-                              child: const Icon(Icons.person_pin_circle_rounded, color: Colors.greenAccent, size: 24),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text("LIVE ATTENDANCE STATUS", style: TextStyle(color: Colors.white24, fontWeight: FontWeight.w900, fontSize: 8, letterSpacing: 1.5)),
-                                  const SizedBox(height: 4),
-                                  Text(_selectedAttendanceEmployee!['name'].toString().toUpperCase(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16)),
-                                  const SizedBox(height: 2),
-                                  Row(
-                                    children: [
-                                      Container(width: 6, height: 6, decoration: const BoxDecoration(color: Colors.greenAccent, shape: BoxShape.circle)),
-                                      const SizedBox(width: 6),
-                                      Text("CLOCKED IN AT OFFICE", style: TextStyle(color: Colors.greenAccent.withOpacity(0.7), fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
-                                    ],
-                                  ),
-                                ],
+                        child: () {
+                          final activeLog = _selectedEmpAttendanceHistory.firstWhere(
+                            (log) => log['check_out_time'] == null,
+                            orElse: () => null,
+                          );
+                          final hasActiveLog = activeLog != null;
+                          DateTime? activeLogTime;
+                          if (hasActiveLog && activeLog['check_in_time'] != null) {
+                            try {
+                              activeLogTime = DateTime.parse('${activeLog['date']}T${activeLog['check_in_time']}');
+                            } catch (e) {
+                              print("Error parsing active log check in: $e");
+                            }
+                          }
+                          final statusColor = hasActiveLog ? Colors.greenAccent : Colors.white24;
+                          final statusText = hasActiveLog
+                              ? "CLOCKED IN (AT ${activeLogTime != null ? DateFormat('hh:mm a').format(activeLogTime).toUpperCase() : 'N/A'})"
+                              : "NOT CLOCKED IN";
+
+                          return Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(color: statusColor.withOpacity(0.1), shape: BoxShape.circle),
+                                child: Icon(Icons.person_pin_circle_rounded, color: statusColor, size: 24),
                               ),
-                            ),
-                            Column(
-                              children: [
-                                ElevatedButton(
-                                  onPressed: () {},
-                                  style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent.withOpacity(0.1), foregroundColor: Colors.redAccent, elevation: 0, padding: const EdgeInsets.symmetric(horizontal: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
-                                  child: const Text("CLOCK OUT", style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900)),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text("LIVE ATTENDANCE STATUS", style: TextStyle(color: Colors.white24, fontWeight: FontWeight.w900, fontSize: 8, letterSpacing: 1.5)),
+                                    const SizedBox(height: 4),
+                                    Text(_selectedAttendanceEmployee!['name'].toString().toUpperCase(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16)),
+                                    const SizedBox(height: 2),
+                                    Row(
+                                      children: [
+                                        Container(width: 6, height: 6, decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle)),
+                                        const SizedBox(width: 6),
+                                        Text(statusText, style: TextStyle(color: statusColor.withOpacity(0.7), fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                                      ],
+                                    ),
+                                  ],
                                 ),
-                              ],
-                            )
-                          ],
-                        ),
+                              ),
+                              if (hasActiveLog)
+                                Column(
+                                  children: [
+                                    ElevatedButton(
+                                      onPressed: () async {
+                                        final scaffoldMessenger = ScaffoldMessenger.of(context);
+                                        final attendanceProvider = context.read<AttendanceProvider>();
+                                        final success = await attendanceProvider.clockOut(_selectedAttendanceEmployee!['id']);
+                                        if (success) {
+                                          scaffoldMessenger.showSnackBar(const SnackBar(content: Text("EMPLOYEE CLOCKED OUT SUCCESSFULLY")));
+                                          _loadAttendanceDetails(_selectedAttendanceEmployee!['id']);
+                                          _loadAllEmployees();
+                                          if (context.mounted) {
+                                            context.read<ManagementProvider>().loadDashboardData();
+                                          }
+                                        } else {
+                                          scaffoldMessenger.showSnackBar(const SnackBar(content: Text("FAILED TO CLOCK OUT EMPLOYEE")));
+                                        }
+                                      },
+                                      style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent.withOpacity(0.1), foregroundColor: Colors.redAccent, elevation: 0, padding: const EdgeInsets.symmetric(horizontal: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+                                      child: const Text("CLOCK OUT", style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900)),
+                                    ),
+                                  ],
+                                )
+                            ],
+                          );
+                        }(),
                       ),
 
                       const SizedBox(height: 24),

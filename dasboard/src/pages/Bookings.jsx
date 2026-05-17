@@ -2466,10 +2466,24 @@ const CheckInModal = ({
         const allRooms = res.data || [];
         // Filter by the booking's room type if it's a soft allocation
         const typeId = booking.room_type_id || (booking.rooms?.[0]?.room_type_id);
-        const filtered = allRooms.filter(r =>
-          r.status === 'Available' &&
-          (!typeId || r.room_type_id === typeId)
-        );
+        
+        // Parse typeId into allowed IDs or names (could be comma-separated for packages)
+        const allowedTypeIds = typeId
+          ? String(typeId).split(',').map(item => item.trim().toLowerCase())
+          : [];
+
+        const filtered = allRooms.filter(r => {
+          if (r.status !== 'Available') return false;
+          if (allowedTypeIds.length === 0) return true;
+          
+          const roomTypeIdStr = String(r.room_type_id).toLowerCase();
+          const roomTypeNameStr = String(r.type || '').toLowerCase();
+          
+          return allowedTypeIds.some(id => 
+            id === roomTypeIdStr || 
+            id === roomTypeNameStr
+          );
+        });
         setAvailableRooms(filtered);
       } catch (err) {
         console.error("Failed to fetch available rooms for check-in:", err);
@@ -3682,6 +3696,7 @@ const Bookings = () => {
   const [inventoryLocations, setInventoryLocations] = useState([]);
   const [inventoryItems, setInventoryItems] = useState([]);
   const [bookings, setBookings] = useState([]);
+  const [calendarBookings, setCalendarBookings] = useState([]); // High-limit bookings for Inventory Timeline
   const [statusFilter, setStatusFilter] = useState("All");
   const [roomNumberFilter, setRoomNumberFilter] = useState("All");
   const [fromDate, setFromDate] = useState("");
@@ -3838,6 +3853,7 @@ const Bookings = () => {
         rooms: pb.rooms || [],
       }));
       const allBookings = [...allRegularBookings, ...allPackageBookings];
+      setCalendarBookings(allBookings); // Use full 500-limit for Calendar accuracy
 
       const activeBookingsCount = allBookings.filter(
         (b) => b.status === "booked" || b.status === "checked-in",
@@ -3929,10 +3945,23 @@ const Bookings = () => {
         });
       });
 
-      // Convert Map to array and sort by ID descending
-      const combinedBookings = Array.from(bookingsMap.values()).sort(
-        (a, b) => (b.id ?? 0) - (a.id ?? 0),
-      );
+      // Sorting Priority: checked-in > booked/confirmed > checked-out > cancelled
+      const getPriority = (status) => {
+        const s = (status || "").toLowerCase().replace(/[-_]/g, "");
+        if (s === "checkedin") return 1;
+        if (s === "booked" || s === "confirmed") return 2;
+        if (s === "checkedout") return 3;
+        if (s === "cancelled") return 4;
+        return 5;
+      };
+
+      // Convert Map to array and sort by Priority then ID descending
+      const combinedBookings = Array.from(bookingsMap.values()).sort((a, b) => {
+        const pA = getPriority(a.status);
+        const pB = getPriority(b.status);
+        if (pA !== pB) return pA - pB;
+        return (b.id ?? 0) - (a.id ?? 0);
+      });
 
       setBookings(combinedBookings);
       setPackages(packageRes.data || []);
@@ -4165,9 +4194,21 @@ const Bookings = () => {
           });
         });
 
-        return Array.from(bookingsMap.values()).sort(
-          (a, b) => (b.id ?? 0) - (a.id ?? 0),
-        );
+        const getPriority = (status) => {
+          const s = (status || "").toLowerCase().replace(/[-_]/g, "");
+          if (s === "checkedin") return 1;
+          if (s === "booked" || s === "confirmed") return 2;
+          if (s === "checkedout") return 3;
+          if (s === "cancelled") return 4;
+          return 5;
+        };
+
+        return Array.from(bookingsMap.values()).sort((a, b) => {
+          const pA = getPriority(a.status);
+          const pB = getPriority(b.status);
+          if (pA !== pB) return pA - pB;
+          return (b.id ?? 0) - (a.id ?? 0);
+        });
       });
 
       const updatedRegularCount = regularBookingsLoaded + newBookings.length;
@@ -4745,11 +4786,12 @@ const Bookings = () => {
         return statusMatch && roomNumberMatch && dateMatch;
       })
       .sort((a, b) => {
-        // First, sort by status priority: booked (1), checked-in (2), checked-out (3), cancelled (4)
+        // First, sort by status priority: checked-in (1), booked (2), checked-out (3), cancelled (4)
         const statusPriority = {
-          booked: 1,
-          "checked-in": 2,
-          checked_in: 2,
+          "checked-in": 1,
+          checked_in: 1,
+          booked: 2,
+          confirmed: 2,
           "checked-out": 3,
           checked_out: 3,
           cancelled: 4,
@@ -6528,12 +6570,24 @@ const Bookings = () => {
                   </table>
                 </div>
                 {filteredBookings.length > 0 && hasMoreBookings && (
-                  <div ref={loadMoreRef} className="text-center p-4">
-                    {isSubmitting && (
-                      <span className="text-indigo-600">
-                        Loading more bookings...
-                      </span>
-                    )}
+                  <div className="text-center p-8 mt-4">
+                    <button
+                      onClick={loadMoreBookings}
+                      disabled={isSubmitting}
+                      className="group px-8 py-4 bg-white hover:bg-indigo-50 text-indigo-600 rounded-2xl font-bold uppercase tracking-widest text-[10px] border-2 border-indigo-100 hover:border-indigo-200 transition-all duration-300 shadow-sm flex items-center gap-3 mx-auto disabled:opacity-50"
+                    >
+                      {isSubmitting ? (
+                        <>
+                          <Clock className="w-4 h-4 animate-spin" />
+                          Processing...
+                        </>
+                      ) : (
+                        <>
+                          <PlusCircle className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                          View More Bookings
+                        </>
+                      )}
+                    </button>
                   </div>
                 )}
               </div>
@@ -6545,7 +6599,7 @@ const Bookings = () => {
         {mainTab === "calendar" && (
           <BookingCalendar
             rooms={allRooms}
-            bookings={bookings}
+            bookings={calendarBookings}
             roomTypeObjects={roomTypeObjects}
           />
         )}

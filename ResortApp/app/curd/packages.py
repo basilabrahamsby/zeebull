@@ -507,7 +507,32 @@ def check_in_package(db: Session, booking_id: int, current_user: User, id_card_i
                         scheduled_time = item.get("scheduledTime")
                         scheduled_date_str = item.get("scheduledDate")
                         
-                        if name and scheduled_time:
+                        if name:
+                            # Fallback if scheduled_time is missing/null/empty
+                            if not scheduled_time or not str(scheduled_time).strip() or str(scheduled_time).lower() == 'null':
+                                timings = {}
+                                if booking.package and booking.package.food_timing:
+                                    try:
+                                        timings = json.loads(booking.package.food_timing)
+                                    except:
+                                        pass
+                                
+                                meal_config = timings.get(name, {})
+                                if isinstance(meal_config, dict):
+                                    scheduled_time = meal_config.get("time")
+                                else:
+                                    scheduled_time = meal_config
+                                
+                                if not scheduled_time or not str(scheduled_time).strip() or str(scheduled_time).lower() == 'null':
+                                    if "breakfast" in name.lower():
+                                        scheduled_time = "08:00"
+                                    elif "lunch" in name.lower():
+                                        scheduled_time = "13:00"
+                                    elif "dinner" in name.lower():
+                                        scheduled_time = "20:00"
+                                    else:
+                                        scheduled_time = "08:00"
+                            
                             try:
                                  scheduled_time = scheduled_time.strip()
                                  if " " in scheduled_time:
@@ -590,8 +615,13 @@ def check_in_package(db: Session, booking_id: int, current_user: User, id_card_i
                 room_id = booking.rooms[0].room_id if booking.rooms else None
                 if room_id:
                     for meal in meals:
-                        # Find meal in timings or use defaults
-                        meal_time_str = timings.get(meal, "08:00" if "breakfast" in meal.lower() else "13:00" if "lunch" in meal.lower() else "20:00")
+                        # Find meal config in timings or use defaults
+                        meal_config = timings.get(meal, {})
+                        if isinstance(meal_config, dict):
+                            meal_time_str = meal_config.get("time", "08:00" if "breakfast" in meal.lower() else "13:00" if "lunch" in meal.lower() else "20:00")
+                        else:
+                            meal_time_str = meal_config or ("08:00" if "breakfast" in meal.lower() else "13:00" if "lunch" in meal.lower() else "20:00")
+                        
                         sh, sm = map(int, meal_time_str.split(":")[:2])
                         
                         now = datetime.now()
@@ -601,19 +631,33 @@ def check_in_package(db: Session, booking_id: int, current_user: User, id_card_i
                         
                         schedule_str = scheduled_dt.strftime("%Y-%m-%d %H:%M:%S")
                         
-                        found_item = db.query(FoodItem).filter(FoodItem.name.ilike(meal)).first()
-                        if not found_item:
-                             if "breakfast" in meal.lower(): found_item = db.query(FoodItem).filter(FoodItem.name.ilike("%breakfast%")).first()
-                             elif "lunch" in meal.lower(): found_item = db.query(FoodItem).filter(FoodItem.name.ilike("%lunch%")).first()
-                             elif "dinner" in meal.lower(): found_item = db.query(FoodItem).filter(FoodItem.name.ilike("%dinner%")).first()
+                        # Populate items either using defined items or matching names
+                        items_to_add = []
+                        if isinstance(meal_config, dict) and "items" in meal_config:
+                            for timing_item in meal_config["items"]:
+                                f_id = timing_item.get("id")
+                                qty = timing_item.get("qty", 1)
+                                if f_id:
+                                    total_qty = int(qty) * (booking.adults or 1)
+                                    items_to_add.append(FoodOrderItemCreate(food_item_id=int(f_id), quantity=total_qty))
+                        
+                        if not items_to_add:
+                            found_item = db.query(FoodItem).filter(FoodItem.name.ilike(meal)).first()
+                            if not found_item:
+                                 if "breakfast" in meal.lower(): found_item = db.query(FoodItem).filter(FoodItem.name.ilike("%breakfast%")).first()
+                                 elif "lunch" in meal.lower(): found_item = db.query(FoodItem).filter(FoodItem.name.ilike("%lunch%")).first()
+                                 elif "dinner" in meal.lower(): found_item = db.query(FoodItem).filter(FoodItem.name.ilike("%dinner%")).first()
+                            
+                            if found_item:
+                                items_to_add.append(FoodOrderItemCreate(food_item_id=found_item.id, quantity=booking.adults or 1))
 
-                        if found_item:
+                        if items_to_add:
                             assigned_emp_id = get_fallback_employee_id(db, current_user.employee.id if (current_user and current_user.employee) else None)
                             order_data = FoodOrderCreate(
                                 room_id=room_id,
                                 amount=0.0,
                                 assigned_employee_id=int(assigned_emp_id) if assigned_emp_id else None,
-                                items=[FoodOrderItemCreate(food_item_id=found_item.id, quantity=booking.adults)],
+                                items=items_to_add,
                                 status="scheduled",
                                 billing_status="unbilled",
                                 order_type="room_service",

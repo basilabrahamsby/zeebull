@@ -110,21 +110,30 @@ def calculate_live_metrics(db: Session, audit: DayAudit, branch_id: int) -> DayA
         expected_cash += tx_cash_impact
         expected_acc += tx_acc_impact
 
-    # Calculate Revenue components (from checkouts and direct orders)
+    # Calculate Revenue components (from checkouts and direct orders) in bulk
     from app.models.checkout import Checkout
     from app.models.foodorder import FoodOrder
     from app.models.service import AssignedService, Service as ServiceModel
     from sqlalchemy.sql import case
 
-    checkouts = db.query(Checkout).filter(
-        Checkout.branch_id == branch_id,
-        Checkout.created_at >= audit.opened_at,
-    ).all()
+    checkout_totals = (
+        db.query(
+            func.coalesce(func.sum(Checkout.room_total), 0),
+            func.coalesce(func.sum(Checkout.food_total), 0),
+            func.coalesce(func.sum(Checkout.service_total), 0),
+            func.coalesce(func.sum(Checkout.tax_amount), 0)
+        )
+        .filter(
+            Checkout.branch_id == branch_id,
+            Checkout.created_at >= audit.opened_at
+        )
+        .first()
+    )
     
-    checkout_room_total = sum(float(c.room_total or 0.0) for c in checkouts)
-    checkout_food_total = sum(float(c.food_total or 0.0) for c in checkouts)
-    checkout_service_total = sum(float(c.service_total or 0.0) for c in checkouts)
-    checkout_tax_total = sum(float(c.tax_amount or 0.0) for c in checkouts)
+    checkout_room_total = float(checkout_totals[0])
+    checkout_food_total = float(checkout_totals[1])
+    checkout_service_total = float(checkout_totals[2])
+    checkout_tax_total = float(checkout_totals[3])
 
     food_revenue = (
         db.query(func.coalesce(func.sum(FoodOrder.total_with_gst), 0))

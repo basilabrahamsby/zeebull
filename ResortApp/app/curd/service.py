@@ -557,7 +557,8 @@ def create_assigned_service(db: Session, assigned: AssignedServiceCreate, branch
                                 location_id=source_location.id,
                                 item_id=item_id,
                                 quantity=-quantity,
-                                last_updated=datetime.now(timezone.utc)
+                                last_updated=datetime.now(timezone.utc),
+                                branch_id=branch_id if branch_id is not None else 1
                             )
                             db.add(new_stock)
                     else:

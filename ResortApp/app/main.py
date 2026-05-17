@@ -24,6 +24,7 @@ load_dotenv()
 from app.api import (
     packages,
     room,
+    restaurant_table,
     user,
     auth,
     frontend,
@@ -322,6 +323,7 @@ app.include_router(role.router, prefix="/api", tags=["Role"])
 app.include_router(service.router, prefix="/api", tags=["Service"])
 app.include_router(branch.router, prefix="/api", tags=["Branches"])
 app.include_router(service_request.router, prefix="/api", tags=["Service Requests"])
+app.include_router(restaurant_table.router, prefix="/api", tags=["Restaurant Tables"])
 app.include_router(account.router, prefix="/api", tags=["Accounts"])
 app.include_router(gst_reports.router, prefix="/api", tags=["GST Reports"])
 

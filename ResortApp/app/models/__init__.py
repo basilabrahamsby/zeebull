@@ -1,6 +1,7 @@
 from .user import User, Role
 from .branch import Branch
 from .room import Room
+from .restaurant_table import RestaurantTable
 from .booking import Booking, BookingRoom
 from .Package import Package, PackageBooking, PackageBookingRoom
 from .foodorder import FoodOrder, FoodOrderItem

@@ -9,8 +9,9 @@ def get_food_item_price_at_time(food_item, order_time: Optional[datetime] = None
     """
     if not order_time:
         # Default to current time in IST (standard for the app)
-        from datetime import timezone, timedelta
-        order_time = datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)
+        from app.utils.timezone import get_system_timezone
+        order_time = datetime.now(get_system_timezone()).replace(tzinfo=None)
+
     
     current_time = order_time.time()
     

@@ -182,6 +182,12 @@ class ApiService {
     return await _dio.put('/food-orders/$orderId/', data: data);
   }
 
+  Future<Response> markFoodOrderPaid(int orderId, String paymentMethod) async {
+    return await _dio.post('/food-orders/$orderId/mark-paid', queryParameters: {
+      'payment_method': paymentMethod,
+    });
+  }
+
   // Stock Requisitions
   Future<Response> createStockRequisition(Map<String, dynamic> data) async {
     return await _dio.post('/inventory/requisitions', data: data);
@@ -276,8 +282,13 @@ class ApiService {
     );
   }
 
-  Future<Response> getCheckoutRequestStatus(String roomNumber) async {
-    return await _dio.get('/bill/checkout-request/$roomNumber');
+  Future<Response> getCheckoutRequestStatus(String roomNumber, {String mode = 'single'}) async {
+    return await _dio.get(
+      '/bill/checkout-request/$roomNumber',
+      queryParameters: {
+        'checkout_mode': mode,
+      },
+    );
   }
 
   Future<Response> getCheckoutInventoryDetails(int requestId) async {
@@ -290,6 +301,14 @@ class ApiService {
 
   Future<Response> getRooms({Map<String, dynamic>? queryParameters}) async {
     return await _dio.get(ApiConstants.rooms, queryParameters: queryParameters);
+  }
+
+  Future<Response> getRestaurantTables({Map<String, dynamic>? queryParameters}) async {
+    return await _dio.get(ApiConstants.restaurantTables, queryParameters: queryParameters);
+  }
+
+  Future<Response> createRestaurantTable(Map<String, dynamic> data) async {
+    return await _dio.post(ApiConstants.restaurantTables, data: data);
   }
 
   Future<Response> getRoomStats() async {
@@ -385,7 +404,7 @@ class ApiService {
 
   // Room Management
   Future<Response> createRoom(Map<String, dynamic> data) async {
-    return await _dio.post(ApiConstants.rooms, data: data);
+    return await _dio.post(ApiConstants.rooms, data: FormData.fromMap(data));
   }
 
   Future<Response> updateRoom(int id, Map<String, dynamic> data) async {
@@ -505,8 +524,13 @@ class ApiService {
   }
 
   // Final Billing & Settlement
-  Future<Response> getBillSummary(String roomNumber) async {
-    return await _dio.get('/bill/$roomNumber');
+  Future<Response> getBillSummary(String roomNumber, {String mode = 'single'}) async {
+    return await _dio.get(
+      '/bill/$roomNumber',
+      queryParameters: {
+        'checkout_mode': mode,
+      },
+    );
   }
 
   Future<Response> finalizeCheckout(String roomNumber, Map<String, dynamic> data) async {

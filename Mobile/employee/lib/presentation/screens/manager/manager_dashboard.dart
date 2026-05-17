@@ -484,9 +484,10 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
             border: Border.all(color: Colors.white10),
           ),
           padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
               Container(
                 width: 40, height: 4,
                 margin: const EdgeInsets.only(bottom: 24),
@@ -518,6 +519,7 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
               const SizedBox(height: 48),
             ],
           ),
+        ),
         ),
       ),
     );

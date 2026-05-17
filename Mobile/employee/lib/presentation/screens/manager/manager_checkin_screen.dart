@@ -59,7 +59,9 @@ class _ManagerCheckInScreenState extends State<ManagerCheckInScreen> {
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(
       source: ImageSource.camera,
-      imageQuality: 70,
+      imageQuality: 50,
+      maxWidth: 1024,
+      maxHeight: 1024,
     );
     if (pickedFile != null) {
       final bytes = await pickedFile.readAsBytes();

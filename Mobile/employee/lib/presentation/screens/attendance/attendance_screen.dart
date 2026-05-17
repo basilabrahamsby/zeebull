@@ -1042,6 +1042,7 @@ class _LeavesTab extends StatelessWidget {
                     TextField(
                       controller: reasonController,
                       maxLines: 3,
+                      onChanged: (_) => setState(() {}),
                       decoration: InputDecoration(
                         hintText: 'Enter reason for leave...',
                         border: OutlineInputBorder(

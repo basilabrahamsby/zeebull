@@ -13,6 +13,7 @@ class RoomOut(BaseModel):
     type: Optional[str] = None     # resolved from RoomType.name via @property
     status: str
     image_url: Optional[str] = None
+    inventory_location_id: Optional[int] = None
 
     class Config:
         from_attributes = True

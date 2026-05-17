@@ -10,6 +10,7 @@ class ApiConstants {
   // Housekeeping & Rooms
   static const String rooms = '/rooms';
   static const String roomStats = '/rooms/stats';
+  static const String restaurantTables = '/restaurant-tables';
   
   // Service Requests
   static const String serviceRequests = '/service-requests';

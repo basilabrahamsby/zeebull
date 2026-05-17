@@ -407,7 +407,7 @@ class _ManagerExpensesScreenState extends State<ManagerExpensesScreen> with Sing
             children: [
               const SizedBox(height: 4),
               Text(
-                "${e['category']} • ${DateFormat('dd MMM yyyy').format(date)}",
+                "${e['category']} • ${(e['payment_mode'] ?? 'Cash').toString().toUpperCase()} • ${DateFormat('dd MMM yyyy').format(date)}",
                 style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 10, fontWeight: FontWeight.bold)
               ),
               const SizedBox(height: 2),
@@ -503,9 +503,13 @@ class _ManagerExpensesScreenState extends State<ManagerExpensesScreen> with Sing
     final amtController = TextEditingController();
     String category = "Operational";
     String? department;
+    String paymentMode = "Cash";
     
     final auth = context.read<AuthProvider>();
     final employeeId = auth.employeeId;
+
+    XFile? selectedImage;
+    final ImagePicker picker = ImagePicker();
 
     showModalBottomSheet(
       context: context,
@@ -522,13 +526,11 @@ class _ManagerExpensesScreenState extends State<ManagerExpensesScreen> with Sing
           padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom, left: 24, right: 24, top: 24),
           child: StatefulBuilder(
             builder: (context, setModalState) {
-              XFile? selectedImage;
-              final ImagePicker picker = ImagePicker();
-
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+              return SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                   Center(
                     child: Container(
                       width: 40, height: 4,
@@ -591,6 +593,14 @@ class _ManagerExpensesScreenState extends State<ManagerExpensesScreen> with Sing
                     items: ["Front Office", "Restaurant", "Kitchen", "Housekeeping", "Maintenance", "Management", "Security"],
                     onChanged: (val) => department = val,
                   ),
+                  const SizedBox(height: 16),
+                  _buildGlassDropdown(
+                    value: paymentMode,
+                    label: "Payment Mode",
+                    icon: Icons.payments_outlined,
+                    items: ["Cash", "Card", "UPI", "Bank Transfer"],
+                    onChanged: (val) => paymentMode = val!,
+                  ),
                   const SizedBox(height: 32),
                   SizedBox(
                     width: double.infinity,
@@ -611,7 +621,7 @@ class _ManagerExpensesScreenState extends State<ManagerExpensesScreen> with Sing
                         if (amount == null || employeeId == null) return;
 
                         final success = await context.read<ExpenseProvider>().createExpense(
-                          category: category, amount: amount, description: descController.text, employeeId: employeeId, department: department, image: selectedImage,
+                          category: category, amount: amount, description: descController.text, employeeId: employeeId, department: department, paymentMode: paymentMode, image: selectedImage,
                         );
 
                         if (context.mounted) {
@@ -629,7 +639,8 @@ class _ManagerExpensesScreenState extends State<ManagerExpensesScreen> with Sing
                   ),
                   const SizedBox(height: 40),
                 ],
-              );
+              ),
+            );
             },
           ),
         ),

@@ -7,7 +7,8 @@ class FoodOrder(Base):
     __tablename__ = "food_orders"
 
     id = Column(Integer, primary_key=True, index=True)
-    room_id = Column(Integer, ForeignKey("rooms.id"))
+    room_id = Column(Integer, ForeignKey("rooms.id"), nullable=True)
+    table_id = Column(Integer, ForeignKey("restaurant_tables.id"), nullable=True)
     amount = Column(Float)  # Base amount without GST
     booking_id = Column(Integer, ForeignKey("bookings.id"), nullable=True) # Link to booking
     package_booking_id = Column(Integer, ForeignKey("package_bookings.id"), nullable=True) # Link to package booking
@@ -35,6 +36,7 @@ class FoodOrder(Base):
     creator = relationship("Employee", foreign_keys=[created_by_id], back_populates="created_food_orders")
     chef = relationship("Employee", foreign_keys=[prepared_by_id], back_populates="prepared_food_orders")
     room = relationship("Room", back_populates="food_orders")
+    table = relationship("RestaurantTable", backref="food_orders")
     booking = relationship("Booking", backref="food_orders")
     package_booking = relationship("PackageBooking", backref="food_orders")
 

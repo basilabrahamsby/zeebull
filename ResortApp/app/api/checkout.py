@@ -2439,10 +2439,11 @@ def get_active_rooms(db: Session = Depends(get_db), current_user: User = Depends
             db.commit()
             
             # Extract room numbers with proper null checks using helper function
-            # Also filter out rooms that are already checked out (status = "Available")
+            # Also filter out rooms that are already checked out (status = "Available" or having a checkout record)
             room_numbers = sorted([
                 room_num for link in booking.booking_rooms 
                 if (room_num := get_room_number(link)) is not None
+                and room_num not in checked_out_rooms  # Exclude already checked-out rooms
                 and link.room 
                 and link.room.status 
                 and link.room.status.lower() not in ["available", "checked-out", "checked_out", "checked out"]  # Exclude already checked-out rooms
@@ -2500,11 +2501,12 @@ def get_active_rooms(db: Session = Depends(get_db), current_user: User = Depends
             db.commit()
             
             # Extract room numbers with proper null checks using helper function
-            # Also filter out rooms that are already checked out (status = "Available" or "available")
+            # Also filter out rooms that are already checked out (status = "Available" or having a checkout record)
             # Include rooms with status "Checked-in", "Checked_in", "checked-in", etc.
             room_numbers = sorted([
                 room_num for link in pkg_booking.rooms 
                 if (room_num := get_room_number(link)) is not None
+                and room_num not in pkg_checked_out_rooms  # Exclude already checked-out rooms
                 and link.room 
                 and link.room.status 
                 and link.room.status.lower() not in ["available", "checked-out", "checked_out", "checked out"]  # Exclude already checked-out rooms

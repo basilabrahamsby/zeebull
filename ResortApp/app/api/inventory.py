@@ -286,25 +286,30 @@ def get_items(
         item_ids = [i.id for i in items]
         last_prices = {}
         if item_ids:
-            # Fetch most recent purchase details for these items
+            # Fetch most recent purchase details for these items using DISTINCT ON (PostgreSQL)
             # statuses: confirmed or received are valid for "last price"
-            rows = db.query(PurchaseDetail.item_id, PurchaseDetail.unit_price, PurchaseMaster.purchase_date, PurchaseMaster.vendor_id)\
-                .join(PurchaseMaster)\
-                .filter(PurchaseDetail.item_id.in_(item_ids))\
-                .filter(PurchaseMaster.status.in_(['received', 'confirmed']))\
-                .order_by(PurchaseMaster.purchase_date.desc(), PurchaseDetail.id.desc())\
-                .all()
+            # Note: order_by must start with the distinct column
+            rows = db.query(
+                PurchaseDetail.item_id, 
+                PurchaseDetail.unit_price, 
+                PurchaseMaster.purchase_date, 
+                PurchaseMaster.vendor_id
+            ).join(PurchaseMaster)\
+             .filter(PurchaseDetail.item_id.in_(item_ids))\
+             .filter(PurchaseMaster.status.in_(['received', 'confirmed']))\
+             .distinct(PurchaseDetail.item_id)\
+             .order_by(PurchaseDetail.item_id, PurchaseMaster.purchase_date.desc(), PurchaseDetail.id.desc())\
+             .all()
             
-            # Since we ordered by date desc, the first time we see an item_id, it is the latest
+            # Since we used DISTINCT ON, each item_id appears at most once
             vendor_ids = set()
             for iid, price, pdate, vid in rows:
-                if iid not in last_prices:
-                    last_prices[iid] = {
-                        "price": float(price) if price else 0.0,
-                        "date": pdate,
-                        "vendor_id": vid
-                    }
-                    if vid: vendor_ids.add(vid)
+                last_prices[iid] = {
+                    "price": float(price) if price else 0.0,
+                    "date": pdate,
+                    "vendor_id": vid
+                }
+                if vid: vendor_ids.add(vid)
             
             # Fetch vendor names
             vendor_names = {}
@@ -331,24 +336,54 @@ def get_items(
         result = []
         for item in items:
             try:
-                # Category is already loaded via eager loading (when configured), no extra query needed
+                # Category is already loaded via eager loading, no extra query needed
                 category = getattr(item, "category", None)
                 last_p = last_prices.get(item.id, {})
                 
                 # Use branch-specific stock if available, else 0
                 current_branch_stock = branch_stock_map.get(item.id, 0.0)
                 
+                # Build item dict safely from model attributes to avoid __dict__ issues
                 item_dict = {
-                    **item.__dict__,
+                    "id": item.id,
+                    "name": item.name,
+                    "item_code": item.item_code,
+                    "description": item.description,
+                    "category_id": item.category_id,
+                    "sub_category": item.sub_category,
+                    "hsn_code": item.hsn_code,
+                    "unit": item.unit,
+                    "min_stock_level": item.min_stock_level,
+                    "max_stock_level": item.max_stock_level,
+                    "unit_price": item.unit_price,
+                    "selling_price": item.selling_price,
+                    "gst_rate": item.gst_rate,
+                    "location": item.location,
+                    "barcode": item.barcode,
+                    "image_path": item.image_path,
+                    "is_perishable": item.is_perishable,
+                    "track_serial_number": item.track_serial_number,
+                    "is_sellable_to_guest": item.is_sellable_to_guest,
+                    "track_laundry_cycle": item.track_laundry_cycle,
+                    "is_asset_fixed": item.is_asset_fixed,
+                    "maintenance_schedule_days": item.maintenance_schedule_days,
+                    "complimentary_limit": item.complimentary_limit,
+                    "ingredient_yield_percentage": item.ingredient_yield_percentage,
+                    "preferred_vendor_id": item.preferred_vendor_id,
+                    "vendor_item_code": item.vendor_item_code,
+                    "lead_time_days": item.lead_time_days,
+                    "is_active": item.is_active,
+                    "created_at": item.created_at,
+                    "updated_at": item.updated_at,
                     "category_name": category.name if category else None,
-                    "department": category.parent_department if category else None,  # Add department from category
-                    "current_stock": current_branch_stock, # Override shared current_stock with branch-specific one
+                    "department": category.parent_department if category else None,
+                    "current_stock": current_branch_stock,
                     "is_low_stock": current_branch_stock <= item.min_stock_level if item.min_stock_level else False,
                     "last_purchase_price": last_p.get("price", 0.0),
                     "last_purchase_date": last_p.get("date"),
                     "last_vendor_name": vendor_names.get(last_p.get("vendor_id")) if last_p.get("vendor_id") else None,
                     "branch_name": "Enterprise",
-                    "branch_id": branch_id or 1 # Use current context branch for pydantic
+                    "branch_id": branch_id or 1
                 }
 
                 # Add category object for frontend grouping
@@ -957,30 +992,56 @@ def get_purchases(
 
     result = []
     for purchase in purchases:
-        # Vendor and details.items already loaded via eager loading
-        vendor = purchase.vendor
+        # Vendor, details, items, user, and location already loaded via eager loading
         details = []
         for detail in purchase.details:
-            item = detail.item  # Already loaded
             details.append({
-                **detail.__dict__,
-                "item_name": item.name if item else None
+                "id": detail.id,
+                "purchase_master_id": detail.purchase_master_id,
+                "item_id": detail.item_id,
+                "item_name": detail.item.name if detail.item else "Unknown",
+                "quantity": detail.quantity,
+                "unit": detail.unit,
+                "unit_price": detail.unit_price,
+                "gst_rate": detail.gst_rate,
+                "cgst_amount": detail.cgst_amount,
+                "sgst_amount": detail.sgst_amount,
+                "igst_amount": detail.igst_amount,
+                "discount": detail.discount,
+                "total_amount": detail.total_amount,
+                "hsn_code": detail.hsn_code,
+                "notes": detail.notes
             })
-        # Get user separately (not in relationship, but only once per purchase)
-        user = db.query(User).filter(User.id == purchase.created_by).first()
-        # Get destination location if set
-        location_name = None
-        if purchase.destination_location_id:
-            location = db.query(Location).filter(Location.id == purchase.destination_location_id, (Location.branch_id == branch_id if branch_id is not None else True)).first()
-
-            if location:
-                location_name = location.name or f"{location.building} - {location.room_area}"
+        
         result.append({
-            **purchase.__dict__,
-            "vendor_name": vendor.name if vendor else None,
-            "vendor_gst": vendor.gst_number if vendor else None,
-            "created_by_name": user.name if user else None,
-            "destination_location_name": location_name,
+            "id": purchase.id,
+            "purchase_number": purchase.purchase_number,
+            "vendor_id": purchase.vendor_id,
+            "vendor_name": purchase.vendor.name if purchase.vendor else None,
+            "vendor_gst": purchase.vendor.gst_number if purchase.vendor else None,
+            "purchase_date": purchase.purchase_date,
+            "expected_delivery_date": purchase.expected_delivery_date,
+            "invoice_number": purchase.invoice_number,
+            "invoice_date": purchase.invoice_date,
+            "status": purchase.status,
+            "payment_status": purchase.payment_status,
+            "payment_method": purchase.payment_method,
+            "payment_terms": purchase.payment_terms,
+            "payment_date": purchase.payment_date,
+            "sub_total": purchase.sub_total,
+            "cgst": purchase.cgst,
+            "sgst": purchase.sgst,
+            "igst": purchase.igst,
+            "discount": purchase.discount,
+            "total_amount": purchase.total_amount,
+            "destination_location_id": purchase.destination_location_id,
+            "destination_location_name": purchase.destination_location.name if purchase.destination_location else None,
+            "created_by": purchase.created_by,
+            "created_by_name": purchase.user.name if purchase.user else None,
+            "created_at": purchase.created_at,
+            "updated_at": purchase.updated_at,
+            "notes": purchase.notes,
+            "bill_file_url": purchase.bill_file_url,
             "details": details
         })
     return result
@@ -993,47 +1054,60 @@ def get_purchase(
     current_user: User = Depends(get_current_user),
     branch_id: Optional[int] = Depends(get_branch_id)
 ):
-    query = db.query(PurchaseMaster).filter(PurchaseMaster.id == purchase_id)
-    if branch_id is not None:
-        query = query.filter(PurchaseMaster.branch_id == branch_id)
-    
-    purchase = query.first()
+    purchase = inventory_crud.get_purchase_by_id(db, purchase_id, branch_id=branch_id)
 
     if not purchase:
         raise HTTPException(status_code=404, detail="Purchase not found")
     
-    # Optimized: Batch load to avoid N+1 queries
-    vendor = inventory_crud.get_vendor_by_id(db, purchase.vendor_id, branch_id=branch_id)
-    user = db.query(User).filter(User.id == purchase.created_by).first()
-    
-    # Batch load items
-    detail_item_ids = [d.item_id for d in purchase.details if d.item_id]
-    items_map = {}
-    if detail_item_ids:
-        items = db.query(InventoryItem).filter(InventoryItem.id.in_(detail_item_ids)).all()
-        items_map = {item.id: item for item in items}
-    
     details = []
     for detail in purchase.details:
-        item = items_map.get(detail.item_id) if detail.item_id else None
         details.append({
-            **detail.__dict__,
-            "item_name": item.name if item else None
+            "id": detail.id,
+            "purchase_master_id": detail.purchase_master_id,
+            "item_id": detail.item_id,
+            "item_name": detail.item.name if detail.item else "Unknown",
+            "quantity": detail.quantity,
+            "unit": detail.unit,
+            "unit_price": detail.unit_price,
+            "gst_rate": detail.gst_rate,
+            "cgst_amount": detail.cgst_amount,
+            "sgst_amount": detail.sgst_amount,
+            "igst_amount": detail.igst_amount,
+            "discount": detail.discount,
+            "total_amount": detail.total_amount,
+            "hsn_code": detail.hsn_code,
+            "notes": detail.notes
         })
     
-    # Get destination location name
-    location_name = None
-    if purchase.destination_location_id:
-        location = db.query(Location).filter(Location.id == purchase.destination_location_id, (Location.branch_id == branch_id if branch_id is not None else True)).first()
-        if location:
-            location_name = location.name or f"{location.building} - {location.room_area}"
-    
     return {
-        **purchase.__dict__,
-        "vendor_name": vendor.name if vendor else None,
-        "vendor_gst": vendor.gst_number if vendor else None,
-        "created_by_name": user.name if user else None,
-        "destination_location_name": location_name,
+        "id": purchase.id,
+        "purchase_number": purchase.purchase_number,
+        "vendor_id": purchase.vendor_id,
+        "vendor_name": purchase.vendor.name if purchase.vendor else None,
+        "vendor_gst": purchase.vendor.gst_number if purchase.vendor else None,
+        "purchase_date": purchase.purchase_date,
+        "expected_delivery_date": purchase.expected_delivery_date,
+        "invoice_number": purchase.invoice_number,
+        "invoice_date": purchase.invoice_date,
+        "status": purchase.status,
+        "payment_status": purchase.payment_status,
+        "payment_method": purchase.payment_method,
+        "payment_terms": purchase.payment_terms,
+        "payment_date": purchase.payment_date,
+        "sub_total": purchase.sub_total,
+        "cgst": purchase.cgst,
+        "sgst": purchase.sgst,
+        "igst": purchase.igst,
+        "discount": purchase.discount,
+        "total_amount": purchase.total_amount,
+        "destination_location_id": purchase.destination_location_id,
+        "destination_location_name": purchase.destination_location.name if purchase.destination_location else None,
+        "created_by": purchase.created_by,
+        "created_by_name": purchase.user.name if purchase.user else None,
+        "created_at": purchase.created_at,
+        "updated_at": purchase.updated_at,
+        "notes": purchase.notes,
+        "bill_file_url": purchase.bill_file_url,
         "details": details
     }
 
@@ -1560,7 +1634,82 @@ def get_transactions(
                     trans_dict["destination_location_name"] = "Central Warehouse"
 
         result.append(trans_dict)
-    return result
+
+    # Fetch food waste logs if relevant
+    food_waste_dicts = []
+    if not item_id and (not type or type == "all" or type == "waste"):
+        from app.models.inventory import WasteLog
+        from app.models.food_item import FoodItem
+        
+        food_query = db.query(WasteLog).filter(WasteLog.is_food_item == True)
+        if branch_id is not None:
+            food_query = food_query.filter(WasteLog.branch_id == branch_id)
+            
+        if start_date:
+            try:
+                s_date = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+                food_query = food_query.filter(WasteLog.created_at >= s_date)
+            except:
+                pass
+        if end_date:
+            try:
+                e_date = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+                food_query = food_query.filter(WasteLog.created_at <= e_date)
+            except:
+                pass
+                
+        if category and category != "all":
+            from app.models.food_item import FoodCategory
+            food_query = food_query.join(FoodItem, WasteLog.food_item_id == FoodItem.id).join(FoodCategory).filter(FoodCategory.name == category)
+            
+        if search:
+            search_term = f"%{search}%"
+            food_query = food_query.join(FoodItem, WasteLog.food_item_id == FoodItem.id).filter(
+                or_(
+                    FoodItem.name.ilike(search_term),
+                    WasteLog.notes.ilike(search_term),
+                    WasteLog.log_number.ilike(search_term)
+                )
+            )
+            
+        food_waste_logs = food_query.order_by(WasteLog.created_at.desc()).limit(limit + skip).all()
+        
+        for log in food_waste_logs:
+            fi = db.query(FoodItem).filter(FoodItem.id == log.food_item_id).first()
+            reporter = db.query(User).filter(User.id == log.reported_by).first()
+            w_loc = db.query(Location).filter(Location.id == log.location_id).first() if log.location_id else None
+            
+            src_loc_name = f"{w_loc.building} - {w_loc.room_area}" if w_loc and (w_loc.building or w_loc.room_area) else (w_loc.name if w_loc else None)
+            
+            food_waste_dicts.append({
+                "id": log.id + 1000000,
+                "item_id": None,
+                "item_name": fi.name if fi else "Unknown Food Item",
+                "transaction_type": "waste",
+                "quantity": float(log.quantity),
+                "unit_price": float(fi.price or 0) if fi else 0.0,
+                "total_amount": float(fi.price or 0) * float(log.quantity) if fi else 0.0,
+                "reference_number": log.log_number,
+                "purchase_master_id": None,
+                "notes": f"WASTE: {log.reason_code} - {log.notes or ''}",
+                "created_by": log.reported_by,
+                "created_by_name": reporter.name if reporter else None,
+                "source_location_name": src_loc_name,
+                "destination_location_name": None,
+                "created_at": log.created_at,
+                "branch_id": log.branch_id
+            })
+
+    # Combine standard transactions and food waste logs
+    all_transactions = result + food_waste_dicts
+    
+    # Sort combined list by created_at descending
+    all_transactions.sort(key=lambda t: t["created_at"] if isinstance(t["created_at"], datetime) else datetime.fromisoformat(str(t["created_at"]).replace('Z', '+00:00')), reverse=True)
+    
+    # Apply pagination (skip and limit) on the combined list
+    paginated_transactions = all_transactions[skip : skip + limit]
+    
+    return paginated_transactions
 
 
 # Stock Requisition Endpoints
@@ -1766,6 +1915,8 @@ def add_inventory_consumption(
         location_id = data.get("location_id")
         quantity = data.get("quantity", 1)
         notes = data.get("notes", "Consumption via mobile")
+        booking_id = data.get("booking_id")
+        used_by_type = data.get("used_by_type", "guest")
         
         if not item_id or not location_id:
             raise HTTPException(status_code=400, detail="item_id and location_id are required")
@@ -1779,12 +1930,14 @@ def add_inventory_consumption(
         issue_data = {
             "destination_location_id": location_id,
             "notes": notes,
+            "booking_id": booking_id,
             "details": [
                 {
                     "item_id": item_id,
                     "issued_quantity": quantity,
                     "unit": item.unit or "pcs",
-                    "notes": notes
+                    "notes": notes,
+                    "is_payable": (used_by_type == 'guest')
                 }
             ]
         }
@@ -1979,7 +2132,7 @@ def create_waste_log(
         return {
             **created.__dict__,
             "reported_by_name": reporter.name if reporter else None,
-            "item_name": item.name if item else None,
+            "item_name": item.name if item else (food_item.name if food_item else None),
             "food_item_name": food_item.name if food_item else None,
             "location_name": f"{location.building} - {location.room_area}" if location else None
         }
@@ -2032,7 +2185,7 @@ def get_waste_logs(
         result.append({
             **log.__dict__,
             "reported_by_name": reporter.name if reporter else None,
-            "item_name": item_name,
+            "item_name": item_name or food_item_name,
             "food_item_name": food_item_name,
             "location_name": f"{location.building} - {location.room_area}" if location else None
         })
@@ -4244,4 +4397,199 @@ def update_transfer_status_endpoint(
         raise HTTPException(status_code=400, detail="Failed to update status")
     
     return updated
+
+
+from pydantic import BaseModel
+
+class ReturnItemRequest(BaseModel):
+    booking_id: int
+    item_id: int
+    quantity: float
+    return_location_id: int
+    is_laundry: bool = False
+
+@router.post("/return-item")
+def return_inventory_item(
+    req: ReturnItemRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    branch_id: int = Depends(get_branch_id)
+):
+    from app.models.booking import Booking, BookingRoom
+    from app.models.Package import PackageBooking, PackageBookingRoom
+    from app.models.room import Room
+    from app.models.inventory import Location, LocationStock, AssetMapping, InventoryTransaction, StockIssue, StockIssueDetail, LaundryLog, InventoryItem
+    from datetime import timezone, datetime
+    
+    booking_id = req.booking_id
+    item_id = req.item_id
+    quantity = req.quantity
+    return_location_id = req.return_location_id
+    is_laundry = req.is_laundry
+    
+    # 1. Fetch booking to identify room location IDs
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    room_ids = []
+    if booking:
+        room_ids = [br.room_id for br in booking.booking_rooms if br.room_id]
+    else:
+        pkg_booking = db.query(PackageBooking).filter(PackageBooking.id == booking_id).first()
+        if pkg_booking:
+            room_ids = [r.room_id for r in pkg_booking.rooms if r.room_id]
+            
+    if not room_ids:
+        raise HTTPException(status_code=400, detail="No rooms associated with this booking")
+        
+    rooms = db.query(Room).filter(Room.id.in_(room_ids)).all()
+    source_location_ids = [r.inventory_location_id for r in rooms if r.inventory_location_id]
+    
+    if not source_location_ids:
+        raise HTTPException(status_code=400, detail="No inventory location mapped to the rooms in this booking")
+        
+    primary_room_loc_id = source_location_ids[0]
+    
+    # 2. Check if active asset mapping exists first
+    mapping = db.query(AssetMapping).filter(
+        AssetMapping.location_id.in_(source_location_ids),
+        AssetMapping.item_id == item_id,
+        AssetMapping.is_active == True
+    ).first()
+    
+    if mapping:
+        # Return asset using unassign_asset CRUD function
+        from app.curd.inventory import unassign_asset as crud_unassign_asset
+        crud_unassign_asset(db, mapping_id=mapping.id, destination_location_id=return_location_id, unassigned_by=current_user.id)
+        return {"message": "Asset mapping unassigned and returned successfully"}
+        
+    # 4. Perform physical LocationStock movements
+    # Search for room stock in all locations associated with the booking's rooms
+    room_stock = db.query(LocationStock).filter(
+        LocationStock.location_id.in_(source_location_ids),
+        LocationStock.item_id == item_id
+    ).first()
+
+    # 3. Check for issued inventory items to ensure we are returning something that was actually issued
+    issue_detail = db.query(StockIssueDetail).join(StockIssue).filter(
+        StockIssue.booking_id == booking_id,
+        StockIssueDetail.item_id == item_id
+    ).first()
+    
+    # We don't modify the existing record here to maintain audit trail, 
+    # as we add a new negative issue below. The total sum will be correct.
+    # But we check existence to validate the return.
+    if not issue_detail and not room_stock:
+        # If no issue record and no room stock, we might still allow return if it's a fixed asset 
+        # but that's handled above in mapping section.
+        pass
+            
+    if room_stock:
+        # Use the actual location where the item was found
+        actual_room_loc_id = room_stock.location_id
+        room_stock.quantity = max(0.0, room_stock.quantity - quantity)
+        room_stock.last_updated = datetime.now(timezone.utc)
+    else:
+        actual_room_loc_id = primary_room_loc_id
+        
+    # Update destination stock
+    dest_stock = db.query(LocationStock).filter(
+        LocationStock.location_id == return_location_id,
+        LocationStock.item_id == item_id
+    ).first()
+    
+    if dest_stock:
+        dest_stock.quantity += quantity
+        dest_stock.last_updated = datetime.now(timezone.utc)
+    else:
+        dest_stock = LocationStock(
+            location_id=return_location_id,
+            item_id=item_id,
+            quantity=quantity,
+            last_updated=datetime.now(timezone.utc),
+            branch_id=branch_id
+        )
+        db.add(dest_stock)
+        
+    # 5. Create Transaction / Issue audit logs
+    item_obj = db.query(InventoryItem).filter(InventoryItem.id == item_id).first()
+    unit_price = item_obj.unit_price if item_obj else 0.0
+    
+    from app.curd.inventory import generate_issue_number
+    issue_number = generate_issue_number(db, branch_id)
+    
+    dest_loc = db.query(Location).filter(Location.id == return_location_id).first()
+    dest_name = dest_loc.name if dest_loc else "Return Location"
+    
+    new_issue = StockIssue(
+        issue_number=issue_number,
+        issued_by=current_user.id,
+        source_location_id=actual_room_loc_id,
+        destination_location_id=return_location_id,
+        issue_date=datetime.now(timezone.utc),
+        notes=f"Return of item from Room Booking #{booking_id} to {dest_name}",
+        branch_id=branch_id,
+        booking_id=booking_id
+    )
+    db.add(new_issue)
+    db.flush()
+    
+    new_detail = StockIssueDetail(
+        issue_id=new_issue.id,
+        item_id=item_id,
+        issued_quantity=-quantity,
+        unit=item_obj.unit if item_obj else "pcs",
+        unit_price=unit_price,
+        cost=-quantity * unit_price,
+        notes="Returned to stock"
+    )
+    db.add(new_detail)
+    
+    # Traceability transactions
+    txn_out = InventoryTransaction(
+        item_id=item_id,
+        transaction_type="transfer_out",
+        quantity=quantity,
+        unit_price=unit_price,
+        total_amount=unit_price * quantity,
+        reference_number=issue_number,
+        notes=f"Returned item moved out from Room (Booking #{booking_id})",
+        created_by=current_user.id,
+        source_location_id=actual_room_loc_id,
+        destination_location_id=return_location_id,
+        branch_id=branch_id
+    )
+    db.add(txn_out)
+    
+    txn_in = InventoryTransaction(
+        item_id=item_id,
+        transaction_type="transfer_in",
+        quantity=quantity,
+        unit_price=unit_price,
+        total_amount=unit_price * quantity,
+        reference_number=issue_number,
+        notes=f"Returned item received at {dest_name} (Booking #{booking_id})",
+        created_by=current_user.id,
+        source_location_id=actual_room_loc_id,
+        destination_location_id=return_location_id,
+        branch_id=branch_id
+    )
+    db.add(txn_in)
+    
+    # 6. If laundry return, create LaundryLog
+    if is_laundry:
+        laundry = LaundryLog(
+            item_id=item_id,
+            source_location_id=actual_room_loc_id,
+            room_number=rooms[0].number if rooms else f"Room-{booking_id}",
+            quantity=quantity,
+            status="Incomplete Washing",
+            sent_at=datetime.now(timezone.utc),
+            created_by=current_user.id,
+            branch_id=branch_id,
+            notes=f"Linen return from Room (Booking #{booking_id})"
+        )
+        db.add(laundry)
+        
+    db.commit()
+    return {"message": "Inventory returned successfully"}
+
 

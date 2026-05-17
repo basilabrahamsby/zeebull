@@ -9,8 +9,10 @@ import re
 from app.curd.notification import notify_food_order_created, notify_food_order_status_changed
 
 def get_ist_now():
-    """Get current time in Indian Standard Time (UTC+5:30)"""
-    return datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)
+    """Get current time in Indian Standard Time (naive)"""
+    from app.utils.timezone import get_system_timezone
+    return datetime.now(get_system_timezone()).replace(tzinfo=None)
+
 
 def get_booking_for_room(room_id, db: Session, branch_id: int, reference_date=None) -> tuple:
     """Get active booking for a room from either regular or package bookings within a branch"""
@@ -221,7 +223,7 @@ def create_food_order(db: Session, order_data: FoodOrderCreate, branch_id: int):
     booking_id = getattr(order_data, 'booking_id', None)
     package_booking_id = getattr(order_data, 'package_booking_id', None)
     
-    if not booking_id and not package_booking_id:
+    if not booking_id and not package_booking_id and order_data.room_id is not None:
         b_id, is_pkg = get_booking_for_room(order_data.room_id, db, branch_id=branch_id)
 
         if b_id:
@@ -235,6 +237,7 @@ def create_food_order(db: Session, order_data: FoodOrderCreate, branch_id: int):
 
     order = FoodOrder(
         room_id=order_data.room_id,
+        table_id=getattr(order_data, 'table_id', None),
         booking_id=booking_id,
         package_booking_id=package_booking_id,
         amount=final_amount,
@@ -270,39 +273,61 @@ def create_food_order(db: Session, order_data: FoodOrderCreate, branch_id: int):
     # Populate for response
     _populate_order_item_prices(order)
     
-    # 1. Create Kitchen Task for the Chef
-    if order.prepared_by_id:
-        existing_kitchen_task = db.query(ServiceRequest).filter(
-            ServiceRequest.food_order_id == order.id,
-            ServiceRequest.request_type == "kitchen_preparation"
-        ).first()
-        if not existing_kitchen_task:
-            kitchen_task = ServiceRequest(
-                food_order_id=order.id,
-                room_id=order.room_id,
-                employee_id=order.prepared_by_id,
-                request_type="kitchen_preparation",
-                description=f"Kitchen Preparation for food order #{order.id}",
-                status="pending" if status != "scheduled" else "scheduled",
-                branch_id=branch_id
-            )
-            db.add(kitchen_task)
-            db.commit()
+    # 1. Create Kitchen Task for the Chef (Bypassed as per user request: food orders decoupled from services)
+    # if order.prepared_by_id:
+    #     existing_kitchen_task = db.query(ServiceRequest).filter(
+    #         ServiceRequest.food_order_id == order.id,
+    #         ServiceRequest.request_type == "kitchen_preparation"
+    #     ).first()
+    #     if not existing_kitchen_task:
+    #         kitchen_task = ServiceRequest(
+    #             food_order_id=order.id,
+    #             room_id=order.room_id,
+    #             table_id=order.table_id,
+    #             employee_id=order.prepared_by_id,
+    #             request_type="kitchen_preparation",
+    #             description=f"Kitchen Preparation for food order #{order.id}",
+    #             status="pending" if status != "scheduled" else "scheduled",
+    #             branch_id=branch_id
+    #         )
+    #         db.add(kitchen_task)
+    #         db.commit()
 
-    # 2. Create Delivery Task for the Delivery Person (Room Service Only)
-    if order.order_type == "room_service" and order.assigned_employee_id:
+    # 2. Create Delivery Task for the Delivery Person (Room Service / Dining Table) (Bypassed as per user request)
+    # if order.assigned_employee_id:
+    #     existing_delivery_task = db.query(ServiceRequest).filter(
+    #         ServiceRequest.food_order_id == order.id,
+    #         ServiceRequest.request_type == "food_delivery"
+    #     ).first()
+    #     if not existing_delivery_task:
+    #         delivery_task = ServiceRequest(
+    #             food_order_id=order.id,
+    #             room_id=order.room_id,
+    #             table_id=order.table_id,
+    #             employee_id=order.assigned_employee_id,
+    #             request_type="food_delivery",
+    #             description=order.delivery_request or f"Delivery/service task for food order #{order.id}",
+    #             status="pending" if status != "scheduled" else "scheduled",
+    #             branch_id=branch_id
+    #         )
+    #         db.add(delivery_task)
+    #         db.commit()
+
+    # Automatically create a delivery ServiceRequest if the order type is "room_service"
+    if order.order_type == "room_service":
         existing_delivery_task = db.query(ServiceRequest).filter(
             ServiceRequest.food_order_id == order.id,
-            ServiceRequest.request_type == "food_delivery"
+            ServiceRequest.request_type == "room_service"
         ).first()
         if not existing_delivery_task:
             delivery_task = ServiceRequest(
                 food_order_id=order.id,
                 room_id=order.room_id,
+                table_id=order.table_id,
                 employee_id=order.assigned_employee_id,
-                request_type="food_delivery",
-                description=order.delivery_request or f"Room service delivery for food order #{order.id}",
-                status="pending" if status != "scheduled" else "scheduled",
+                request_type="room_service",
+                description=order.delivery_request or f"Room Service Delivery for food order #{order.id}",
+                status="pending" if order.status != "scheduled" else "scheduled",
                 branch_id=branch_id
             )
             db.add(delivery_task)
@@ -311,10 +336,16 @@ def create_food_order(db: Session, order_data: FoodOrderCreate, branch_id: int):
     
     # Notify about new order
     try:
-        from app.models.room import Room
-        room = db.query(Room).filter(Room.id == order.room_id, Room.branch_id == branch_id).first()
-
-        room_number = room.number if room else "Unknown"
+        room_number = "Unknown"
+        if order.room_id:
+            from app.models.room import Room
+            room = db.query(Room).filter(Room.id == order.room_id, Room.branch_id == branch_id).first()
+            room_number = room.number if room else "Unknown"
+        elif order.table_id:
+            from app.models.restaurant_table import RestaurantTable
+            table = db.query(RestaurantTable).filter(RestaurantTable.id == order.table_id, RestaurantTable.branch_id == branch_id).first()
+            room_number = table.table_number if table else "Unknown"
+            
         notify_food_order_created(db, room_number, order.id, branch_id=branch_id)
         
         # If order is created as PAID immediately, record accounting entry
@@ -352,7 +383,7 @@ def create_food_order(db: Session, order_data: FoodOrderCreate, branch_id: int):
 
     return order
 
-def get_food_orders(db: Session, branch_id: int, skip: int = 0, limit: int = 100, room_id: int = None, booking_id: int = None, package_booking_id: int = None, user_id: int = None):
+def get_food_orders(db: Session, branch_id: int, skip: int = 0, limit: int = 100, room_id: int = None, table_id: int = None, booking_id: int = None, package_booking_id: int = None, user_id: int = None):
 
     from sqlalchemy.orm import joinedload
     
@@ -371,6 +402,8 @@ def get_food_orders(db: Session, branch_id: int, skip: int = 0, limit: int = 100
 
         if room_id:
             query = query.filter(FoodOrder.room_id == room_id)
+        if table_id:
+            query = query.filter(FoodOrder.table_id == table_id)
         if booking_id:
             query = query.filter(FoodOrder.booking_id == booking_id)
         if package_booking_id:
@@ -391,6 +424,7 @@ def get_food_orders(db: Session, branch_id: int, skip: int = 0, limit: int = 100
                 joinedload(FoodOrder.creator),   # Load creator name
                 joinedload(FoodOrder.chef),      # Load chef name
                 joinedload(FoodOrder.room),      # Load room for room number
+                joinedload(FoodOrder.table),     # Load table for table number
                 joinedload(FoodOrder.booking),   # Load booking for guest name
                 joinedload(FoodOrder.package_booking), # Load package booking
                 joinedload(FoodOrder.items).joinedload(FoodOrderItem.food_item)  # Load items and food details
@@ -414,6 +448,12 @@ def get_food_orders(db: Session, branch_id: int, skip: int = 0, limit: int = 100
                 order.room_number = order.room.number
             else:
                 order.room_number = None
+
+            # Set table number
+            if order.table:
+                order.table_number = order.table.table_number
+            else:
+                order.table_number = None
             
             # Set additional names
             order.creator_name = order.creator.name if order.creator else "Unknown"
@@ -449,44 +489,35 @@ def delete_food_order(db: Session, order_id: int, branch_id: int):
 
 def sync_food_order_to_requests(db: Session, order_id: int, status: str = None, billing_status: str = None, branch_id: int = None):
     """Sync FoodOrder status and billing to linked ServiceRequests"""
-    
-    # 1. Handle Billing Status Sync (Applies to ALL linked requests)
-    if billing_status is not None:
-        billing_query = db.query(ServiceRequest).filter(ServiceRequest.food_order_id == order_id)
+    try:
+        query = db.query(ServiceRequest).filter(ServiceRequest.food_order_id == order_id)
         if branch_id is not None:
-            billing_query = billing_query.filter(ServiceRequest.branch_id == branch_id)
-        billing_query.update({"billing_status": billing_status})
-        print(f"[DEBUG-SYNC] Synced billing_status {billing_status} to all ServiceRequests for FO {order_id}")
-
-    # 2. Handle Status Sync (Applies ONLY to Kitchen Preparation as per user request)
-    if status is not None:
-        # Map FoodOrder status to ServiceRequest status
-        mapped_status = "pending"
-        if status in ["preparing", "cooking", "accepted", "in_progress"]:
-            mapped_status = "in_progress"
-        elif status in ["ready", "completed", "delivered", "served"]:
-            mapped_status = "completed"
-        elif status == "cancelled":
-            mapped_status = "cancelled"
-            
-        status_query = db.query(ServiceRequest).filter(
-            ServiceRequest.food_order_id == order_id,
-            ServiceRequest.request_type == "kitchen_preparation"
-        )
-        if branch_id is not None:
-            status_query = status_query.filter(ServiceRequest.branch_id == branch_id)
-            
-        status_query.update({"status": mapped_status})
-        print(f"[DEBUG-SYNC] Synced status {mapped_status} only to kitchen_preparation for FO {order_id}")
-    
-    db.commit()
+            query = query.filter(ServiceRequest.branch_id == branch_id)
+        
+        requests = query.all()
+        for req in requests:
+            if status is not None:
+                status_to_set = status
+                if status_to_set in ["cooking", "preparing", "accepted"]:
+                    status_to_set = "in_progress"
+                req.status = status_to_set
+            if billing_status is not None:
+                req.billing_status = billing_status
+        db.commit()
+    except Exception as e:
+        print(f"[ERROR] Failed to sync food order to requests: {e}")
 
 def update_food_order_status(db: Session, order_id: int, status: str, branch_id: int):
     order = db.query(FoodOrder).filter(FoodOrder.id == order_id, FoodOrder.branch_id == branch_id).first()
 
     if order:
         old_status = order.status
-        order.status = status
+        
+        status_to_set = status
+        if status_to_set in ["cooking", "preparing", "accepted"]:
+            status_to_set = "in_progress"
+            
+        order.status = status_to_set
         
         # If moving to cooking/preparing, set the chef
         # (This usually happens via the kitchen staff's UI)
@@ -539,6 +570,21 @@ def update_food_order(db: Session, order_id: int, update_data: FoodOrderUpdate, 
 
     if update_data.room_id is not None:
         order.room_id = update_data.room_id
+        # Automatically resolve booking if not explicitly provided
+        if getattr(update_data, 'booking_id', None) is None and getattr(update_data, 'package_booking_id', None) is None:
+            b_id, is_pkg = get_booking_for_room(update_data.room_id, db, branch_id=branch_id)
+            if b_id:
+                if is_pkg:
+                    order.package_booking_id = b_id
+                    order.booking_id = None
+                else:
+                    order.booking_id = b_id
+                    order.package_booking_id = None
+            else:
+                order.booking_id = None
+                order.package_booking_id = None
+    if getattr(update_data, 'table_id', None) is not None:
+        order.table_id = update_data.table_id
     if update_data.amount is not None:
         order.amount = update_data.amount
         order.gst_amount = order.amount * 0.05
@@ -547,19 +593,21 @@ def update_food_order(db: Session, order_id: int, update_data: FoodOrderUpdate, 
         order.assigned_employee_id = update_data.assigned_employee_id
     if update_data.status is not None:
         old_status = order.status
-        order.status = update_data.status
+        
+        status_to_set = update_data.status
+        if status_to_set in ["cooking", "preparing", "accepted"]:
+            status_to_set = "in_progress"
+            
+        order.status = status_to_set
         
         # If status moved to cooking/preparing, and prepared_by_id not set, 
         # we can assume the person updating it is preparing it? 
         # Actually, let's check if prepared_by_id is explicitly passed.
         if update_data.prepared_by_id is not None:
             order.prepared_by_id = update_data.prepared_by_id
-        elif update_data.status in ['cooking', 'accepted', 'preparing'] and order.prepared_by_id is None:
-             # If the UI doesn't pass it, we might set it in the endpoint layer
-             pass
         
         # Process inventory usage if completed
-        if old_status != "completed" and update_data.status == "completed":
+        if old_status != "completed" and order.status == "completed":
             try:
                 from app.curd.inventory import process_food_order_usage
                 process_food_order_usage(db, order.id)
@@ -567,15 +615,21 @@ def update_food_order(db: Session, order_id: int, update_data: FoodOrderUpdate, 
                 print(f"Failed to process inventory usage: {e}")
 
         # Sync to linked ServiceRequests
-        sync_food_order_to_requests(db, order.id, status=update_data.status, branch_id=branch_id)
+        sync_food_order_to_requests(db, order.id, status=order.status, branch_id=branch_id)
 
         # Notify status change
         try:
-            from app.models.room import Room
             from app.models.employee import Employee
             
-            room = db.query(Room).filter(Room.id == order.room_id, Room.branch_id == branch_id).first()
-            room_number = room.number if room else "Unknown"
+            room_number = "Unknown"
+            if order.room_id:
+                from app.models.room import Room
+                room = db.query(Room).filter(Room.id == order.room_id, Room.branch_id == branch_id).first()
+                room_number = room.number if room else "Unknown"
+            elif order.table_id:
+                from app.models.restaurant_table import RestaurantTable
+                table = db.query(RestaurantTable).filter(RestaurantTable.id == order.table_id, RestaurantTable.branch_id == branch_id).first()
+                room_number = table.table_number if table else "Unknown"
             
             recipient_id = None
             if order.assigned_employee_id:
@@ -584,7 +638,7 @@ def update_food_order(db: Session, order_id: int, update_data: FoodOrderUpdate, 
                 if emp:
                     recipient_id = emp.user_id
 
-            notify_food_order_status_changed(db, room_number, update_data.status, order.id, branch_id=branch_id, recipient_id=recipient_id)
+            notify_food_order_status_changed(db, room_number, order.status, order.id, branch_id=branch_id, recipient_id=recipient_id)
         except Exception as e:
             print(f"Notification error: {e}")
 
@@ -592,6 +646,10 @@ def update_food_order(db: Session, order_id: int, update_data: FoodOrderUpdate, 
     if update_data.billing_status is not None:
         was_paid = order.billing_status == "paid"
         order.billing_status = update_data.billing_status
+        
+        if order.billing_status == "paid" and order.payment_time is None:
+            from datetime import timezone, datetime
+            order.payment_time = datetime.now(timezone.utc)
         
         # If order is now paid but wasn't before, record accounting entry
         if order.billing_status == "paid" and not was_paid:
@@ -627,27 +685,25 @@ def update_food_order(db: Session, order_id: int, update_data: FoodOrderUpdate, 
     elif update_data.order_type is not None:
         order.order_type = update_data.order_type
 
-    # Ensure ServiceRequest is created for room service orders whenever they are active
+    # Ensure ServiceRequest is created for room service orders
     if order.order_type == "room_service" and order.status not in ["cancelled", "deleted"]:
-        # Check if service request already exists
-        existing_request = db.query(ServiceRequest).filter(
+        existing_delivery_task = db.query(ServiceRequest).filter(
             ServiceRequest.food_order_id == order.id,
-            ServiceRequest.branch_id == branch_id
+            ServiceRequest.request_type == "room_service"
         ).first()
-
-        if not existing_request:
-            service_request = ServiceRequest(
+        if not existing_delivery_task:
+            delivery_task = ServiceRequest(
                 food_order_id=order.id,
                 room_id=order.room_id,
+                table_id=order.table_id,
                 employee_id=order.assigned_employee_id,
-                request_type="food_delivery",
-                description=order.delivery_request or f"Room service delivery for food order #{order.id}",
+                request_type="room_service",
+                description=order.delivery_request or f"Room Service Delivery for food order #{order.id}",
                 status="pending" if order.status != "scheduled" else "scheduled",
                 branch_id=branch_id
             )
-            db.add(service_request)
-
-            print(f"[INFO] Created missing ServiceRequest for room service order {order.id}")
+            db.add(delivery_task)
+            db.commit()
 
     if update_data.items is not None:
         db.query(FoodOrderItem).filter(FoodOrderItem.order_id == order.id).delete()
@@ -663,6 +719,26 @@ def update_food_order(db: Session, order_id: int, update_data: FoodOrderUpdate, 
     db.commit()
     db.refresh(order)
     
+    # Release table if no more active orders (not completed, not cancelled, not paid)
+    if order.table_id:
+        try:
+            active_count = db.query(FoodOrder).filter(
+                FoodOrder.table_id == order.table_id,
+                FoodOrder.status != "completed",
+                FoodOrder.status != "cancelled",
+                FoodOrder.billing_status != "paid"
+            ).count()
+            
+            if active_count == 0:
+                from app.models.restaurant_table import RestaurantTable
+                table = db.query(RestaurantTable).filter(RestaurantTable.id == order.table_id).first()
+                if table:
+                    table.status = "Available"
+                    db.commit()
+                    print(f"[INFO] Table {table.table_number} released (marked Available) via update.")
+        except Exception as te:
+            print(f"[ERROR] Failed to update table status in curd: {te}")
+
     # Populate for response
     _populate_order_item_prices(order)
     

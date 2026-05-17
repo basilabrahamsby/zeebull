@@ -10,6 +10,7 @@ class ServiceRequest {
   final String? guestName;
   final List<dynamic> refillItems;
   final List<dynamic> foodItems;
+  final List<dynamic> inventoryItemsUsed;
   final int? employeeId;
   final String? employeeName;
   final String? preparedByName;
@@ -31,6 +32,7 @@ class ServiceRequest {
     this.guestName,
     this.refillItems = const [],
     this.foodItems = const [],
+    this.inventoryItemsUsed = const [],
     this.employeeId,
     this.employeeName,
     this.preparedByName,
@@ -69,7 +71,8 @@ class ServiceRequest {
       guestName: json['guest_name']?.toString(), // Keep nullable
       refillItems: json['refill_data'] is List ? json['refill_data'] : [],
       foodItems: json['food_items'] is List ? json['food_items'] : [],
-      employeeId: json['employee_id'],
+      inventoryItemsUsed: json['inventory_items_used'] is List ? json['inventory_items_used'] : [],
+      employeeId: int.tryParse(json['employee_id']?.toString() ?? ''),
       employeeName: json['employee_name']?.toString(),
       preparedByName: json['prepared_by_name']?.toString(),
       foodOrderAmount: double.tryParse(json['food_order_amount']?.toString() ?? '0') ?? 0.0,
@@ -79,11 +82,29 @@ class ServiceRequest {
   }
 
   static DateTime _parseDate(String dateStr) {
-    if (!dateStr.endsWith('Z') && !dateStr.contains('+')) {
-      // If it doesn't have timezone info, assume it's UTC from backend
-      dateStr += 'Z';
+    try {
+      if (dateStr.endsWith('Z') || dateStr.contains('+')) {
+        return DateTime.parse(dateStr).toLocal();
+      }
+      // If it doesn't have timezone info, parse it as a local date string directly
+      final parsed = DateTime.parse(dateStr);
+      if (parsed.isUtc) {
+        return DateTime(
+          parsed.year,
+          parsed.month,
+          parsed.day,
+          parsed.hour,
+          parsed.minute,
+          parsed.second,
+          parsed.millisecond,
+          parsed.microsecond,
+        );
+      }
+      return parsed;
+    } catch (e) {
+      print("[SRM] Error parsing date '$dateStr': $e");
+      return DateTime.now();
     }
-    return DateTime.parse(dateStr).toLocal();
   }
 }
 

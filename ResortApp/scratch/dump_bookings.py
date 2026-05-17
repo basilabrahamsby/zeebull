@@ -13,7 +13,8 @@ def check_data():
         print(f"Error: {e}")
 
 from app.database import SessionLocal
-from app.models.booking import Booking, PackageBooking
+from app.models.booking import Booking
+from app.models.Package import PackageBooking
 from datetime import date
 
 db = SessionLocal()

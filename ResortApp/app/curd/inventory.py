@@ -350,20 +350,29 @@ def create_purchase_master(db: Session, data: PurchaseMasterCreate, branch_id: i
 
 
 def get_all_purchases(db: Session, branch_id: int, skip: int = 0, limit: int = 100, status: Optional[str] = None):
-    """Optimized with eager loading"""
+    """Optimized with eager loading and case-insensitive status filtering"""
     query = db.query(PurchaseMaster).options(
         joinedload(PurchaseMaster.vendor),
+        joinedload(PurchaseMaster.user),
+        joinedload(PurchaseMaster.destination_location),
         selectinload(PurchaseMaster.details).joinedload(PurchaseDetail.item)
     )
     if branch_id is not None:
         query = query.filter(PurchaseMaster.branch_id == branch_id)
     if status:
-        query = query.filter(PurchaseMaster.status == status)
+        from sqlalchemy import func
+        query = query.filter(func.lower(PurchaseMaster.status) == status.lower())
     return query.order_by(PurchaseMaster.created_at.desc()).offset(skip).limit(limit).all()
 
 
 def get_purchase_by_id(db: Session, purchase_id: int, branch_id: Optional[int] = None):
-    query = db.query(PurchaseMaster).filter(PurchaseMaster.id == purchase_id)
+    """Optimized with eager loading"""
+    query = db.query(PurchaseMaster).options(
+        joinedload(PurchaseMaster.vendor),
+        joinedload(PurchaseMaster.user),
+        joinedload(PurchaseMaster.destination_location),
+        selectinload(PurchaseMaster.details).joinedload(PurchaseDetail.item)
+    ).filter(PurchaseMaster.id == purchase_id)
     if branch_id is not None:
         query = query.filter(PurchaseMaster.branch_id == branch_id)
     return query.first()

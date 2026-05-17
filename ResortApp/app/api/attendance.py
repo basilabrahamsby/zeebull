@@ -148,6 +148,20 @@ def clock_in(
         ist = get_system_timezone()
         now = datetime.now(ist)
         
+        # Auto clock-out any open clock-ins from previous days
+        from datetime import time as dt_time
+        previous_open_logs = db.query(WorkingLog).filter(
+            WorkingLog.employee_id == employee_id,
+            WorkingLog.date < now.date(),
+            WorkingLog.check_out_time.is_(None)
+        ).all()
+        
+        for log in previous_open_logs:
+            # Auto clock-out at 6:00 PM (18:00) of that log's date
+            log.check_out_time = dt_time(18, 0, 0)
+        if previous_open_logs:
+            db.commit()
+
         # Check if there's an open clock-in for this employee today
         open_log = db.query(WorkingLog).filter(
             WorkingLog.employee_id == employee_id,

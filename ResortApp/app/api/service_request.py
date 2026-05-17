@@ -8,6 +8,7 @@ from app.schemas.service_request import ServiceRequestCreate, ServiceRequestOut,
 from app.curd import service_request as crud
 from app.utils.auth import get_db, get_current_user
 from app.utils.branch_scope import get_branch_id
+from app.utils.date_utils import format_iso_z
 
 from app.models.user import User
 from typing import List, Optional, Dict, Any
@@ -182,8 +183,8 @@ def get_service_requests(
                 "description": str(sr.description) if sr.description else None,
                 "status": str(sr.status) if sr.status else "pending",
                 "billing_status": sr.billing_status,
-                "created_at": sr.created_at.isoformat() + "Z" if (sr.created_at and not sr.created_at.tzinfo) else (sr.created_at.isoformat().replace("+00:00", "Z") if sr.created_at else None),
-                "completed_at": sr.completed_at.isoformat() + "Z" if (sr.completed_at and not sr.completed_at.tzinfo) else (sr.completed_at.isoformat().replace("+00:00", "Z") if sr.completed_at else None),
+                "created_at": format_iso_z(sr.created_at),
+                "completed_at": format_iso_z(sr.completed_at),
                 "is_checkout_request": False,
                 "is_assigned_service": False,
                 "room_number": sr.room.number if sr.room else (str(getattr(sr, 'room_number', '')) if getattr(sr, 'room_number', None) else None),
@@ -267,15 +268,12 @@ def get_service_requests(
                 continue
                 
             # Fetch inventory needs for this service assignment
-            refill_data = []
+            from app.api.service import _load_assigned_inventory_items, _load_inventory_items_for_service
+            items_used = []
             try:
-                request_inventory = db.query(service_inventory_item).filter(
-                    service_inventory_item.c.service_id == asvc.service_id
-                ).all()
-                refill_data = [
-                    {"item_id": item.inventory_item_id, "quantity": item.quantity} 
-                    for item in request_inventory
-                ]
+                items_used = _load_assigned_inventory_items(db, asvc.id)
+                if not items_used:
+                    items_used = _load_inventory_items_for_service(db, asvc.service_id)
             except Exception as e:
                 print(f"[ERROR] Error fetching inventory for assigned service {asvc.id}: {e}")
 
@@ -288,16 +286,17 @@ def get_service_requests(
                 "type": asvc.service.name, # Alias for mobile app
                 "description": asvc.service.description or f"Manual duty: {asvc.service.name}",
                 "status": str(asvc.status.value if hasattr(asvc.status, 'value') else asvc.status),
-                "created_at": asvc.assigned_at.isoformat() + "Z" if (asvc.assigned_at and not asvc.assigned_at.tzinfo) else (asvc.assigned_at.isoformat().replace("+00:00", "Z") if asvc.assigned_at else None),
-                "started_at": asvc.started_at.isoformat() + "Z" if (getattr(asvc, 'started_at', None) and not asvc.started_at.tzinfo) else (asvc.started_at.isoformat().replace("+00:00", "Z") if getattr(asvc, 'started_at', None) else None),
-                "completed_at": asvc.last_used_at.isoformat() + "Z" if (getattr(asvc, 'last_used_at', None) and not asvc.last_used_at.tzinfo) else (asvc.last_used_at.isoformat().replace("+00:00", "Z") if getattr(asvc, 'last_used_at', None) else None),
+                "created_at": format_iso_z(asvc.assigned_at),
+                "started_at": format_iso_z(getattr(asvc, 'started_at', None)),
+                "completed_at": format_iso_z(getattr(asvc, 'last_used_at', None)),
                 "is_checkout_request": False,
                 "is_assigned_service": True,
                 "assigned_service_id": asvc.id,
                 "billing_status": asvc.billing_status, # Include billing status from AssignedService
                 "room_number": asvc.room.number if asvc.room else "???",
                 "employee_name": asvc.employee.name if asvc.employee else "Unassigned",
-                "refill_data": refill_data,
+                "refill_data": None,
+                "inventory_items_used": items_used,
                 "service": {
                     "id": asvc.service.id,
                     "name": asvc.service.name,
@@ -401,11 +400,11 @@ def get_service_requests(
                     "type": "checkout_verification", # Alias for mobile app
                     "description": f"Checkout inventory verification for Room {cr.room_number} - Guest: {cr.guest_name}",
                     "status": str(cr.status) if cr.status else "pending",
-                    "created_at": cr.created_at.isoformat() + "Z" if (cr.created_at and not cr.created_at.tzinfo) else (cr.created_at.isoformat().replace("+00:00", "Z") if cr.created_at else None),
-                    "started_at": cr.started_at.isoformat() + "Z" if (getattr(cr, 'started_at', None) and not cr.started_at.tzinfo) else (cr.started_at.isoformat().replace("+00:00", "Z") if getattr(cr, 'started_at', None) else None),
-                    "completed_at": cr.completed_at.isoformat() + "Z" if (cr.completed_at and not cr.completed_at.tzinfo) else (cr.completed_at.isoformat().replace("+00:00", "Z") if cr.completed_at else None),
-                    "inventory_checked_at": cr.inventory_checked_at.isoformat() + "Z" if (cr.inventory_checked_at and not cr.inventory_checked_at.tzinfo) else (cr.inventory_checked_at.isoformat().replace("+00:00", "Z") if cr.inventory_checked_at else None),
-                    "requested_at": cr.requested_at.isoformat() + "Z" if (cr.requested_at and not cr.requested_at.tzinfo) else (cr.requested_at.isoformat().replace("+00:00", "Z") if cr.requested_at else None),
+                    "created_at": format_iso_z(cr.created_at),
+                    "started_at": format_iso_z(getattr(cr, 'started_at', None)),
+                    "completed_at": format_iso_z(cr.completed_at),
+                    "inventory_checked_at": format_iso_z(cr.inventory_checked_at),
+                    "requested_at": format_iso_z(cr.requested_at),
                     "is_checkout_request": True,
                     "is_assigned_service": False,
                     "checkout_request_id": cr.id,
@@ -506,9 +505,9 @@ def update_service_request(
             "description": f"Checkout inventory verification for Room {checkout_request.room_number}",
             "status": checkout_request.status,
             "billing_status": None,
-            "created_at": checkout_request.created_at.isoformat() + "Z" if (checkout_request.created_at and not checkout_request.created_at.tzinfo) else (checkout_request.created_at.isoformat().replace("+00:00", "Z") if checkout_request.created_at else None),
-            "started_at": checkout_request.started_at.isoformat() + "Z" if (checkout_request.started_at and not checkout_request.started_at.tzinfo) else (checkout_request.started_at.isoformat().replace("+00:00", "Z") if checkout_request.started_at else None),
-            "completed_at": checkout_request.completed_at.isoformat() + "Z" if (checkout_request.completed_at and not checkout_request.completed_at.tzinfo) else (checkout_request.completed_at.isoformat().replace("+00:00", "Z") if checkout_request.completed_at else None),
+            "created_at": format_iso_z(checkout_request.created_at),
+            "started_at": format_iso_z(checkout_request.started_at),
+            "completed_at": format_iso_z(checkout_request.completed_at),
             "is_checkout_request": True,
             "is_assigned_service": False,
             "room_number": checkout_request.room_number,
@@ -551,7 +550,8 @@ def update_service_request(
             employee_id=update.employee_id,
             billing_status=update.billing_status,
             payment_mode=update.payment_mode,
-            return_location_id=update.return_location_id
+            return_location_id=update.return_location_id,
+            inventory_returns=update.inventory_returns
         )
         
         updated_asvc = update_assigned_service_status(db, actual_assigned_id, as_update)
@@ -572,9 +572,9 @@ def update_service_request(
             "description": updated_asvc.service.description if updated_asvc.service else "",
             "status": asvc_status,
             "billing_status": updated_asvc.billing_status,
-            "created_at": updated_asvc.assigned_at.isoformat() + "Z" if (updated_asvc.assigned_at and not updated_asvc.assigned_at.tzinfo) else (updated_asvc.assigned_at.isoformat().replace("+00:00", "Z") if updated_asvc.assigned_at else None),
-            "started_at": updated_asvc.started_at.isoformat() + "Z" if (getattr(updated_asvc, 'started_at', None) and not updated_asvc.started_at.tzinfo) else (updated_asvc.started_at.isoformat().replace("+00:00", "Z") if getattr(updated_asvc, 'started_at', None) else None),
-            "completed_at": updated_asvc.completed_at.isoformat() + "Z" if (getattr(updated_asvc, 'completed_at', None) and not updated_asvc.completed_at.tzinfo) else (updated_asvc.completed_at.isoformat().replace("+00:00", "Z") if getattr(updated_asvc, 'completed_at', None) else None),
+            "created_at": format_iso_z(updated_asvc.assigned_at),
+            "started_at": format_iso_z(getattr(updated_asvc, 'started_at', None)),
+            "completed_at": format_iso_z(getattr(updated_asvc, 'completed_at', None)),
             "is_checkout_request": False,
             "is_assigned_service": True,
             "assigned_service_id": updated_asvc.id,
@@ -654,9 +654,9 @@ def update_service_request(
         "description": str(reloaded.description) if reloaded.description else None,
         "status": str(reloaded.status) if reloaded.status else "pending",
         "billing_status": reloaded.billing_status,
-        "created_at": reloaded.created_at.isoformat() + "Z" if (reloaded.created_at and not reloaded.created_at.tzinfo) else (reloaded.created_at.isoformat().replace("+00:00", "Z") if reloaded.created_at else None),
-        "started_at": reloaded.started_at.isoformat() + "Z" if (reloaded.started_at and not reloaded.started_at.tzinfo) else (reloaded.started_at.isoformat().replace("+00:00", "Z") if reloaded.started_at else None),
-        "completed_at": reloaded.completed_at.isoformat() + "Z" if (reloaded.completed_at and not reloaded.completed_at.tzinfo) else (reloaded.completed_at.isoformat().replace("+00:00", "Z") if reloaded.completed_at else None),
+        "created_at": format_iso_z(reloaded.created_at),
+        "started_at": format_iso_z(reloaded.started_at),
+        "completed_at": format_iso_z(reloaded.completed_at),
         "is_checkout_request": False,
         "is_assigned_service": False,
         "room_number": reloaded.room.number if reloaded.room else None,

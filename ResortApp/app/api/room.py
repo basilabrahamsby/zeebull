@@ -934,7 +934,7 @@ def delete_room(room_id: int, background_tasks: BackgroundTasks, db: Session = D
     if background_tasks and room_type_id:
         try:
             from app.core.aiosell_triggers import trigger_inventory_push
-            trigger_inventory_push(db, background_tasks, room_type_id)
+            background_tasks.add_task(trigger_inventory_push, room_type_id)
         except Exception as e:
             print(f"Failed to queue Aiosell inventory push: {e}")
             
@@ -1035,7 +1035,7 @@ def update_room(
     if background_tasks:
         try:
             from app.core.aiosell_triggers import trigger_inventory_push
-            trigger_inventory_push(db, background_tasks, db_room.room_type_id)
+            background_tasks.add_task(trigger_inventory_push, db_room.room_type_id)
         except Exception as e:
             print(f"Failed to queue Aiosell inventory push: {e}")
             

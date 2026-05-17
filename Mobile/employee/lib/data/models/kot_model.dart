@@ -24,6 +24,9 @@ class KOTItem {
 class KOT {
   final int id;
   final String roomNumber;
+  final int? roomId;
+  final int? tableId;
+  final String? tableNumber;
   final String waiterName;
   final DateTime createdAt;
   final List<KOTItem> items;
@@ -39,6 +42,9 @@ class KOT {
   KOT({
     required this.id,
     required this.roomNumber,
+    this.roomId,
+    this.tableId,
+    this.tableNumber,
     required this.waiterName,
     required this.createdAt,
     required this.items,
@@ -52,17 +58,26 @@ class KOT {
     this.billingStatus,
   });
 
+  String get displayLocation => tableNumber != null && tableNumber!.isNotEmpty ? tableNumber! : roomNumber;
+
   factory KOT.fromJson(Map<String, dynamic> json) {
     var itemsList = (json['items'] as List?)?.map((i) => KOTItem.fromJson(i)).toList() ?? [];
     return KOT(
       id: json['id'] is int ? json['id'] : int.tryParse(json['id'].toString()) ?? 0,
       roomNumber: json['room_number']?.toString() ?? 'N/A',
+      roomId: json['room_id'] is int ? json['room_id'] : int.tryParse(json['room_id']?.toString() ?? ''),
+      tableId: json['table_id'] is int ? json['table_id'] : int.tryParse(json['table_id']?.toString() ?? ''),
+      tableNumber: json['table_number']?.toString(),
       waiterName: json['employee_name']?.toString() ?? 'N/A', // This is assigned name
       createdAt: json['created_at'] != null 
-          ? DateTime.parse(json['created_at'].toString()).toLocal() 
+          ? _parseDate(json['created_at'].toString()) 
           : DateTime.now(),
       items: itemsList,
-      status: json['status']?.toString() ?? 'pending',
+      status: (() {
+        final s = json['status']?.toString()?.toLowerCase() ?? 'pending';
+        if (s == 'in_progress' || s == 'preparing' || s == 'accepted') return 'cooking';
+        return s;
+      })(),
       deliveryRequest: json['delivery_request']?.toString(),
       orderType: json['order_type']?.toString() ?? 'dine_in',
       assignedEmployeeId: json['assigned_employee_id'] is int ? json['assigned_employee_id'] : int.tryParse(json['assigned_employee_id']?.toString() ?? ''),
@@ -71,5 +86,29 @@ class KOT {
       chefName: json['chef_name']?.toString() ?? 'Not Started',
       billingStatus: json['billing_status']?.toString(),
     );
+  }
+
+  static DateTime _parseDate(String dateStr) {
+    try {
+      if (dateStr.endsWith('Z') || dateStr.contains('+')) {
+        return DateTime.parse(dateStr).toLocal();
+      }
+      final parsed = DateTime.parse(dateStr);
+      if (parsed.isUtc) {
+        return DateTime(
+          parsed.year,
+          parsed.month,
+          parsed.day,
+          parsed.hour,
+          parsed.minute,
+          parsed.second,
+          parsed.millisecond,
+          parsed.microsecond,
+        );
+      }
+      return parsed;
+    } catch (e) {
+      return DateTime.now();
+    }
   }
 }

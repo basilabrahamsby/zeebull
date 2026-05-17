@@ -1017,7 +1017,7 @@ class _ManagerFoodOrdersScreenState extends State<ManagerFoodOrdersScreen> with 
                                 Text("ASSIGNED: ${empName.toUpperCase()}", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 9, color: statusColor.withOpacity(0.7), letterSpacing: 0.5)),
                               ],
                             ),
-                            trailing: (requestedOnly || empName == 'UNASSIGNED')
+                            trailing: (requestedOnly || (empName == 'UNASSIGNED' && !['completed', 'cancelled', 'delivered', 'served'].contains(o['status']?.toString().toLowerCase())))
                                 ? TextButton(
                                     onPressed: () => _showEmployeeAssignment(o['id']),
                                     style: TextButton.styleFrom(backgroundColor: AppColors.accent.withOpacity(0.1), padding: const EdgeInsets.symmetric(horizontal: 16)),
@@ -1193,83 +1193,144 @@ class _ManagerFoodOrdersScreenState extends State<ManagerFoodOrdersScreen> with 
     String paymentMethod = 'Cash'; // Default
     final paymentMethods = ['Cash', 'Card', 'UPI', 'Bank Transfer'];
 
+    int? chosenRoomId;
+    List<dynamic> activeRooms = [];
+    bool loadingRooms = false;
+
     showDialog(
       context: context,
       builder: (ctx) => BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
         child: StatefulBuilder(
-          builder: (context, setModalState) => AlertDialog(
-            backgroundColor: AppColors.onyx,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24), side: const BorderSide(color: Colors.white10)),
-            title: const Text("COMPLETE ORDER", style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16)),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text("SELECT FINAL SETTLEMENT STATUS:", style: TextStyle(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 24),
-                _buildSettlementTile("UNPAID", 'unpaid', paymentStatus, (v) => setModalState(() => paymentStatus = v)),
-                _buildSettlementTile("PAID", 'paid', paymentStatus, (v) => setModalState(() => paymentStatus = v)),
-                
-                if (paymentStatus == 'paid') ...[
+          builder: (context, setModalState) {
+            if (paymentStatus == 'unpaid' && order['room_id'] == null && activeRooms.isEmpty && !loadingRooms) {
+              loadingRooms = true;
+              WidgetsBinding.instance.addPostFrameCallback((_) async {
+                try {
+                  final api = context.read<ApiService>();
+                  final resp = await api.getRooms(queryParameters: {'status': 'Checked-in'});
+                  final rooms = resp.data as List? ?? [];
+                  setModalState(() {
+                    activeRooms = rooms.where((r) {
+                      final status = (r['status'] ?? '').toString().toLowerCase();
+                      return status == 'checked-in' || status == 'checked_in' || status == 'occupied';
+                    }).toList();
+                    loadingRooms = false;
+                  });
+                } catch (e) {
+                  setModalState(() { loadingRooms = false; });
+                }
+              });
+            }
+
+            return AlertDialog(
+              backgroundColor: AppColors.onyx,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24), side: const BorderSide(color: Colors.white10)),
+              title: const Text("COMPLETE ORDER", style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16)),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text("SELECT FINAL SETTLEMENT STATUS:", style: TextStyle(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 24),
-                  const Text("PAYMENT MODE:", style: TextStyle(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.05),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.white10),
-                    ),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        value: paymentMethod,
-                        dropdownColor: AppColors.onyx,
-                        isExpanded: true,
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
-                        items: paymentMethods.map((m) => DropdownMenuItem(value: m, child: Text(m.toUpperCase()))).toList(),
-                        onChanged: (v) => setModalState(() => paymentMethod = v!),
+                  _buildSettlementTile("UNPAID", 'unpaid', paymentStatus, (v) => setModalState(() => paymentStatus = v)),
+                  _buildSettlementTile("PAID", 'paid', paymentStatus, (v) => setModalState(() => paymentStatus = v)),
+                  
+                  if (paymentStatus == 'paid') ...[
+                    const SizedBox(height: 24),
+                    const Text("PAYMENT MODE:", style: TextStyle(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.05),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.white10),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: paymentMethod,
+                          dropdownColor: AppColors.onyx,
+                          isExpanded: true,
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                          items: paymentMethods.map((m) => DropdownMenuItem(value: m, child: Text(m.toUpperCase()))).toList(),
+                          onChanged: (v) => setModalState(() => paymentMethod = v!),
+                        ),
                       ),
                     ),
-                  ),
+                  ] else if (paymentStatus == 'unpaid' && order['room_id'] == null) ...[
+                    const SizedBox(height: 24),
+                    const Text("CHARGE TO GUEST ROOM:", style: TextStyle(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 12),
+                    if (loadingRooms)
+                      const Center(child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: AppColors.accent, strokeWidth: 2)))
+                    else if (activeRooms.isEmpty)
+                      const Text("NO ACTIVE CHECKED-IN ROOMS AVAILABLE", style: TextStyle(color: Colors.redAccent, fontSize: 11, fontWeight: FontWeight.bold))
+                    else
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.05),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.white10),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<int>(
+                            value: chosenRoomId,
+                            dropdownColor: AppColors.onyx,
+                            isExpanded: true,
+                            hint: const Text("SELECT GUEST ROOM", style: TextStyle(color: Colors.white24, fontSize: 12)),
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                            items: activeRooms.map((r) => DropdownMenuItem<int>(value: r['id'], child: Text("ROOM ${r['number'] ?? r['room_number']}"))).toList(),
+                            onChanged: (v) => setModalState(() => chosenRoomId = v),
+                          ),
+                        ),
+                      ),
+                  ],
                 ],
-              ],
-            ),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("CANCEL", style: TextStyle(color: Colors.white24, fontWeight: FontWeight.bold))),
-              TextButton(
-                onPressed: () async {
-                  try {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("PROCESSING SETTLEMENT..."), duration: Duration(milliseconds: 500)));
-                    
-                    final updateData = {
-                      'status': 'completed',
-                      'billing_status': paymentStatus,
-                    };
-                    
-                    if (paymentStatus == 'paid') {
-                      updateData['payment_method'] = paymentMethod;
-                    }
-                    
-                    await context.read<ApiService>().updateFoodOrder(order['id'], updateData);
-                    
-                    if (mounted) {
-                       Navigator.pop(ctx);
-                       if (Navigator.of(context).canPop()) Navigator.pop(context); // Close details sheet
-                       _loadOrders();
-                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("ORDER COMPLETED SUCCESSFULLY"), backgroundColor: Colors.green));
-                    }
-                  } catch (e) {
-                    print("Error completing order: $e");
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("ERROR COMPLETING ORDER: $e"), backgroundColor: Colors.red));
-                    }
-                  }
-                },
-                child: const Text("CONFIRM", style: TextStyle(color: AppColors.accent, fontWeight: FontWeight.w900)),
               ),
-            ],
-          ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("CANCEL", style: TextStyle(color: Colors.white24, fontWeight: FontWeight.bold))),
+                TextButton(
+                  onPressed: () async {
+                    if (paymentStatus == 'unpaid' && order['room_id'] == null && chosenRoomId == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("PLEASE SELECT A ROOM TO CHARGE"), backgroundColor: Colors.orangeAccent));
+                      return;
+                    }
+
+                    try {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("PROCESSING SETTLEMENT..."), duration: Duration(milliseconds: 500)));
+                      
+                      final Map<String, dynamic> updateData = {
+                        'status': 'completed',
+                        'billing_status': paymentStatus,
+                      };
+                      
+                      if (paymentStatus == 'paid') {
+                        updateData['payment_method'] = paymentMethod;
+                      } else if (paymentStatus == 'unpaid' && chosenRoomId != null) {
+                        updateData['room_id'] = chosenRoomId;
+                      }
+                      
+                      await context.read<ApiService>().updateFoodOrder(order['id'], updateData);
+                      
+                      if (mounted) {
+                         Navigator.pop(ctx);
+                         if (Navigator.of(context).canPop()) Navigator.pop(context); // Close details sheet
+                         _loadOrders();
+                         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("ORDER COMPLETED SUCCESSFULLY"), backgroundColor: Colors.green));
+                      }
+                    } catch (e) {
+                      print("Error completing order: $e");
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("ERROR COMPLETING ORDER: $e"), backgroundColor: Colors.red));
+                      }
+                    }
+                  },
+                  child: const Text("CONFIRM", style: TextStyle(color: AppColors.accent, fontWeight: FontWeight.w900)),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -1739,7 +1800,10 @@ class _CreateOrderFormState extends State<_CreateOrderForm> {
           Expanded(
             child: ListView(
               children: [
-                _buildGlassPicker("TARGET ROOM", selectedRoomId, widget.rooms.map((r) => DropdownMenuItem<int>(value: r['id'], child: Text("ROOM ${r['number'] ?? r['room_number'] ?? r['id']}"))).toList(), (v) => setState(() => selectedRoomId = v)),
+                _buildGlassPicker("TARGET ROOM", selectedRoomId, widget.rooms.where((r) {
+                  final status = (r['status'] ?? '').toString().toLowerCase();
+                  return status == 'checked-in' || status == 'checked_in' || status == 'occupied';
+                }).map((r) => DropdownMenuItem<int>(value: r['id'], child: Text("ROOM ${r['number'] ?? r['room_number'] ?? r['id']}"))).toList(), (v) => setState(() => selectedRoomId = v)),
                 const SizedBox(height: 16),
                 _buildGlassPicker("ASSIGN WAITER", selectedEmployeeId, widget.employees.map((e) => DropdownMenuItem<int>(value: e['id'], child: Text(e['name'].toString().toUpperCase()))).toList(), (v) => setState(() => selectedEmployeeId = v)),
                 const SizedBox(height: 16),

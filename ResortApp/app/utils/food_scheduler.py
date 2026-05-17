@@ -11,9 +11,9 @@ from app.curd.foodorder import trigger_scheduled_orders, create_food_order
 from app.schemas.foodorder import FoodOrderCreate, FoodOrderItemCreate
 
 def get_ist_time():
-    """Get current time in Indian Standard Time"""
-    # Assuming the server might be in UTC, IST is UTC+5:30
-    return datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)
+    """Get current time in Indian Standard Time (naive)"""
+    from app.utils.timezone import get_system_timezone
+    return datetime.now(get_system_timezone()).replace(tzinfo=None)
 
 async def run_food_scheduler():
     """Background task to check food schedules every minute"""
@@ -34,11 +34,17 @@ def check_food_schedules():
     try:
         now_ist = get_ist_time()
         
-        # 1. Trigger individual scheduled FoodOrders
+        # 1. Trigger individual scheduled FoodOrders for all branches
         try:
-            trigger_scheduled_orders(db)
+            from app.models.branch import Branch
+            branches = db.query(Branch).all()
+            for b in branches:
+                try:
+                    trigger_scheduled_orders(db, b.id)
+                except Exception as ex:
+                    print(f"[SCHEDULER] Error triggering individual orders for branch {b.id}: {ex}")
         except Exception as e:
-            print(f"[SCHEDULER] Error triggering individual orders: {e}")
+            print(f"[SCHEDULER] Error querying branches or triggering: {e}")
 
         # 2. Handle recurring Package Meals
         # Lookahead for 60 minutes

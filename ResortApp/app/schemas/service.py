@@ -75,7 +75,7 @@ class ServiceStatus(str, Enum):
 
 class AssignedServiceBase(BaseModel):
     service_id: int
-    employee_id: int
+    employee_id: Optional[int] = None
     room_id: int
 
 class AssignedServiceCreate(AssignedServiceBase):

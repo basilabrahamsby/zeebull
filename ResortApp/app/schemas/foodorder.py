@@ -7,7 +7,8 @@ class FoodOrderItemCreate(BaseModel):
     quantity: int
 
 class FoodOrderCreate(BaseModel):
-    room_id: int
+    room_id: Optional[int] = None
+    table_id: Optional[int] = None
     amount: float
     assigned_employee_id: Optional[int] = None
     prepared_by_id: Optional[int] = None
@@ -32,6 +33,7 @@ class FoodOrderItemOut(BaseModel):
 class FoodOrderOut(BaseModel):
     id: int
     room_id: Optional[int] = None
+    table_id: Optional[int] = None
     amount: Optional[float] = 0.0
     status: str
     assigned_employee_id: Optional[int] = None
@@ -46,6 +48,7 @@ class FoodOrderOut(BaseModel):
     creator_name: Optional[str] = None  # Populated from creator relationship
     chef_name: Optional[str] = None  # Populated from chef relationship
     room_number: Optional[str] = None  # Populated from room relationship
+    table_number: Optional[str] = None  # Populated from table relationship
     created_at: Optional[datetime] = None
     booking_id: Optional[int] = None
     package_booking_id: Optional[int] = None
@@ -56,6 +59,7 @@ class FoodOrderOut(BaseModel):
 
 class FoodOrderUpdate(BaseModel):
     room_id: Optional[int] = None
+    table_id: Optional[int] = None
     amount: Optional[float] = None
     assigned_employee_id: Optional[int] = None
     created_by_id: Optional[int] = None

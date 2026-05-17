@@ -222,7 +222,7 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
               _selectedRoomNumber = room['number'].toString();
             });
           },
-          validator: (val) => val == null ? "Required" : null,
+          validator: (val) => null,
         ),
         if (!isLoading && rooms.isEmpty)
           Padding(
@@ -543,7 +543,7 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
           width: double.infinity,
           height: 60,
           child: ElevatedButton(
-            onPressed: kitchen.isLoading || _selectedItems.isEmpty || _selectedRoomId == null
+            onPressed: kitchen.isLoading || _selectedItems.isEmpty
                 ? null
                 : () => _submitOrder(kitchen),
             style: ElevatedButton.styleFrom(

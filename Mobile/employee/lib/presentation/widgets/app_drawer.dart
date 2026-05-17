@@ -22,6 +22,7 @@ import 'package:orchid_employee/presentation/screens/manager/manager_bookings_sc
 import 'package:orchid_employee/presentation/screens/manager/manager_food_orders_screen.dart';
 import 'package:orchid_employee/presentation/screens/manager/manager_service_assignment_screen.dart';
 import 'package:orchid_employee/presentation/screens/manager/manager_checkout_workflow.dart';
+import 'package:orchid_employee/presentation/screens/waiter/waiter_service_screen.dart';
 
 class AppDrawer extends StatelessWidget {
   const AppDrawer({super.key});
@@ -182,6 +183,14 @@ class AppDrawer extends StatelessWidget {
                       Navigator.push(context, MaterialPageRoute(builder: (_) => const MenuOrderScreen()));
                     },
                   ),
+                  _DrawerItem(
+                    icon: Icons.room_service_rounded,
+                    title: "MY SERVICES",
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => const WaiterServiceScreen()));
+                    },
+                  ),
                 ],
                 
                 // Manager Menu
@@ -260,11 +269,19 @@ class AppDrawer extends StatelessWidget {
                     },
                   ),
                   _DrawerItem(
-                    icon: Icons.shopping_cart_rounded,
-                    title: "PURCHASES",
+                    icon: Icons.shopping_cart_checkout_rounded,
+                    title: "PURCHASE ORDERS",
                     onTap: () {
                       Navigator.pop(context);
                       Navigator.push(context, MaterialPageRoute(builder: (_) => const ManagerPurchaseScreen()));
+                    },
+                  ),
+                  _DrawerItem(
+                    icon: Icons.room_service_rounded,
+                    title: "ALL SERVICES / TASKS",
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => const WaiterServiceScreen()));
                     },
                   ),
                 ],

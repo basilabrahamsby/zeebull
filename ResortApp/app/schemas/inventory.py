@@ -181,24 +181,24 @@ class InventoryItemBase(BaseModel):
     category_id: int
     sub_category: Optional[str] = None
     hsn_code: Optional[str] = None
-    unit: str = "pcs"
-    min_stock_level: float = 0.0
+    unit: Optional[str] = "pcs"
+    min_stock_level: Optional[float] = 0.0
     max_stock_level: Optional[float] = None
-    unit_price: float = 0.0
+    unit_price: Optional[float] = 0.0
     selling_price: Optional[float] = None
-    gst_rate: float = 0.0
+    gst_rate: Optional[float] = 0.0
     location: Optional[str] = None
     barcode: Optional[str] = None
     image_path: Optional[str] = None
     
     # Inventory settings
-    is_perishable: bool = False
-    track_serial_number: bool = False
-    is_sellable_to_guest: bool = False
+    is_perishable: Optional[bool] = False
+    track_serial_number: Optional[bool] = False
+    is_sellable_to_guest: Optional[bool] = False
     
     # Department-specific logic
-    track_laundry_cycle: bool = False
-    is_asset_fixed: bool = False
+    track_laundry_cycle: Optional[bool] = False
+    is_asset_fixed: Optional[bool] = False
     maintenance_schedule_days: Optional[int] = None
     complimentary_limit: Optional[int] = None
     ingredient_yield_percentage: Optional[float] = None
@@ -247,12 +247,12 @@ class InventoryItemUpdate(BaseModel):
 
 class InventoryItemOut(InventoryItemBase):
     id: int
-    current_stock: float
+    current_stock: Optional[float] = 0.0
     category_name: Optional[str] = None
     department: Optional[str] = None  # Department from category's parent_department
-    created_at: datetime
-    updated_at: datetime
-    is_low_stock: bool = False
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    is_low_stock: Optional[bool] = False
     last_purchase_price: Optional[float] = 0.0
     last_purchase_date: Optional[datetime] = None
     last_vendor_name: Optional[str] = None
@@ -267,11 +267,11 @@ class InventoryItemOut(InventoryItemBase):
 class PurchaseDetailBase(BaseModel):
     item_id: int
     hsn_code: Optional[str] = None
-    quantity: float
-    unit: str
-    unit_price: Decimal
-    gst_rate: Decimal = Decimal("0.00")
-    discount: Decimal = Decimal("0.00")
+    quantity: Optional[float] = 0.0
+    unit: Optional[str] = "pcs"
+    unit_price: Optional[Decimal] = Decimal("0.00")
+    gst_rate: Optional[Decimal] = Decimal("0.00")
+    discount: Optional[Decimal] = Decimal("0.00")
     notes: Optional[str] = None
 
 
@@ -282,12 +282,19 @@ class PurchaseDetailCreate(PurchaseDetailBase):
 class PurchaseDetailOut(PurchaseDetailBase):
     id: int
     purchase_master_id: int
-    cgst_amount: Decimal
-    sgst_amount: Decimal
-    igst_amount: Decimal
-    total_amount: Decimal
+    cgst_amount: Optional[Decimal] = Decimal("0.00")
+    sgst_amount: Optional[Decimal] = Decimal("0.00")
+    igst_amount: Optional[Decimal] = Decimal("0.00")
+    total_amount: Optional[Decimal] = Decimal("0.00")
     item_name: Optional[str] = None
     
+    @field_validator("cgst_amount", "sgst_amount", "igst_amount", "total_amount", mode="before")
+    @classmethod
+    def coerce_none_to_decimal(cls, v):
+        if v is None:
+            return Decimal("0.00")
+        return v
+
     class Config:
         from_attributes = True
 
@@ -344,12 +351,12 @@ class PurchaseMasterUpdate(BaseModel):
 
 class PurchaseMasterOut(PurchaseMasterBase):
     id: int
-    sub_total: Decimal
-    cgst: Decimal
-    sgst: Decimal
-    igst: Decimal
-    discount: Decimal
-    total_amount: Decimal
+    sub_total: Optional[Decimal] = Decimal("0.00")
+    cgst: Optional[Decimal] = Decimal("0.00")
+    sgst: Optional[Decimal] = Decimal("0.00")
+    igst: Optional[Decimal] = Decimal("0.00")
+    discount: Optional[Decimal] = Decimal("0.00")
+    total_amount: Optional[Decimal] = Decimal("0.00")
     created_by: Optional[int] = None
     created_by_name: Optional[str] = None
     vendor_name: Optional[str] = None
@@ -360,6 +367,13 @@ class PurchaseMasterOut(PurchaseMasterBase):
     updated_at: datetime
     details: List[PurchaseDetailOut] = []
     
+    @field_validator("sub_total", "cgst", "sgst", "igst", "discount", "total_amount", mode="before")
+    @classmethod
+    def coerce_none_to_decimal(cls, v):
+        if v is None:
+            return Decimal("0.00")
+        return v
+
     class Config:
         from_attributes = True
 
@@ -375,7 +389,7 @@ class StockAdjustmentCreate(BaseModel):
 # Transaction Schemas
 class InventoryTransactionOut(BaseModel):
     id: int
-    item_id: int
+    item_id: Optional[int] = None
     item_name: Optional[str] = None
     transaction_type: str
     quantity: float

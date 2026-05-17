@@ -4971,10 +4971,10 @@ const SmartTransactionsTab = ({
     };
   };
 
-  const getItemDetails = (itemId) => {
+  const getItemDetails = (itemId, fallbackName) => {
     const item = items.find((i) => i.id === itemId);
     if (!item)
-      return { name: "Unknown Item", category: "Uncategorized", unit: "pcs" };
+      return { name: fallbackName || "Unknown Item", category: "Uncategorized", unit: "pcs" };
     const category = categories.find((c) => c.id === item.category_id);
     return {
       name: item.name,
@@ -5262,7 +5262,7 @@ const SmartTransactionsTab = ({
               ) : (
                 filteredTransactions.map((trans) => {
                   const typeInfo = getTransactionTypeInfo(trans);
-                  const itemDetails = getItemDetails(trans.item_id);
+                  const itemDetails = getItemDetails(trans.item_id, trans.item_name);
                   const isPositive = trans.transaction_type === "in" || trans.transaction_type === "transfer_in" || trans.transaction_type === "Stock Received" || (trans.transaction_type === "transfer" && trans.destination_location_name);
 
                   return (

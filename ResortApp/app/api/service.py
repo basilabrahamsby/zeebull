@@ -650,7 +650,21 @@ def assign_service(
         if not payload.service_id:
             raise HTTPException(status_code=400, detail="service_id is required")
         if not payload.employee_id:
-            raise HTTPException(status_code=400, detail="employee_id is required")
+            # Graceful fallback: try to find the employee corresponding to current_user
+            from app.models.employee import Employee
+            emp = db.query(Employee).filter(Employee.user_id == current_user.id).first()
+            if not emp:
+                # Fallback to the first active employee in the branch
+                emp = db.query(Employee).filter(Employee.branch_id == (branch_id or 1)).first()
+            if not emp:
+                # Fallback to absolutely any employee in the DB
+                emp = db.query(Employee).first()
+            
+            if emp:
+                payload.employee_id = emp.id
+                print(f"[DEBUG assign_service] Resolved missing employee_id to {emp.id} ({emp.name})")
+            else:
+                raise HTTPException(status_code=400, detail="employee_id is required and no active employees exist")
         if not payload.room_id:
             raise HTTPException(status_code=400, detail="room_id is required")
         

@@ -37,9 +37,11 @@ class OnyxGlassDialog extends StatelessWidget {
             letterSpacing: 1.5,
           ),
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: children,
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: children,
+          ),
         ),
         actions: actions,
         actionsAlignment: MainAxisAlignment.spaceEvenly,

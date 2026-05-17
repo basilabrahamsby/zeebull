@@ -219,6 +219,7 @@ class _ManagerGuestManagementScreenState extends State<ManagerGuestManagementScr
         builder: (ctx) => _buildSelectionModal(
           title: "SELECT INVENTORY ITEM",
           items: items.where((i) => i['is_consumable'] == true || i['is_asset_fixed'] == false).toList(),
+          emptyMessage: "NO CONSUMABLES AVAILABLE",
           itemTitleKey: 'name',
           itemSubtitleKey: 'unit',
           onSelect: (item) => _showDetailsEntryModal(item, "CONSUMABLE"),
@@ -258,7 +259,7 @@ class _ManagerGuestManagementScreenState extends State<ManagerGuestManagementScr
     }
   }
 
-  Future<void> _addInventoryConsumption(dynamic item, {double quantity = 1.0}) async {
+  Future<void> _addInventoryConsumption(dynamic item, {double quantity = 1.0, bool isPayable = true}) async {
     final api = context.read<ApiService>();
     final rooms = _details?['rooms'] as List? ?? [];
     final firstRoom = rooms.isNotEmpty ? rooms[0] : null;
@@ -275,7 +276,12 @@ class _ManagerGuestManagementScreenState extends State<ManagerGuestManagementScr
       final matchingRoom = rooms.firstWhere((r) => r['id'] == roomId || r['room_id'] == roomId, orElse: () => rooms[0]);
       locationId = matchingRoom['inventory_location_id'];
     }
-    locationId ??= roomId;
+    if (locationId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Inventory location not set for this room"), backgroundColor: Colors.orange));
+      setState(() => _isUpdating = false);
+      return;
+    }
+
 
     setState(() => _isUpdating = true);
     try {
@@ -285,7 +291,7 @@ class _ManagerGuestManagementScreenState extends State<ManagerGuestManagementScr
         'room_id': roomId,
         'booking_id': widget.booking['id'],
         'quantity': quantity,
-        'used_by_type': 'guest',
+        'used_by_type': isPayable ? 'guest' : 'housekeeping',
       });
       _loadDetails();
     } catch (e) {
@@ -299,67 +305,107 @@ class _ManagerGuestManagementScreenState extends State<ManagerGuestManagementScr
   void _showDetailsEntryModal(dynamic item, String mode) {
     final TextEditingController amountController = TextEditingController(text: (item['charges'] ?? item['unit_price'] ?? 0).toString());
     final TextEditingController qtyController = TextEditingController(text: "1");
+    bool isPayable = true;
 
     showDialog(
       context: context,
       barrierColor: Colors.black54,
       builder: (ctx) => BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-        child: AlertDialog(
-          backgroundColor: AppColors.onyx.withOpacity(0.9),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24), side: BorderSide(color: Colors.white10)),
-          title: Text(item['name'].toString().toUpperCase(), style: const TextStyle(color: AppColors.accent, fontSize: 14, fontWeight: FontWeight.w900)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (mode != "CONSUMABLE")
-                TextField(
-                  controller: amountController,
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                  decoration: InputDecoration(
-                    labelText: "AMOUNT / DAILY RATE",
-                    labelStyle: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 10, fontWeight: FontWeight.bold),
-                    prefixIcon: const Icon(Icons.currency_rupee, color: AppColors.accent, size: 16),
-                    enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white10)),
+        child: StatefulBuilder(
+          builder: (context, setStateModal) {
+            return AlertDialog(
+              backgroundColor: AppColors.onyx.withOpacity(0.9),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24), side: BorderSide(color: Colors.white10)),
+              title: Text(item['name'].toString().toUpperCase(), style: const TextStyle(color: AppColors.accent, fontSize: 14, fontWeight: FontWeight.w900)),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (mode == "CONSUMABLE") ...[
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text("BILLING:", style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 10, fontWeight: FontWeight.bold)),
+                        Row(
+                          children: [
+                            InkWell(
+                              onTap: () => setStateModal(() => isPayable = true),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: isPayable ? AppColors.accent : Colors.white10,
+                                  borderRadius: const BorderRadius.horizontal(left: Radius.circular(8)),
+                                ),
+                                child: Text("PAYABLE", style: TextStyle(color: isPayable ? Colors.black : Colors.white60, fontSize: 8, fontWeight: FontWeight.bold)),
+                              ),
+                            ),
+                            InkWell(
+                              onTap: () => setStateModal(() => isPayable = false),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: !isPayable ? Colors.greenAccent : Colors.white10,
+                                  borderRadius: const BorderRadius.horizontal(right: Radius.circular(8)),
+                                ),
+                                child: Text("COMPLIMENTARY", style: TextStyle(color: !isPayable ? Colors.black : Colors.white60, fontSize: 8, fontWeight: FontWeight.bold)),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  if (mode != "CONSUMABLE")
+                    TextField(
+                      controller: amountController,
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                      decoration: InputDecoration(
+                        labelText: "AMOUNT / DAILY RATE",
+                        labelStyle: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 10, fontWeight: FontWeight.bold),
+                        prefixIcon: const Icon(Icons.currency_rupee, color: AppColors.accent, size: 16),
+                        enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white10)),
+                      ),
+                      keyboardType: TextInputType.number,
+                    ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: qtyController,
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                    decoration: InputDecoration(
+                      labelText: "QUANTITY",
+                      labelStyle: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 10, fontWeight: FontWeight.bold),
+                      prefixIcon: const Icon(Icons.add_shopping_cart, color: AppColors.accent, size: 16),
+                      enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white10)),
+                    ),
+                    keyboardType: TextInputType.number,
                   ),
-                  keyboardType: TextInputType.number,
-                ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: qtyController,
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                decoration: InputDecoration(
-                  labelText: "QUANTITY",
-                  labelStyle: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 10, fontWeight: FontWeight.bold),
-                  prefixIcon: const Icon(Icons.add_shopping_cart, color: AppColors.accent, size: 16),
-                  enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white10)),
-                ),
-                keyboardType: TextInputType.number,
+                ],
               ),
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("CANCEL", style: TextStyle(color: Colors.white24, fontWeight: FontWeight.w900))),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(ctx);
-                final amount = double.tryParse(amountController.text) ?? 0.0;
-                final qty = double.tryParse(qtyController.text) ?? 1.0;
-                
-                if (mode == "PREMIUM" || item['_source'] == 'service') {
-                  _assignServiceToBooking(item, amount: amount);
-                } else if (mode == "RENTAL") {
-                  _addRentedItem(item, quantity: qty, rate: amount);
-                } else if (mode == "FIXED") {
-                  _mapAssetToRoom(item, quantity: qty);
-                } else {
-                  _addInventoryConsumption(item, quantity: qty);
-                }
-              },
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-              child: const Text("CONFIRM", style: TextStyle(color: AppColors.onyx, fontWeight: FontWeight.w900)),
-            ),
-          ],
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("CANCEL", style: TextStyle(color: Colors.white24, fontWeight: FontWeight.w900))),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    final amount = double.tryParse(amountController.text) ?? 0.0;
+                    final qty = double.tryParse(qtyController.text) ?? 1.0;
+                    
+                    if (mode == "PREMIUM" || item['_source'] == 'service') {
+                      _assignServiceToBooking(item, amount: amount);
+                    } else if (mode == "RENTAL") {
+                      _addRentedItem(item, quantity: qty, rate: amount);
+                    } else if (mode == "FIXED") {
+                      _mapAssetToRoom(item, quantity: qty);
+                    } else {
+                      _addInventoryConsumption(item, quantity: qty, isPayable: isPayable);
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.accent, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                  child: const Text("CONFIRM", style: TextStyle(color: AppColors.onyx, fontWeight: FontWeight.w900)),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -371,7 +417,9 @@ class _ManagerGuestManagementScreenState extends State<ManagerGuestManagementScr
     required String itemTitleKey,
     required String itemSubtitleKey,
     required Function(dynamic) onSelect,
+    String? emptyMessage,
   }) {
+    final bool isEmpty = items.isEmpty;
     return BackdropFilter(
       filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
       child: Container(
@@ -390,33 +438,43 @@ class _ManagerGuestManagementScreenState extends State<ManagerGuestManagementScr
             const SizedBox(height: 24),
             ConstrainedBox(
               constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.6),
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: items.length,
-                itemBuilder: (context, index) {
-                  final item = items[index];
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    child: OnyxGlassCard(
-                      padding: EdgeInsets.zero,
-                      child: ListTile(
-                        onTap: () {
-                          Navigator.pop(context);
-                          onSelect(item);
-                        },
-                        title: Text(item[itemTitleKey].toString().toUpperCase(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 13)),
-                        subtitle: Text(
-                          itemTitleKey == 'name' && item.containsKey('charges') 
-                            ? _currencyFormat.format(item['charges']) 
-                            : item[itemSubtitleKey].toString().toUpperCase(),
-                          style: TextStyle(color: Colors.white24, fontSize: 10, fontWeight: FontWeight.bold),
-                        ),
-                        trailing: const Icon(Icons.add_circle_outline, color: AppColors.accent, size: 20),
+              child: isEmpty 
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 40.0),
+                      child: Text(
+                        emptyMessage ?? "NO ITEMS AVAILABLE", 
+                        style: const TextStyle(color: Colors.white12, fontWeight: FontWeight.w900, fontSize: 11, letterSpacing: 2)
                       ),
                     ),
-                  );
-                },
-              ),
+                  )
+                : ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: items.length,
+                    itemBuilder: (context, index) {
+                      final item = items[index];
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        child: OnyxGlassCard(
+                          padding: EdgeInsets.zero,
+                          child: ListTile(
+                            onTap: () {
+                              Navigator.pop(context);
+                              onSelect(item);
+                            },
+                            title: Text(item[itemTitleKey].toString().toUpperCase(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 13)),
+                            subtitle: Text(
+                              itemTitleKey == 'name' && item.containsKey('charges') 
+                                ? _currencyFormat.format(item['charges']) 
+                                : item[itemSubtitleKey].toString().toUpperCase(),
+                              style: TextStyle(color: Colors.white24, fontSize: 10, fontWeight: FontWeight.bold),
+                            ),
+                            trailing: const Icon(Icons.add_circle_outline, color: AppColors.accent, size: 20),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
             ),
             const SizedBox(height: 24),
           ],
@@ -772,9 +830,231 @@ class _ManagerGuestManagementScreenState extends State<ManagerGuestManagementScr
                 style: TextStyle(color: (category == "FIXED" ? Colors.orangeAccent : Colors.indigoAccent), fontSize: 8, fontWeight: FontWeight.w900),
               ),
             ),
+            if (item['item_id'] != null) ...[
+              const SizedBox(width: 8),
+              IconButton(
+                icon: const Icon(Icons.assignment_return, color: Colors.orangeAccent, size: 16),
+                onPressed: () => _showReturnModal(item),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                tooltip: "Return to location",
+              ),
+            ],
           ],
         ),
       ),
+    );
+  }
+
+  Future<void> _showReturnModal(dynamic item) async {
+    final api = context.read<ApiService>();
+    List<dynamic> locations = [];
+    bool isLoadingLocations = true;
+    int? selectedLocationId;
+    double maxQty = (item['quantity'] ?? 1.0).toDouble();
+    double selectedQty = maxQty;
+    bool isLaundry = item['track_laundry_cycle'] == true ||
+        (item['category']?.toString().toLowerCase().contains('linen') ?? false) ||
+        (item['category']?.toString().toLowerCase().contains('laundry') ?? false);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setStateModal) {
+            if (isLoadingLocations) {
+              isLoadingLocations = false;
+              api.dio.get('/inventory/locations').then((resp) {
+                if (resp.statusCode == 200 && mounted) {
+                  setStateModal(() {
+                    locations = resp.data as List? ?? [];
+                    if (locations.isNotEmpty) {
+                      try {
+                        final found = locations.firstWhere(
+                          (loc) => loc['name'].toString().toLowerCase().contains('warehouse') ||
+                                   loc['name'].toString().toLowerCase().contains('laundry') ||
+                                   loc['name'].toString().toLowerCase().contains('store'),
+                        );
+                        selectedLocationId = found['id'];
+                      } catch (_) {
+                        selectedLocationId = locations.first['id'];
+                      }
+                    }
+                  });
+                }
+              }).catchError((err) {
+                print("Error loading return locations: $err");
+              });
+            }
+
+            return Padding(
+              padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+              child: Container(
+                decoration: const BoxDecoration(
+                  color: Color(0xFF1E202C),
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                ),
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            "RETURN: ${item['item_name'].toString().toUpperCase()}",
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close, color: Colors.white60),
+                          onPressed: () => Navigator.pop(ctx),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      "Select Return Destination:",
+                      style: TextStyle(color: Colors.white60, fontSize: 11, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    if (locations.isEmpty)
+                      const Center(child: CircularProgressIndicator(color: AppColors.accent))
+                    else
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.05),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.white10),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<int>(
+                            dropdownColor: const Color(0xFF1E202C),
+                            value: selectedLocationId,
+                            isExpanded: true,
+                            icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
+                            items: locations.map<DropdownMenuItem<int>>((loc) {
+                              return DropdownMenuItem<int>(
+                                value: loc['id'],
+                                child: Text(
+                                  loc['name'].toString().toUpperCase(),
+                                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                                ),
+                              );
+                            }).toList(),
+                            onChanged: (val) {
+                              setStateModal(() => selectedLocationId = val);
+                            },
+                          ),
+                        ),
+                      ),
+                    const SizedBox(height: 16),
+                    Text(
+                      "Return Quantity (Max: ${maxQty.toStringAsFixed(0)}):",
+                      style: const TextStyle(color: Colors.white60, fontSize: 11, fontWeight: FontWeight.bold),
+                    ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Slider(
+                            value: selectedQty,
+                            min: 1.0,
+                            max: maxQty > 1.0 ? maxQty : 1.0,
+                            divisions: maxQty > 1.0 ? maxQty.toInt() : 1,
+                            activeColor: AppColors.accent,
+                            inactiveColor: Colors.white10,
+                            onChanged: maxQty > 1.0 ? (val) {
+                              setStateModal(() => selectedQty = val);
+                            } : null,
+                          ),
+                        ),
+                        Text(
+                          selectedQty.toStringAsFixed(0),
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          "Send to Laundry Cycle:",
+                          style: TextStyle(color: Colors.white60, fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                        Switch(
+                          value: isLaundry,
+                          activeColor: Colors.orangeAccent,
+                          onChanged: (val) {
+                            setStateModal(() => isLaundry = val);
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orangeAccent,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        onPressed: selectedLocationId == null
+                            ? null
+                            : () async {
+                                Navigator.pop(ctx);
+                                setState(() => _isUpdating = true);
+                                try {
+                                  final response = await api.dio.post(
+                                    '/inventory/return-item',
+                                    data: {
+                                      'booking_id': _details?['id'],
+                                      'item_id': item['item_id'],
+                                      'quantity': selectedQty,
+                                      'return_location_id': selectedLocationId,
+                                      'is_laundry': isLaundry,
+                                    },
+                                  );
+                                  if (response.statusCode == 200) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text("ITEM RETURNED TO LOCATION SUCCESSFULLY"),
+                                        backgroundColor: Colors.green,
+                                      ),
+                                    );
+                                  }
+                                } catch (e) {
+                                  print("Error returning item: $e");
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text("FAILED TO RETURN ITEM: $e"),
+                                      backgroundColor: Colors.redAccent,
+                                    ),
+                                  );
+                                } finally {
+                                  _loadDetails();
+                                }
+                              },
+                        child: const Text(
+                          "SUBMIT RETURN",
+                          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, letterSpacing: 1),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -1040,8 +1320,14 @@ class _ManagerGuestManagementScreenState extends State<ManagerGuestManagementScr
 
   Future<void> _mapAssetToRoom(dynamic item, {double quantity = 1.0}) async {
     final api = context.read<ApiService>();
-    final roomId = _details?['room_id'] ?? widget.booking['room_id'];
-    if (roomId == null) return;
+    final rooms = _details?['rooms'] as List? ?? [];
+    final firstRoom = rooms.isNotEmpty ? rooms[0] : null;
+    final roomId = firstRoom?['id'] ?? firstRoom?['room_id'] ?? widget.booking['room_id'];
+
+    if (roomId == null) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("No room found for this booking"), backgroundColor: Colors.redAccent));
+      return;
+    }
 
     int? locationId;
     if (_details?['rooms'] != null && (_details!['rooms'] as List).isNotEmpty) {
@@ -1060,10 +1346,15 @@ class _ManagerGuestManagementScreenState extends State<ManagerGuestManagementScr
         'notes': 'Mapped via Mobile Manager',
       });
       _loadDetails();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("ASSET MAPPED TO ROOM SUCCESSFULLY"), backgroundColor: Colors.green),
+        );
+      }
     } catch (e) {
       if (mounted) {
         setState(() => _isUpdating = false);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Failed to map asset"), backgroundColor: Colors.redAccent));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Failed to map asset: $e"), backgroundColor: Colors.redAccent));
       }
     }
   }
@@ -1232,50 +1523,61 @@ class _CreateOrderFormState extends State<_CreateOrderForm> {
                   
                   return Container(
                     margin: const EdgeInsets.only(bottom: 8),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     decoration: BoxDecoration(
                       color: isSelected ? AppColors.accent.withOpacity(0.05) : Colors.white.withOpacity(0.02),
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(color: isSelected ? AppColors.accent.withOpacity(0.3) : Colors.transparent)
                     ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(item.name.toUpperCase(), style: TextStyle(color: isSelected ? Colors.white : Colors.white60, fontWeight: FontWeight.w900, fontSize: 12, letterSpacing: 0.5)),
-                              Text("₹${item.price}", style: TextStyle(color: isSelected ? AppColors.accent : Colors.white24, fontWeight: FontWeight.bold, fontSize: 11)),
-                            ],
-                          ),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(16),
+                      onTap: () => setState(() {
+                        if (!isSelected) {
+                          selectedItems.add({'food_item_id': item.id, 'quantity': 1, 'price': item.price});
+                        } else {
+                          // Allow tapping again to toggle/remove? 
+                          // No, better to use the +/- buttons if already selected, but tapping the row can toggle initial selection
+                        }
+                      }),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(item.name.toUpperCase(), style: TextStyle(color: isSelected ? Colors.white : Colors.white60, fontWeight: FontWeight.w900, fontSize: 12, letterSpacing: 0.5)),
+                                  Text("₹${item.price}", style: TextStyle(color: isSelected ? AppColors.accent : Colors.white24, fontWeight: FontWeight.bold, fontSize: 11)),
+                                ],
+                              ),
+                            ),
+                            if (isSelected) ...[
+                              IconButton(
+                                icon: const Icon(Icons.remove_circle_outline, color: AppColors.accent, size: 20),
+                                onPressed: () => setState(() {
+                                  if (selectedItems[existing]['quantity'] > 1) {
+                                    selectedItems[existing]['quantity']--;
+                                  } else {
+                                    selectedItems.removeAt(existing);
+                                  }
+                                }),
+                              ),
+                              Text("$quantity", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16)),
+                              IconButton(
+                                icon: const Icon(Icons.add_circle_outline, color: AppColors.accent, size: 20),
+                                onPressed: () => setState(() {
+                                  selectedItems[existing]['quantity']++;
+                                }),
+                              ),
+                            ] else ...[
+                              const Padding(
+                                padding: EdgeInsets.all(8.0),
+                                child: Text("ADD", style: TextStyle(color: AppColors.accent, fontWeight: FontWeight.w900, fontSize: 12)),
+                              ),
+                            ]
+                          ],
                         ),
-                        if (isSelected) ...[
-                          IconButton(
-                            icon: const Icon(Icons.remove_circle_outline, color: AppColors.accent, size: 20),
-                            onPressed: () => setState(() {
-                              if (selectedItems[existing]['quantity'] > 1) {
-                                selectedItems[existing]['quantity']--;
-                              } else {
-                                selectedItems.removeAt(existing);
-                              }
-                            }),
-                          ),
-                          Text("$quantity", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16)),
-                          IconButton(
-                            icon: const Icon(Icons.add_circle_outline, color: AppColors.accent, size: 20),
-                            onPressed: () => setState(() {
-                              selectedItems[existing]['quantity']++;
-                            }),
-                          ),
-                        ] else ...[
-                          TextButton(
-                            onPressed: () => setState(() {
-                              selectedItems.add({'food_item_id': item.id, 'quantity': 1, 'price': item.price});
-                            }),
-                            child: const Text("ADD", style: TextStyle(color: AppColors.accent, fontWeight: FontWeight.w900, fontSize: 12)),
-                          ),
-                        ]
-                      ],
+                      ),
                     ),
                   );
                 }),
@@ -1395,7 +1697,10 @@ class _CreateServiceRequestFormState extends State<_CreateServiceRequestForm> {
           Center(child: Container(width: 40, height: 4, margin: const EdgeInsets.only(bottom: 24), decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(2)))),
           const Text("NEW SERVICE ASSIGNMENT", style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: 1.5)),
           const SizedBox(height: 32),
-          _buildGlassPicker("TARGET ROOM", selectedRoomId, widget.rooms.map((r) => DropdownMenuItem<int>(value: r['id'], child: Text("ROOM ${r['number'] ?? r['room_number'] ?? r['id'] ?? '???' }"))).toList(), (v) => setState(() => selectedRoomId = v)),
+          _buildGlassPicker("TARGET ROOM", selectedRoomId, widget.rooms.where((r) {
+            final status = (r['status'] ?? '').toString().toLowerCase();
+            return status == 'checked-in' || status == 'checked_in' || status == 'occupied';
+          }).map((r) => DropdownMenuItem<int>(value: r['id'], child: Text("ROOM ${r['number'] ?? r['room_number'] ?? r['id'] ?? '???' }"))).toList(), (v) => setState(() => selectedRoomId = v)),
           const SizedBox(height: 16),
           _buildGlassPicker("SELECT SERVICE", selectedServiceId, widget.services.map((s) => DropdownMenuItem<int>(value: s['id'], child: Text(s['name'].toString().toUpperCase()))).toList(), (v) => setState(() => selectedServiceId = v)),
           const SizedBox(height: 16),

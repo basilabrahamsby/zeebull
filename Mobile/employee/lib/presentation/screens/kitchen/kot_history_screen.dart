@@ -92,7 +92,7 @@ class _KOTHistoryScreenState extends State<KOTHistoryScreen> {
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                             child: ListTile(
                               contentPadding: const EdgeInsets.all(16),
-                              title: Text("Order #${kot.id} - ${kot.roomNumber}",
+                              title: Text("Order #${kot.id} - ${kot.displayLocation}",
                                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                               subtitle: Padding(
                                 padding: const EdgeInsets.only(top: 8),

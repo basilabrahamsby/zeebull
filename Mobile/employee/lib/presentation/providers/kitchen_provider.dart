@@ -117,13 +117,15 @@ class KitchenProvider extends ChangeNotifier {
             .where((kot) => 
                 kot.status.toLowerCase() != 'completed' && 
                 kot.status.toLowerCase() != 'cancelled' && 
-                kot.status.toLowerCase() != 'paid')
+                kot.status.toLowerCase() != 'paid' &&
+                kot.billingStatus?.toLowerCase() != 'paid')
             .toList();
         _orderHistory = allKots
             .where((kot) => 
                 kot.status.toLowerCase() == 'completed' || 
                 kot.status.toLowerCase() == 'cancelled' || 
-                kot.status.toLowerCase() == 'paid')
+                kot.status.toLowerCase() == 'paid' ||
+                kot.billingStatus?.toLowerCase() == 'paid')
             .toList();
       } else {
         _error = "Failed to fetch orders";
@@ -141,11 +143,14 @@ class KitchenProvider extends ChangeNotifier {
 
   Future<void> fetchOrderHistory({int? employeeId}) => fetchActiveOrders(employeeId: employeeId);
 
-  Future<bool> updateStatus(int orderId, String newStatus, {String? billingStatus}) async {
+  Future<bool> updateStatus(int orderId, String newStatus, {String? billingStatus, String? paymentMethod}) async {
     try {
       final payload = {'status': newStatus};
       if (billingStatus != null) {
         payload['billing_status'] = billingStatus;
+      }
+      if (paymentMethod != null) {
+        payload['payment_method'] = paymentMethod;
       }
       final response = await _apiService.updateFoodOrder(orderId, payload);
       if (response.statusCode == 200) {
@@ -153,13 +158,39 @@ class KitchenProvider extends ChangeNotifier {
         final index = _activeKots.indexWhere((kot) => kot.id == orderId);
         if (index != -1) {
           final statusLow = newStatus.toLowerCase();
-          if (statusLow == 'completed' || statusLow == 'cancelled' || statusLow == 'paid') {
+          final billLow = billingStatus?.toLowerCase();
+          
+          if (statusLow == 'completed' || statusLow == 'cancelled' || statusLow == 'paid' || billLow == 'paid') {
             final kot = _activeKots.removeAt(index);
             kot.status = newStatus;
+            // No simple way to update kot.billingStatus as it's final in the model currently, 
+            // but removing it from activeKots is the primary goal.
             _orderHistory.insert(0, kot);
           } else {
             _activeKots[index].status = newStatus;
           }
+          notifyListeners();
+        }
+        return true;
+      }
+      return false;
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> markOrderPaid(int orderId, String paymentMethod) async {
+    try {
+      final response = await _apiService.markFoodOrderPaid(orderId, paymentMethod);
+      if (response.statusCode == 200) {
+        // Update local state
+        final index = _activeKots.indexWhere((kot) => kot.id == orderId);
+        if (index != -1) {
+          final kot = _activeKots.removeAt(index);
+          // We can't update final fields, but we move it to history
+          _orderHistory.insert(0, kot);
           notifyListeners();
         }
         return true;

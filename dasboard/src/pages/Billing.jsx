@@ -123,89 +123,202 @@ const CheckoutDetailModal = React.memo(({ checkout, onClose, onUpdateSuccess }) 
 
     const doc = new jsPDF();
 
-    // 1. Header
-    doc.addImage(logo, 'PNG', 14, 15, 30, 15);
-    doc.setFontSize(22);
+    // 1. Title (Centered, Green, Emerald 600: rgb(5, 150, 105))
+    doc.setFontSize(24);
     doc.setFont('helvetica', 'bold');
-    doc.text('Resort Invoice', 105, 25, { align: 'center' });
+    doc.setTextColor(5, 150, 105);
+    doc.text('ORCHID TRAILS RESORT', 105, 25, { align: 'center' });
+
+    // 2. Subtitle (Left-aligned, Dark Grey)
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(31, 41, 55); // Hex #1F2937
+    doc.text('Resort Invoice', 14, 38);
+
+    // 3. Info Section (Two Columns)
     doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-    doc.text('Zeebull Hospitality', 190, 20, { align: 'right' });
-    doc.text('Waynad, Kerala', 190, 25, { align: 'right' });
+    doc.setTextColor(55, 65, 81); // Hex #374151
 
-    // 2. Info
-    doc.setFontSize(12);
+    // Column 1
     doc.setFont('helvetica', 'bold');
-    doc.text('Bill To:', 14, 45);
+    doc.text('Bill ID:', 14, 48);
     doc.setFont('helvetica', 'normal');
-    doc.text(details.guest_name || 'N/A', 14, 51);
-    doc.text(`Rooms: ${details.room_numbers?.join(', ') || details.room_number || 'N/A'}`, 14, 57);
+    doc.text(details.id.toString(), 45, 48);
 
     doc.setFont('helvetica', 'bold');
-    doc.text('Bill ID:', 140, 45);
+    doc.text('Guest Name:', 14, 55);
     doc.setFont('helvetica', 'normal');
-    doc.text(details.id.toString(), 160, 45);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Date:', 140, 51);
-    doc.setFont('helvetica', 'normal');
-    doc.text(formatDateIST(details.created_at), 160, 51);
+    doc.text((details.guest_name || 'N/A').toUpperCase(), 45, 55);
 
-    // 3. Charges table
+    doc.setFont('helvetica', 'bold');
+    doc.text('Check-in:', 14, 62);
+    doc.setFont('helvetica', 'normal');
+    doc.text(formatDateIST(details.check_in || details.created_at), 45, 62);
+
+    // Column 2
+    doc.setFont('helvetica', 'bold');
+    doc.text('Date:', 120, 48);
+    doc.setFont('helvetica', 'normal');
+    doc.text(formatDateTimeIST(details.created_at), 145, 48);
+
+    doc.setFont('helvetica', 'bold');
+    doc.text('Status:', 120, 55);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Checked Out', 145, 55);
+
+    doc.setFont('helvetica', 'bold');
+    doc.text('Check-out:', 120, 62);
+    doc.setFont('helvetica', 'normal');
+    doc.text(formatDateIST(details.check_out || details.created_at), 145, 62);
+
+    // Helper for currency formatting (no ₹ symbol to avoid backtick glitches)
+    const formatPDFCurrency = (amt) => {
+      const formatted = new Intl.NumberFormat('en-IN', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(amt || 0);
+      return `Rs.${formatted}`;
+    };
+
+    // 4. Charges Table
     const chargesBody = [];
-    if (details.room_total > 0) chargesBody.push(['Room Charges', '', formatCurrency(details.room_total)]);
-    if (details.package_total > 0) chargesBody.push(['Package Charges', '', formatCurrency(details.package_total)]);
+    let idx = 1;
 
-    details.food_orders?.forEach(order => {
-      order.items?.forEach(item => {
-        chargesBody.push([`Food: ${item.item_name}`, `x${item.quantity}`, formatCurrency(item.total)]);
+    if (details.room_total > 0) {
+      chargesBody.push([idx++, 'Room Charges', '-', formatPDFCurrency(details.room_total)]);
+    }
+    if (details.package_total > 0) {
+      chargesBody.push([idx++, 'Package Charges', '-', formatPDFCurrency(details.package_total)]);
+    }
+    
+    // Food orders
+    if (details.food_orders && details.food_orders.length > 0) {
+      details.food_orders.forEach(order => {
+        order.items?.forEach(item => {
+          chargesBody.push([idx++, `Food: ${item.item_name}`, `x${item.quantity}`, formatPDFCurrency(item.total)]);
+        });
       });
-    });
+    }
 
-    details.services?.forEach(service => {
-      chargesBody.push([`Service: ${service.service_name}`, '', formatCurrency(service.charges)]);
-    });
+    // Services
+    if (details.services && details.services.length > 0) {
+      details.services.forEach(service => {
+        chargesBody.push([idx++, `Service: ${service.service_name}`, '-', formatPDFCurrency(service.charges)]);
+      });
+    }
 
-    details.bill_details?.consumables_items?.forEach(item => {
-      chargesBody.push([`Consumable: ${item.item_name}`, `x${item.quantity || item.actual_consumed}`, formatCurrency(item.total_charge)]);
-    });
+    // Consumables details
+    if (details.bill_details?.consumables_items && details.bill_details.consumables_items.length > 0) {
+      details.bill_details.consumables_items.forEach(item => {
+        chargesBody.push([
+          idx++,
+          `Consumable: ${item.item_name}`,
+          `x${item.quantity || item.actual_consumed || 1}`,
+          formatPDFCurrency(item.total_charge)
+        ]);
+      });
+    }
 
-    details.bill_details?.inventory_usage?.forEach(item => {
-      chargesBody.push([`Rental: ${item.item_name}`, `x${item.quantity} ${item.unit || ''}`, formatCurrency(item.rental_charge || 0)]);
-    });
+    // Rentals
+    if (details.bill_details?.inventory_usage && details.bill_details.inventory_usage.length > 0) {
+      details.bill_details.inventory_usage.forEach(item => {
+        chargesBody.push([
+          idx++,
+          `Rental: ${item.item_name}`,
+          `x${item.quantity} ${item.unit || ''}`,
+          formatPDFCurrency(item.rental_charge || 0)
+        ]);
+      });
+    }
 
-    details.bill_details?.asset_damages?.forEach(item => {
-      chargesBody.push([`Damage: ${item.item_name}`, item.notes || '', formatCurrency(item.total_charge || item.replacement_cost)]);
-    });
+    // Damages
+    if (details.bill_details?.asset_damages && details.bill_details.asset_damages.length > 0) {
+      details.bill_details.asset_damages.forEach(item => {
+        chargesBody.push([
+          idx++,
+          `Damage: ${item.item_name} ${item.notes ? `(${item.notes})` : ''}`,
+          '-',
+          formatPDFCurrency(item.total_charge || item.replacement_cost)
+        ]);
+      });
+    }
 
     autoTable(doc, {
-      startY: 65,
-      head: [['Description', 'Details', 'Amount']],
+      startY: 72,
+      head: [['#', 'Description', 'Qty', 'Amount']],
       body: chargesBody,
-      theme: 'striped',
-      headStyles: { fillColor: [79, 70, 229] }
+      theme: 'grid',
+      headStyles: { fillColor: [5, 150, 105], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' },
+      columnStyles: {
+        0: { halign: 'center', cellWidth: 15 },
+        1: { halign: 'left' },
+        2: { halign: 'center', cellWidth: 30 },
+        3: { halign: 'right', cellWidth: 40 }
+      },
+      styles: { cellPadding: 2.5, fontSize: 9 }
     });
 
-    // 4. Totals
-    const totalsY = doc.lastAutoTable.finalY + 10;
-    const totals = [
-      ['Subtotal', formatCurrency(details.grand_total - details.tax_amount + details.discount_amount)],
-      ['Tax', `+${formatCurrency(details.tax_amount)}`],
-      ['Discount', `-${formatCurrency(details.discount_amount)}`],
-      ['Grand Total', formatCurrency(details.grand_total)]
+    // 5. Financial Summary Y position
+    const totalsY = doc.lastAutoTable.finalY + 8;
+    
+    const subtotal = (
+      (details.room_total || 0) +
+      (details.package_total || 0) +
+      (details.food_orders?.reduce((acc, order) => acc + (order.items?.reduce((sum, item) => sum + (item.total || 0), 0) || 0), 0) || 0) +
+      (details.services?.reduce((acc, s) => acc + (s.charges || 0), 0) || 0) +
+      (details.bill_details?.consumables_items?.reduce((acc, item) => acc + (item.total_charge || 0), 0) || 0) +
+      (details.bill_details?.inventory_usage?.reduce((acc, item) => acc + (item.rental_charge || 0), 0) || 0) +
+      (details.bill_details?.asset_damages?.reduce((acc, item) => acc + (item.total_charge || item.replacement_cost || 0), 0) || 0)
+    );
+    const tax = details.tax_amount || 0;
+    const discount = details.discount_amount || 0;
+    const advance = details.advance_deposit || 0;
+    const grand = details.grand_total || (subtotal + tax - discount);
+    const balanceDue = Math.max(0, grand - advance);
+
+    const summaryRows = [
+      ['SUBTOTAL', formatPDFCurrency(subtotal)],
+      ['TAX (GST)', `+${formatPDFCurrency(tax)}`],
+      ['DISCOUNT', `-${formatPDFCurrency(discount)}`],
+      ['ADVANCE PAID', `-${formatPDFCurrency(advance)}`],
+      ['NET PAYABLE', formatPDFCurrency(balanceDue)]
     ];
 
     autoTable(doc, {
       startY: totalsY,
-      body: totals,
+      body: summaryRows,
       theme: 'plain',
       tableWidth: 'wrap',
-      margin: { left: 120 },
-      styles: { cellPadding: 1.5, fontSize: 11 },
+      margin: { left: 110 },
+      styles: { cellPadding: 2, fontSize: 10 },
       columnStyles: {
-        0: { fontStyle: 'bold', halign: 'right' },
-        1: { fontStyle: 'bold', halign: 'right' }
+        0: { fontStyle: 'bold', halign: 'right', cellWidth: 50 },
+        1: { fontStyle: 'bold', halign: 'right', cellWidth: 40 }
+      },
+      didParseCell: (data) => {
+        if (data.row.index === summaryRows.length - 1) {
+          data.cell.styles.fontSize = 11;
+          if (data.column.index === 1) {
+            data.cell.styles.textColor = balanceDue > 0 ? [220, 38, 38] : [5, 150, 105]; // Red or Green
+          }
+        }
       }
     });
+
+    // 6. Footer Y position
+    const footerY = doc.lastAutoTable.finalY + 15;
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(107, 114, 128);
+    doc.text('This is a computer-generated invoice for the services rendered.', 105, footerY, { align: 'center' });
+    doc.text('Please present this invoice for any disputes or refund requests.', 105, footerY + 5, { align: 'center' });
+    
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(31, 41, 55);
+    doc.text('Orchid Trails Resort', 105, footerY + 13, { align: 'center' });
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(8);
+    doc.text(`Generated on ${formatDateTimeIST(new Date())}`, 105, footerY + 18, { align: 'center' });
 
     doc.save(`bill-${details.id}.pdf`);
   };
@@ -1453,198 +1566,206 @@ const Billing = () => {
 
     const doc = new jsPDF();
 
-    // 1. Add Logo and Resort Info Header
-    doc.addImage(logo, 'PNG', 14, 10, 30, 15); // Logo on the left
-
-    // Resort Name as main title (centered)
-    doc.setFontSize(20);
+    // 1. Title (Centered, Green, Emerald 600: rgb(5, 150, 105))
+    doc.setFontSize(24);
     doc.setFont('helvetica', 'bold');
-    doc.text(resortSettings.resort_name || 'Resort Invoice', 105, 15, { align: 'center' });
+    doc.setTextColor(5, 150, 105);
+    doc.text('ORCHID TRAILS RESORT', 105, 25, { align: 'center' });
 
-    // Invoice subtitle
-    doc.setFontSize(12);
-    doc.setFont('helvetica', 'normal');
-    doc.text('TAX INVOICE', 105, 21, { align: 'center' });
-
-    // Resort contact details (right side)
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
-    let yPos = 12;
-
-    if (resortSettings.resort_address) {
-      const addressLines = doc.splitTextToSize(resortSettings.resort_address, 70);
-      addressLines.forEach(line => {
-        doc.text(line, 200, yPos, { align: 'right' });
-        yPos += 4;
-      });
-    }
-
-    if (resortSettings.resort_phone) {
-      doc.text(`Phone: ${resortSettings.resort_phone}`, 200, yPos, { align: 'right' });
-      yPos += 4;
-    }
-
-    if (resortSettings.resort_email) {
-      doc.text(`Email: ${resortSettings.resort_email}`, 200, yPos, { align: 'right' });
-      yPos += 4;
-    }
-
-    if (resortSettings.resort_website) {
-      doc.text(`Web: ${resortSettings.resort_website}`, 200, yPos, { align: 'right' });
-      yPos += 4;
-    }
-
-    // GST and License info
-    if (resortSettings.gst_number) {
-      doc.setFont('helvetica', 'bold');
-      doc.text(`GSTIN: ${resortSettings.gst_number}`, 200, yPos, { align: 'right' });
-      doc.setFont('helvetica', 'normal');
-      yPos += 4;
-    }
-
-    if (resortSettings.license_number) {
-      doc.text(`License: ${resortSettings.license_number}`, 200, yPos, { align: 'right' });
-      yPos += 4;
-    }
-
-    // Horizontal line separator
-    doc.setDrawColor(200, 200, 200);
-    const separatorY = Math.max(yPos + 2, 32);
-    doc.line(14, separatorY, 196, separatorY);
-
-    // 2. Bill Details (positioned after header)
-    const billDetailsStartY = separatorY + 8;
-    doc.setFontSize(12);
+    // 2. Subtitle (Left-aligned, Dark Grey)
+    doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
-    doc.text('Bill To:', 14, billDetailsStartY);
+    doc.setTextColor(31, 41, 55); // Hex #1F2937
+    doc.text('Resort Invoice', 14, 38);
+
+    // 3. Info Section (Two Columns)
+    doc.setFontSize(10);
+    doc.setTextColor(55, 65, 81); // Hex #374151
+
+    // Column 1
+    doc.setFont('helvetica', 'bold');
+    doc.text('Booking ID:', 14, 48);
     doc.setFont('helvetica', 'normal');
-    doc.text(billData.guest_name, 14, billDetailsStartY + 6);
-    doc.text(`Rooms: ${billData.room_numbers.join(', ')}`, 14, billDetailsStartY + 12);
+    doc.text(billData.booking_display_id || `BK-${billData.booking_id || ''}`, 45, 48);
 
     doc.setFont('helvetica', 'bold');
-    doc.text('Check-in:', 130, billDetailsStartY);
+    doc.text('Guest Name:', 14, 55);
     doc.setFont('helvetica', 'normal');
-    doc.text(new Date(billData.check_in).toLocaleDateString(), 150, billDetailsStartY);
+    doc.text((billData.guest_name || 'N/A').toUpperCase(), 45, 55);
+
     doc.setFont('helvetica', 'bold');
-    doc.text('Check-out:', 130, billDetailsStartY + 6);
+    doc.text('Check-in:', 14, 62);
     doc.setFont('helvetica', 'normal');
-    doc.text(new Date(billData.check_out).toLocaleDateString(), 150, billDetailsStartY + 6);
+    doc.text(new Date(billData.check_in).toLocaleDateString('en-GB'), 45, 62);
 
+    // Column 2
+    doc.setFont('helvetica', 'bold');
+    doc.text('Date:', 120, 48);
+    doc.setFont('helvetica', 'normal');
+    doc.text(formatDateTimeIST(new Date()), 145, 48);
 
-    // 3. Itemized Charges Table
+    doc.setFont('helvetica', 'bold');
+    doc.text('Status:', 120, 55);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Checked Out', 145, 55);
+
+    doc.setFont('helvetica', 'bold');
+    doc.text('Check-out:', 120, 62);
+    doc.setFont('helvetica', 'normal');
+    doc.text(new Date(billData.check_out).toLocaleDateString('en-GB'), 145, 62);
+
+    // Helper for currency formatting (no ₹ symbol to avoid backtick glitches)
+    const formatPDFCurrency = (amt) => {
+      const formatted = new Intl.NumberFormat('en-IN', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(amt || 0);
+      return `Rs.${formatted}`;
+    };
+
+    // 4. Itemized Charges Table
     const chargesBody = [];
+    let idx = 1;
+
     if (billData.charges.room_charges > 0) {
       const numRooms = billData.room_numbers?.length || 1;
       const dailyRatePerRoom = billData.charges.room_charges / (billData.stay_nights * numRooms);
-      chargesBody.push(['Room Charges', `${formatCurrency(dailyRatePerRoom)}/day × ${billData.stay_nights} ${billData.stay_nights === 1 ? 'night' : 'nights'} × ${numRooms} ${numRooms === 1 ? 'room' : 'rooms'}`, formatCurrency(billData.charges.room_charges)]);
+      chargesBody.push([
+        idx++,
+        'Room Charges',
+        `${formatPDFCurrency(dailyRatePerRoom)}/day × ${billData.stay_nights} nights × ${numRooms} rooms`,
+        formatPDFCurrency(billData.charges.room_charges)
+      ]);
     }
-    if (billData.charges.package_charges > 0) chargesBody.push(['Package Charges', `Package for ${billData.stay_nights} nights`, formatCurrency(billData.charges.package_charges)]);
-    billData.charges.food_items.forEach(item => chargesBody.push([`Food: ${item.item_name}`, `Quantity: ${item.quantity}`, formatCurrency(item.amount)]));
-    billData.charges.service_items.forEach(item => {
-      const serviceLabel = item.is_paid ? `Service: ${item.service_name} (Previously Billed)` : `Service: ${item.service_name}`;
-      chargesBody.push([serviceLabel, '', formatCurrency(item.charges)]);
-    });
+    if (billData.charges.package_charges > 0) {
+      chargesBody.push([
+        idx++,
+        'Package Charges',
+        `Package for ${billData.stay_nights} nights`,
+        formatPDFCurrency(billData.charges.package_charges)
+      ]);
+    }
+    
+    // Food items
+    if (billData.charges.food_items && billData.charges.food_items.length > 0) {
+      billData.charges.food_items.forEach(item => {
+        chargesBody.push([idx++, `Food: ${item.item_name}`, `x${item.quantity}`, formatPDFCurrency(item.amount)]);
+      });
+    }
 
-    // Add Inventory Usage (Optional display)
+    // Service items
+    if (billData.charges.service_items && billData.charges.service_items.length > 0) {
+      billData.charges.service_items.forEach(item => {
+        const serviceLabel = item.is_paid ? `Service: ${item.service_name} (Previously Billed)` : `Service: ${item.service_name}`;
+        chargesBody.push([idx++, serviceLabel, '-', formatPDFCurrency(item.charges)]);
+      });
+    }
+
+    // Consumables details
+    if (billData.charges.consumables_items && billData.charges.consumables_items.length > 0) {
+      billData.charges.consumables_items.forEach(item => {
+        chargesBody.push([
+          idx++,
+          `Consumable: ${item.item_name}`,
+          `Qty: ${item.actual_consumed} (Limit: ${item.complimentary_limit || 0})`,
+          formatPDFCurrency(item.total_charge)
+        ]);
+      });
+    }
+
+    // Rentals / Inventory
     if (billData.charges.inventory_usage && billData.charges.inventory_usage.length > 0) {
-      chargesBody.push([{ content: 'Rental / Asset Usage', colSpan: 3, styles: { fillColor: [240, 240, 240], fontStyle: 'bold' } }]);
       billData.charges.inventory_usage.forEach(item => {
         const roomPrefix = item.room_number ? `Rm ${item.room_number}: ` : '';
         chargesBody.push([
-          `${roomPrefix}${item.item_name}`,
-          `Qty: ${item.quantity} ${item.unit} ${item.is_rental ? `(Rate: ${formatCurrency(item.rental_price)})` : ''}`,
-          formatCurrency(item.rental_charge || 0)
+          idx++,
+          `Rental: ${roomPrefix}${item.item_name}`,
+          `Qty: ${item.quantity} ${item.unit || ''} ${item.is_rental ? `(Rate: ${formatPDFCurrency(item.rental_price)})` : ''}`,
+          formatPDFCurrency(item.rental_charge || 0)
         ]);
       });
     }
 
-    // Add Consumables specifically if they have individual charges
-    if (billData.charges.consumables_items && billData.charges.consumables_items.length > 0) {
-      chargesBody.push([{ content: 'Consumables & Breakage', colSpan: 3, styles: { fillColor: [240, 240, 240], fontStyle: 'bold' } }]);
-      billData.charges.consumables_items.forEach(item => {
-        chargesBody.push([
-          item.item_name,
-          `Qty: ${item.actual_consumed} (Limit: ${item.complimentary_limit})`,
-          formatCurrency(item.total_charge)
-        ]);
-      });
-    }
-
-    // Add Asset Damages
+    // Asset Damages
     if (billData.charges.asset_damages && billData.charges.asset_damages.length > 0) {
-      chargesBody.push([{ content: 'Asset Damages / Replacement', colSpan: 3, styles: { fillColor: [240, 240, 240], fontStyle: 'bold' } }]);
       billData.charges.asset_damages.forEach(item => {
         chargesBody.push([
-          item.item_name,
+          idx++,
+          `Damage: ${item.item_name}`,
           item.notes || 'Asset Replacement Charge',
-          formatCurrency(item.replacement_cost)
+          formatPDFCurrency(item.replacement_cost)
         ]);
       });
     }
 
     autoTable(doc, {
-      startY: billDetailsStartY + 20,
-      head: [['Description', 'Details', 'Amount']],
+      startY: 72,
+      head: [['#', 'Description', 'Qty/Details', 'Amount']],
       body: chargesBody,
-      theme: 'striped',
-      headStyles: { fillColor: [38, 41, 61] } // Dark blue color
+      theme: 'grid',
+      headStyles: { fillColor: [5, 150, 105], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' },
+      columnStyles: {
+        0: { halign: 'center', cellWidth: 15 },
+        1: { halign: 'left' },
+        2: { halign: 'center', cellWidth: 45 },
+        3: { halign: 'right', cellWidth: 40 }
+      },
+      styles: { cellPadding: 2.5, fontSize: 9 }
     });
 
-    // 4. Totals with GST breakdown
-    const subtotal = billData.charges.total_due;
+    // 5. Financial Summary Y position
+    const totalsY = doc.lastAutoTable.finalY + 8;
+    
+    const subtotal = billData.charges.total_due || 0;
     const totalGST = billData.charges.total_gst || 0;
     const advancePaid = billData.charges.advance_deposit || 0;
     const netPayable = (subtotal + totalGST - (parseFloat(discount) || 0)) - advancePaid;
-    
-    const totals = [
-      ...(billData.charges.food_charges > 0 ? [['Food & Beverage', formatCurrency(billData.charges.food_charges)]] : []),
-      ...(billData.charges.service_charges > 0 ? [['Service Charges', formatCurrency(billData.charges.service_charges)]] : []),
-      ...(billData.charges.inventory_charges > 0 ? [['Rentals / Inventory', formatCurrency(billData.charges.inventory_charges)]] : []),
-      ...(billData.charges.consumables_charges > 0 ? [['Consumables', formatCurrency(billData.charges.consumables_charges)]] : []),
-      ...(billData.charges.asset_damage_charges > 0 ? [['Asset Damages', formatCurrency(billData.charges.asset_damage_charges)]] : []),
-      ['Subtotal', formatCurrency(billData.charges.total_due)],
-      ...(billData.charges.room_gst > 0 ? [['Room GST', `+${formatCurrency(billData.charges.room_gst || 0)}`]] : []),
-      ...(billData.charges.package_gst > 0 ? [['Package GST', `+${formatCurrency(billData.charges.package_gst || 0)}`]] : []),
-      ...(billData.charges.food_gst > 0 ? [['Food GST (5%)', `+${formatCurrency(billData.charges.food_gst || 0)}`]] : []),
-      ...(billData.charges.service_gst > 0 ? [['Service GST (18%)', `+${formatCurrency(billData.charges.service_gst || 0)}`]] : []),
-      ...(billData.charges.consumables_gst > 0 ? [['Consumables GST (5%)', `+${formatCurrency(billData.charges.consumables_gst || 0)}`]] : []),
-      ...(billData.charges.inventory_gst > 0 ? [['Inventory GST (18%)', `+${formatCurrency(billData.charges.inventory_gst || 0)}`]] : []),
-      ...(billData.charges.asset_damage_gst > 0 ? [['Damage GST (18%)', `+${formatCurrency(billData.charges.asset_damage_gst || 0)}`]] : []),
-      ['Total GST', `+${formatCurrency(totalGST)}`],
-      ['Total Bill Value', formatCurrency(subtotal + totalGST)],
-      ...(discount > 0 ? [['Discount', `-${formatCurrency(parseFloat(discount))}`]] : []),
-      ...(advancePaid > 0 ? [['Advance Paid', `-${formatCurrency(advancePaid)}`]] : []),
-      [netPayable >= 0 ? 'Net Payable' : 'Refund Amount', formatCurrency(Math.abs(netPayable))]
+
+    const summaryRows = [
+      ['SUBTOTAL', formatPDFCurrency(subtotal)],
+      ['TAX (GST)', `+${formatPDFCurrency(totalGST)}`],
+      ['DISCOUNT', `-${formatPDFCurrency(parseFloat(discount) || 0)}`],
+      ['ADVANCE PAID', `-${formatPDFCurrency(advancePaid)}`],
+      [netPayable >= 0 ? 'NET PAYABLE' : 'REFUND AMOUNT', formatPDFCurrency(Math.abs(netPayable))]
     ];
 
     autoTable(doc, {
-      startY: doc.lastAutoTable.finalY + 2,
-      body: totals,
+      startY: totalsY,
+      body: summaryRows,
       theme: 'plain',
       tableWidth: 'wrap',
-      margin: { left: 120 },
-      styles: { cellPadding: 1.5, fontSize: 11 },
+      margin: { left: 110 },
+      styles: { cellPadding: 2, fontSize: 10 },
       columnStyles: {
-        0: { fontStyle: 'bold', halign: 'right' },
-        1: { fontStyle: 'bold', halign: 'right' }
+        0: { fontStyle: 'bold', halign: 'right', cellWidth: 50 },
+        1: { fontStyle: 'bold', halign: 'right', cellWidth: 40 }
       },
       didParseCell: (data) => {
-        if (data.row.index === totals.length - 1) { // Grand Total row
-          data.cell.styles.fontStyle = 'bold';
-          data.cell.styles.fontSize = 14;
+        if (data.row.index === summaryRows.length - 1) {
+          data.cell.styles.fontSize = 11;
+          if (data.column.index === 1) {
+            data.cell.styles.textColor = netPayable >= 0 ? [220, 38, 38] : [5, 150, 105]; // Red or Green
+          }
         }
       }
     });
 
-    // 5. Footer
-    const pageCount = doc.internal.getNumberOfPages();
-    for (let i = 1; i <= pageCount; i++) {
-      doc.setPage(i);
-      doc.setFontSize(10);
-      doc.text('Thank you for staying with us!', 105, doc.internal.pageSize.height - 10, { align: 'center' });
-    }
+    // 6. Footer Y position
+    const footerY = doc.lastAutoTable.finalY + 15;
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(107, 114, 128);
+    doc.text('This is a computer-generated invoice for the services rendered.', 105, footerY, { align: 'center' });
+    doc.text('Please present this invoice for any disputes or refund requests.', 105, footerY + 5, { align: 'center' });
+    
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(31, 41, 55);
+    doc.text('Orchid Trails Resort', 105, footerY + 13, { align: 'center' });
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(8);
+    doc.text(`Generated on ${formatDateTimeIST(new Date())}`, 105, footerY + 18, { align: 'center' });
 
-    // 6. Perform action
+    // Perform action
     if (action === 'print') {
       doc.autoPrint();
       doc.output('dataurlnewwindow'); // Opens PDF in new window with print dialog

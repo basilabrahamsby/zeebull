@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import Optional, List
 from datetime import date, datetime, timezone
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from app.utils.auth import get_db, get_current_user
 from app.utils.branch_scope import get_branch_id
@@ -41,32 +41,56 @@ class CloseDayRequest(BaseModel):
 
 
 class DayAuditOut(BaseModel):
-    id: int
-    branch_id: int
-    business_date: date
-    status: str
+    id: Optional[int] = None
+    branch_id: Optional[int] = None
+    business_date: Optional[date] = None
+    status: Optional[str] = "open"
     opened_at: Optional[datetime] = None
     closed_at: Optional[datetime] = None
-    opening_cash_balance: float = 0.0
-    opening_account_balance: float = 0.0
-    closing_cash_balance: float = 0.0
-    closing_account_balance: float = 0.0
-    system_expected_cash: float = 0.0
-    system_expected_account: float = 0.0
+    opening_cash_balance: Optional[float] = 0.0
+    opening_account_balance: Optional[float] = 0.0
+    closing_cash_balance: Optional[float] = 0.0
+    closing_account_balance: Optional[float] = 0.0
+    system_expected_cash: Optional[float] = 0.0
+    system_expected_account: Optional[float] = 0.0
     override_reason: Optional[str] = None
     opening_notes: Optional[str] = None
     closing_notes: Optional[str] = None
-    total_room_revenue: float = 0.0
-    total_food_revenue: float = 0.0
-    total_service_revenue: float = 0.0
-    total_gst_collected: float = 0.0
-    total_payments_received: float = 0.0
-    total_expenses: float = 0.0
-    total_purchases: float = 0.0
-    rooms_occupied: int = 0
-    new_checkins: int = 0
-    new_checkouts: int = 0
-    audit_log: Optional[list] = None
+    total_room_revenue: Optional[float] = 0.0
+    total_food_revenue: Optional[float] = 0.0
+    total_service_revenue: Optional[float] = 0.0
+    total_gst_collected: Optional[float] = 0.0
+    total_payments_received: Optional[float] = 0.0
+    total_expenses: Optional[float] = 0.0
+    total_purchases: Optional[float] = 0.0
+    rooms_occupied: Optional[int] = 0
+    new_checkins: Optional[int] = 0
+    new_checkouts: Optional[int] = 0
+    audit_log: Optional[list] = []
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    @field_validator(
+        "opening_cash_balance", "opening_account_balance", 
+        "closing_cash_balance", "closing_account_balance",
+        "system_expected_cash", "system_expected_account",
+        "total_room_revenue", "total_food_revenue", "total_service_revenue",
+        "total_gst_collected", "total_payments_received", "total_expenses",
+        "total_purchases", "rooms_occupied", "new_checkins", "new_checkouts",
+        mode="before"
+    )
+    @classmethod
+    def coerce_none_to_zero(cls, v):
+        if v is None:
+            return 0
+        return v
+
+    @field_validator("audit_log", mode="before")
+    @classmethod
+    def coerce_none_to_list(cls, v):
+        if v is None:
+            return []
+        return v
 
     class Config:
         from_attributes = True

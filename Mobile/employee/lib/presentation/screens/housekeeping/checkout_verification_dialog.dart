@@ -179,8 +179,10 @@ class _CheckoutVerificationDialogState extends State<CheckoutVerificationDialog>
         
         for (var i in items) {
            final m = Map<String, dynamic>.from(i);
+           m['name'] = m['item_name'] ?? m['name'] ?? '';
            if (m['is_fixed_asset'] == true) {
              m['damaged'] = false;
+             m['is_laundry'] = false;
              m['notes'] = "";
              m['cost'] = m['replacement_cost'];
              fixed.add(m);
@@ -207,12 +209,14 @@ class _CheckoutVerificationDialogState extends State<CheckoutVerificationDialog>
     setState(() => _isLoading = true);
     try {
       final dio = ApiService().dio;
-      final assetDamages = _fixedAssets.where((a) => a['damaged'] == true).map((a) {
+      final assetDamages = _fixedAssets.where((a) => a['damaged'] == true || a['is_laundry'] == true).map((a) {
          return {
             'item_name': a['name'],
             'replacement_cost': double.tryParse(a['replacement_cost']?.toString() ?? '0') ?? 0.0,
             'notes': a['notes'],
             'item_id': a['item_id'],
+            'is_damaged': a['damaged'] == true,
+            'is_laundry': a['is_laundry'] == true,
          };
       }).toList();
 
@@ -295,7 +299,18 @@ class _CheckoutVerificationDialogState extends State<CheckoutVerificationDialog>
              ],
 
              if (_fixedAssets.isEmpty && _consumables.isEmpty)
-                const Padding(padding: EdgeInsets.all(20), child: Center(child: Text("No items to verify for this room."))),
+                Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Center(
+                    child: Text(
+                      _requestId == null
+                          ? "Please initiate checkout first to start the audit."
+                          : "No items to verify for this room.",
+                      style: TextStyle(color: Colors.grey[600], fontSize: 14, fontWeight: FontWeight.w500),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
              
              const Text("Audit Notes", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
              const SizedBox(height: 8),
@@ -346,7 +361,7 @@ class _CheckoutVerificationDialogState extends State<CheckoutVerificationDialog>
     );
   }
 
-  Widget _buildFixedAssetRow(Map<String, dynamic> item) {
+   Widget _buildFixedAssetRow(Map<String, dynamic> item) {
      return Container(
        margin: const EdgeInsets.only(bottom: 8),
        padding: const EdgeInsets.all(12),
@@ -359,13 +374,32 @@ class _CheckoutVerificationDialogState extends State<CheckoutVerificationDialog>
          children: [
            Row(
              children: [
-               Expanded(child: Text(item['name'], style: const TextStyle(fontWeight: FontWeight.bold))),
+               Expanded(child: Text(item['name']?.toString() ?? 'FIXED ASSET', style: const TextStyle(fontWeight: FontWeight.bold))),
                Checkbox(
                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
                  value: item['damaged'], 
-                 onChanged: (v) => setState(() => item['damaged'] = v)
+                 onChanged: (v) => setState(() {
+                   item['damaged'] = v;
+                   if (v == true) {
+                     item['is_laundry'] = false;
+                   }
+                 })
                ),
                const Text("Damaged", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.red)),
+               if ((item['name'] ?? '').toString().toLowerCase().replaceAll(' ', '').contains('bedsheet')) ...[
+                 const SizedBox(width: 12),
+                 Checkbox(
+                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                   value: item['is_laundry'] ?? false, 
+                   onChanged: (v) => setState(() {
+                     item['is_laundry'] = v;
+                     if (v == true) {
+                       item['damaged'] = false;
+                     }
+                   })
+                 ),
+                 const Text("Laundry", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blue)),
+               ],
              ],
            ),
            if (item['damaged'] == true)
@@ -387,7 +421,7 @@ class _CheckoutVerificationDialogState extends State<CheckoutVerificationDialog>
 
   Widget _buildConsumableRow(Map<String, dynamic> item) {
      double current = double.tryParse(item['current_stock']?.toString() ?? '0') ?? 0;
-     double available = double.tryParse(item['available'].toString()) ?? current;
+     double available = double.tryParse(item['available']?.toString() ?? current.toString()) ?? current;
      double consumed = (current - available).clamp(0, 1000);
      double rate = double.tryParse(item['charge_per_unit']?.toString() ?? '0') ?? 0;
      double freeLimit = double.tryParse(item['complimentary_limit']?.toString() ?? '0') ?? 0;
@@ -406,7 +440,7 @@ class _CheckoutVerificationDialogState extends State<CheckoutVerificationDialog>
          children: [
            Row(
              children: [
-               Expanded(child: Text(item['name'], style: const TextStyle(fontWeight: FontWeight.bold))),
+               Expanded(child: Text(item['name']?.toString() ?? 'CONSUMABLE', style: const TextStyle(fontWeight: FontWeight.bold))),
                Text("Stock: ${current.toInt()}", style: const TextStyle(fontSize: 12, color: Colors.grey)),
              ],
            ),

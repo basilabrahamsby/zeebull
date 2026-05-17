@@ -119,7 +119,8 @@ const BookingCalendar = ({ rooms, bookings, roomTypeObjects }) => {
 
     // Add bookings to their respective groups
     (bookings || []).forEach(booking => {
-      if (booking.status === 'cancelled') return;
+      const normalizedStatus = (booking.status || "").toLowerCase().trim().replace(/[-_]/g, "");
+      if (normalizedStatus === 'cancelled') return;
       
       const processedRooms = new Set();
       (booking.rooms || []).forEach(r => {

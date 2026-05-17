@@ -57,6 +57,7 @@ class ExpenseProvider with ChangeNotifier {
     required String description,
     required int employeeId,
     String? department,
+    String? paymentMode,
     dynamic image, // XFile?
   }) async {
     try {
@@ -67,6 +68,7 @@ class ExpenseProvider with ChangeNotifier {
         'description': description,
         'employee_id': employeeId,
         'department': department,
+        'payment_mode': paymentMode ?? 'Cash',
       });
 
       if (image != null) {

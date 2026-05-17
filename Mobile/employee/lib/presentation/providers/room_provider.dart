@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:orchid_employee/data/models/room_model.dart';
 import 'package:orchid_employee/data/models/room_type_model.dart';
+import 'package:orchid_employee/data/models/restaurant_table_model.dart';
 import 'package:orchid_employee/data/services/api_service.dart';
 import 'package:orchid_employee/core/constants/api_constants.dart';
 
@@ -8,6 +9,7 @@ class RoomProvider with ChangeNotifier {
   final ApiService _apiService;
   List<Room> _rooms = [];
   List<RoomType> _roomTypes = [];
+  List<RestaurantTable> _restaurantTables = [];
   Map<String, dynamic> _roomStats = {};
   bool _isLoading = false;
   String? _error;
@@ -16,6 +18,7 @@ class RoomProvider with ChangeNotifier {
 
   List<Room> get rooms => _rooms;
   List<RoomType> get roomTypes => _roomTypes;
+  List<RestaurantTable> get restaurantTables => _restaurantTables;
   Map<String, dynamic> get roomStats => _roomStats;
   bool get isLoading => _isLoading;
   String? get error => _error;
@@ -104,6 +107,43 @@ class RoomProvider with ChangeNotifier {
       }
     } catch (e) {
       print("Error creating room: $e");
+    }
+    return false;
+  }
+
+  Future<void> fetchRestaurantTables() async {
+    final softLoading = _restaurantTables.isNotEmpty;
+    if (!softLoading) {
+      _isLoading = true;
+      _error = null;
+      notifyListeners();
+    }
+
+    try {
+      final response = await _apiService.getRestaurantTables();
+      if (response.statusCode == 200) {
+        final List<dynamic> data = response.data;
+        _restaurantTables = data.map((json) => RestaurantTable.fromJson(json)).toList();
+      } else {
+        _error = "Failed to load restaurant tables: ${response.statusCode}";
+      }
+    } catch (e) {
+      _error = "Error fetching restaurant tables: $e";
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> createRestaurantTable(Map<String, dynamic> data) async {
+    try {
+      final response = await _apiService.createRestaurantTable(data);
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        fetchRestaurantTables();
+        return true;
+      }
+    } catch (e) {
+      print("Error creating restaurant table: $e");
     }
     return false;
   }

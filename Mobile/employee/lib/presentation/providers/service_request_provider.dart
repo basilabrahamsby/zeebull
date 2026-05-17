@@ -9,12 +9,14 @@ import 'package:orchid_employee/core/constants/api_constants.dart';
 class ServiceRequestProvider with ChangeNotifier {
   final ApiService _apiService;
   List<ServiceRequest> _requests = [];
+  List<dynamic> _serviceDefinitions = [];
   bool _isLoading = false;
   String? _error;
 
   ServiceRequestProvider(this._apiService);
 
   List<ServiceRequest> get requests => _requests;
+  List<dynamic> get serviceDefinitions => _serviceDefinitions;
   bool get isLoading => _isLoading;
   String? get error => _error;
 
@@ -64,7 +66,25 @@ class ServiceRequestProvider with ChangeNotifier {
     }
   }
 
-  Future<bool> updateRequestStatus(String id, String status, {String? billingStatus, int? employeeId, String? paymentMode}) async {
+  Future<void> fetchServiceDefinitions() async {
+    try {
+      final response = await _apiService.getServiceDefinitions();
+      if (response.statusCode == 200) {
+        _serviceDefinitions = response.data;
+        notifyListeners();
+      }
+    } catch (e) {
+      print("[SRP] Error fetching service definitions: $e");
+    }
+  }
+
+  Future<bool> updateRequestStatus(String id, String status, {
+    String? billingStatus, 
+    int? employeeId, 
+    String? paymentMode,
+    List<Map<String, dynamic>>? inventoryReturns,
+    int? returnLocationId,
+  }) async {
     try {
       final parsedId = int.tryParse(id);
       if (parsedId != null && parsedId > 2000000) {
@@ -78,6 +98,8 @@ class ServiceRequestProvider with ChangeNotifier {
             if (billingStatus != null) 'billing_status': billingStatus,
             if (employeeId != null) 'employee_id': employeeId,
             if (paymentMode != null) 'payment_mode': paymentMode,
+            if (inventoryReturns != null) 'inventory_returns': inventoryReturns,
+            if (returnLocationId != null) 'return_location_id': returnLocationId,
           },
         );
         
@@ -95,10 +117,14 @@ class ServiceRequestProvider with ChangeNotifier {
         }
       } else {
         // Normal service request or checkout request (1M offset)
-        final Map<String, dynamic> payload = {'status': status};
-        if (billingStatus != null) payload['billing_status'] = billingStatus;
-        if (employeeId != null) payload['employee_id'] = employeeId;
-        if (paymentMode != null) payload['payment_mode'] = paymentMode;
+        final Map<String, dynamic> payload = {
+          'status': status,
+          if (billingStatus != null) 'billing_status': billingStatus,
+          if (employeeId != null) 'employee_id': employeeId,
+          if (paymentMode != null) 'payment_mode': paymentMode,
+          if (inventoryReturns != null) 'inventory_returns': inventoryReturns,
+          if (returnLocationId != null) 'return_location_id': returnLocationId,
+        };
 
         final response = await _apiService.dio.put(
           '${ApiConstants.serviceRequests}/$id',
@@ -195,5 +221,34 @@ class ServiceRequestProvider with ChangeNotifier {
       print("Error creating refill request: $e");
       return false;
     }
+  }
+
+  Future<bool> createServiceRequest({
+    required int roomId,
+    required String type,
+    required String description,
+    String priority = 'Medium',
+    int? employeeId,
+  }) async {
+    try {
+      final response = await _apiService.dio.post(
+        ApiConstants.serviceRequests,
+        data: {
+          'room_id': roomId,
+          'type': type,
+          'description': description,
+          'priority': priority,
+          'status': employeeId != null ? 'assigned' : 'pending',
+          if (employeeId != null) 'employee_id': employeeId,
+        },
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        await fetchRequests();
+        return true;
+      }
+    } catch (e) {
+      print("[SRP] Error creating service request: $e");
+    }
+    return false;
   }
 }

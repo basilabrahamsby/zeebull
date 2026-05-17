@@ -227,6 +227,27 @@ def mark_order_paid(
         print(f"Failed to create journal entry for food order {order.id}: {str(e)}")
         print(traceback.format_exc())
 
+    # Release table if no more active orders (not completed, not cancelled, not paid)
+    if order.table_id:
+        try:
+            from app.models.foodorder import FoodOrder
+            active_count = db.query(FoodOrder).filter(
+                FoodOrder.table_id == order.table_id,
+                FoodOrder.status != "completed",
+                FoodOrder.status != "cancelled",
+                FoodOrder.billing_status != "paid"
+            ).count()
+            
+            if active_count == 0:
+                from app.models.restaurant_table import RestaurantTable
+                table = db.query(RestaurantTable).filter(RestaurantTable.id == order.table_id).first()
+                if table:
+                    table.status = "Available"
+                    db.commit()
+                    print(f"[INFO] Table {table.table_number} released (marked Available) as all orders are settled.")
+        except Exception as te:
+            print(f"[ERROR] Failed to update table status: {te}")
+
     return {
         "message": "Order marked as paid successfully",
         "order_id": order.id,

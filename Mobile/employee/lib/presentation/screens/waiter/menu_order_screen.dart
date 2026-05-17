@@ -5,10 +5,12 @@ import 'package:orchid_employee/data/models/food_management_model.dart';
 import 'package:orchid_employee/data/models/menu_model.dart';
 import 'package:orchid_employee/core/constants/app_colors.dart';
 import 'package:orchid_employee/presentation/widgets/onyx_glass_card.dart';
+import 'package:orchid_employee/presentation/providers/kitchen_provider.dart' as orchid_kitchen;
 
 class MenuOrderScreen extends StatefulWidget {
   final String? tableId;
-  const MenuOrderScreen({super.key, this.tableId});
+  final int? roomId;
+  const MenuOrderScreen({super.key, this.tableId, this.roomId});
 
   @override
   State<MenuOrderScreen> createState() => _MenuOrderScreenState();
@@ -188,8 +190,34 @@ class _MenuOrderScreenState extends State<MenuOrderScreen> {
                       ),
                     ),
                     ElevatedButton(
-                      onPressed: () {
-                        // Navigate to Review/Submit Order
+                      onPressed: () async {
+                        if (_cart.isEmpty) return;
+                        
+                        final orderData = {
+                          if (widget.roomId != null) 'room_id': widget.roomId,
+                          'amount': _totalAmount,
+                          'order_type': 'dine_in',
+                          'status': 'pending',
+                          'billing_status': 'unbilled',
+                          'items': _cart.map((c) => {
+                            'food_item_id': int.parse(c.item.id),
+                            'quantity': c.quantity,
+                          }).toList(),
+                        };
+
+                        try {
+                          final provider = context.read<orchid_kitchen.KitchenProvider>();
+                          final success = await provider.createOrder(orderData);
+                          
+                          if (success && context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Order placed successfully!")));
+                            Navigator.pop(context);
+                          } else if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Failed to place order.")));
+                          }
+                        } catch (e) {
+                          if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+                        }
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.green[700],

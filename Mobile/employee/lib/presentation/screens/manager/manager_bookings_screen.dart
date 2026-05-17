@@ -73,20 +73,32 @@ class _ManagerBookingsScreenState extends State<ManagerBookingsScreen> with Sing
 
         // Process Room Bookings
         if (roomResponse.statusCode == 200) {
+          List<dynamic> rawRooms = [];
           if (roomResponse.data is List) {
-            _roomBookings = roomResponse.data as List;
+            rawRooms = roomResponse.data as List;
           } else if (roomResponse.data is Map && roomResponse.data['bookings'] != null) {
-            _roomBookings = roomResponse.data['bookings'] as List;
+            rawRooms = roomResponse.data['bookings'] as List;
           }
+          _roomBookings = rawRooms.map((b) {
+            final map = Map<String, dynamic>.from(b);
+            map['is_package'] = false;
+            return map;
+          }).toList();
         }
 
         // Process Package Bookings
         if (packageResponse.statusCode == 200) {
+          List<dynamic> rawPackages = [];
           if (packageResponse.data is List) {
-            _packageBookings = packageResponse.data as List;
+            rawPackages = packageResponse.data as List;
           } else if (packageResponse.data is Map && packageResponse.data['bookings'] != null) {
-            _packageBookings = packageResponse.data['bookings'] as List;
+            rawPackages = packageResponse.data['bookings'] as List;
           }
+          _packageBookings = rawPackages.map((b) {
+            final map = Map<String, dynamic>.from(b);
+            map['is_package'] = true;
+            return map;
+          }).toList();
         }
       } catch (e) {
         print("Error loading bookings: $e");
@@ -1041,18 +1053,60 @@ class _ManagerBookingsScreenState extends State<ManagerBookingsScreen> with Sing
     text += "Dates: ${billData['check_in']} to ${billData['check_out']}\n";
     text += "--------------------------------\n";
     
-    final subtotal = (charges['room_charges'] ?? charges['rent'] ?? 0.0) + (charges['package_charges'] ?? 0.0);
-    text += "Room Rent: ${format.format(subtotal)}\n";
+    // Extract individual charges
+    final roomCharges = double.tryParse(charges['room_charges']?.toString() ?? '') ?? double.tryParse(charges['rent']?.toString() ?? '') ?? 0.0;
+    final packageCharges = double.tryParse(charges['package_charges']?.toString() ?? '') ?? 0.0;
+    final foodCharges = double.tryParse(charges['food_charges']?.toString() ?? '') ?? double.tryParse(charges['food']?.toString() ?? '') ?? 0.0;
+    final serviceCharges = double.tryParse(charges['service_charges']?.toString() ?? '') ?? double.tryParse(charges['services']?.toString() ?? '') ?? 0.0;
+    final consumablesCharges = double.tryParse(charges['consumables_charges']?.toString() ?? '') ?? 0.0;
+    final inventoryCharges = double.tryParse(charges['inventory_charges']?.toString() ?? '') ?? 0.0;
+    final assetDamageCharges = double.tryParse(charges['asset_damage_charges']?.toString() ?? '') ?? 0.0;
+
+    // Extract individual GST components
+    final roomGst = double.tryParse(charges['room_gst']?.toString() ?? '') ?? 0.0;
+    final packageGst = double.tryParse(charges['package_gst']?.toString() ?? '') ?? 0.0;
+    final foodGst = double.tryParse(charges['food_gst']?.toString() ?? '') ?? 0.0;
+    final serviceGst = double.tryParse(charges['service_gst']?.toString() ?? '') ?? 0.0;
+    final consumablesGst = double.tryParse(charges['consumables_gst']?.toString() ?? '') ?? 0.0;
+    final inventoryGst = double.tryParse(charges['inventory_gst']?.toString() ?? '') ?? 0.0;
+    final assetDamageGst = double.tryParse(charges['asset_damage_gst']?.toString() ?? '') ?? 0.0;
+
+    final subtotal = double.tryParse(charges['total_due']?.toString() ?? '') ?? double.tryParse(charges['subtotal']?.toString() ?? '') ?? 0.0;
+    final totalGst = double.tryParse(charges['total_gst']?.toString() ?? '') ?? double.tryParse(charges['gst']?.toString() ?? '') ?? 0.0;
+    final discount = double.tryParse(charges['discount_amount']?.toString() ?? '') ?? 0.0;
+    final advance = double.tryParse(charges['advance_deposit']?.toString() ?? '') ?? 0.0;
     
-    final food = (charges['food_charges'] ?? charges['food'] ?? 0.0);
-    if (food > 0) text += "Food: ${format.format(food)}\n";
+    final totalBill = subtotal + totalGst;
+    final grandTotal = totalBill - discount - advance;
+
+    if (roomCharges > 0) text += "Room Charges: ${format.format(roomCharges)}\n";
+    if (packageCharges > 0) text += "Package Charges: ${format.format(packageCharges)}\n";
+    if (foodCharges > 0) text += "Food Charges: ${format.format(foodCharges)}\n";
+    if (serviceCharges > 0) text += "Service Charges: ${format.format(serviceCharges)}\n";
+    if (consumablesCharges > 0) text += "Consumables Charges: ${format.format(consumablesCharges)}\n";
+    if (inventoryCharges > 0) text += "Inventory/Rental Charges: ${format.format(inventoryCharges)}\n";
+    if (assetDamageCharges > 0) text += "Asset Damage Charges: ${format.format(assetDamageCharges)}\n";
     
-    final gst = (charges['total_gst'] ?? charges['gst'] ?? 0.0);
-    text += "GST: ${format.format(gst)}\n";
-    
-    final total = (charges['total_due'] ?? charges['grand_total'] ?? 0.0) + gst;
     text += "--------------------------------\n";
-    text += "*GRAND TOTAL: ${format.format(total)}*\n";
+    text += "Subtotal: ${format.format(subtotal)}\n";
+
+    // GST Breakdown
+    if (roomGst > 0) text += "  Room GST: ${format.format(roomGst)}\n";
+    if (packageGst > 0) text += "  Package GST: ${format.format(packageGst)}\n";
+    if (foodGst > 0) text += "  Food GST (5%): ${format.format(foodGst)}\n";
+    if (serviceGst > 0) text += "  Service GST: ${format.format(serviceGst)}\n";
+    if (consumablesGst > 0) text += "  Consumables GST (5%): ${format.format(consumablesGst)}\n";
+    if (inventoryGst > 0) text += "  Inventory GST: ${format.format(inventoryGst)}\n";
+    if (assetDamageGst > 0) text += "  Damage GST: ${format.format(assetDamageGst)}\n";
+    
+    text += "Total GST: ${format.format(totalGst)}\n";
+    text += "Total Bill: ${format.format(totalBill)}\n";
+    if (discount > 0) text += "Discount: -${format.format(discount)}\n";
+    if (advance > 0) text += "Advance Paid: -${format.format(advance)}\n";
+    text += "--------------------------------\n";
+    
+    final label = grandTotal >= 0 ? "NET PAYABLE" : "REFUND AMOUNT";
+    text += "*$label: ${format.format(grandTotal.abs())}*\n";
     text += "--------------------------------\n";
     text += "Thank you for staying with us!";
     
@@ -1488,14 +1542,43 @@ class _ManagerBookingsScreenState extends State<ManagerBookingsScreen> with Sing
     );
   }
 
+  Widget _buildStayDetailItem(String label, String value, Color color) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Text(
+          label,
+          style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 1),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          value,
+          style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w900),
+          textAlign: TextAlign.center,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
+    );
+  }
+
 
   Future<void> _showCheckInDialog(dynamic booking, bool isPackage) async {
     final picker = ImagePicker();
     XFile? idProof;
     XFile? portrait;
     List<dynamic> availableRooms = [];
-    int? selectedRoomId;
+    List<int> selectedRoomIds = [];
     bool isSubmittingSub = false;
+
+    int nights = 0;
+    try {
+      if (booking['check_in'] != null && booking['check_out'] != null) {
+        final cin = DateTime.parse(booking['check_in'].toString());
+        final cout = DateTime.parse(booking['check_out'].toString());
+        nights = cout.difference(cin).inDays;
+      }
+    } catch (_) {}
 
     // Show Loader while fetching available rooms if it's a soft-allocated booking
     final currentRooms = booking['rooms'] as List?;
@@ -1552,6 +1635,58 @@ class _ManagerBookingsScreenState extends State<ManagerBookingsScreen> with Sing
                           "CHECK-IN GUEST",
                           style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: 0.5),
                         ),
+                        const SizedBox(height: 24),
+                        
+                        // Stay Details Card
+                        OnyxGlassCard(
+                          borderRadius: 24,
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(Icons.info_outline, color: AppColors.accent, size: 14),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    "STAY CONFIGURATION: BK-${booking['id']}",
+                                    style: const TextStyle(color: AppColors.accent, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.5),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _buildStayDetailItem(
+                                      "TEMPORAL SPAN",
+                                      "$nights Night(s)",
+                                      Colors.orangeAccent,
+                                    ),
+                                  ),
+                                  Container(width: 1, height: 32, color: Colors.white10),
+                                  Expanded(
+                                    child: _buildStayDetailItem(
+                                      "ROOMS BOOKED",
+                                      "${booking['num_rooms'] ?? 1} Room(s)",
+                                      Colors.greenAccent,
+                                    ),
+                                  ),
+                                  Container(width: 1, height: 32, color: Colors.white10),
+                                  Expanded(
+                                    child: _buildStayDetailItem(
+                                      isPackage ? "PACKAGE" : "CATEGORY",
+                                      (isPackage 
+                                          ? (booking['package_name'] ?? 'Package')
+                                          : (booking['room_type_name'] ?? 'Room')).toString().toUpperCase(),
+                                      Colors.blueAccent,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
                         const SizedBox(height: 32),
 
                         Row(
@@ -1561,7 +1696,12 @@ class _ManagerBookingsScreenState extends State<ManagerBookingsScreen> with Sing
                                 "SCAN ID CARD", 
                                 idProof, 
                                 () async {
-                                  final img = await picker.pickImage(source: ImageSource.camera);
+                                  final img = await picker.pickImage(
+                                    source: ImageSource.camera,
+                                    imageQuality: 50,
+                                    maxWidth: 1024,
+                                    maxHeight: 1024,
+                                  );
                                   if (img != null) setSubState(() => idProof = img);
                                 }
                               ),
@@ -1572,7 +1712,12 @@ class _ManagerBookingsScreenState extends State<ManagerBookingsScreen> with Sing
                                 "TAKE PORTRAIT", 
                                 portrait, 
                                 () async {
-                                  final img = await picker.pickImage(source: ImageSource.camera);
+                                  final img = await picker.pickImage(
+                                    source: ImageSource.camera,
+                                    imageQuality: 50,
+                                    maxWidth: 1024,
+                                    maxHeight: 1024,
+                                  );
                                   if (img != null) setSubState(() => portrait = img);
                                 }
                               ),
@@ -1583,14 +1728,80 @@ class _ManagerBookingsScreenState extends State<ManagerBookingsScreen> with Sing
                         const SizedBox(height: 32),
 
                         if (needsRoomAssignment) ...[
-                          _buildGlassDropdown<int>(
-                            value: selectedRoomId,
-                            label: "ASSIGN PHYSICAL ROOM",
-                            items: availableRooms.map((r) => DropdownMenuItem(
-                              value: r['id'] as int,
-                              child: Text("ROOM ${r['number']} (${r['type']})", style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
-                            )).toList(),
-                            onChanged: (v) => setSubState(() => selectedRoomId = v),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text(
+                                "ASSIGN PHYSICAL ROOMS",
+                                style: TextStyle(color: Colors.white24, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 2),
+                              ),
+                              Text(
+                                "SELECTED: ${selectedRoomIds.length} / ${booking['num_rooms'] ?? 1}",
+                                style: TextStyle(
+                                  color: selectedRoomIds.length == (booking['num_rooms'] ?? 1) ? AppColors.accent : Colors.white38,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.02),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: Colors.white10),
+                            ),
+                            child: Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: availableRooms.map((r) {
+                                final isSelected = selectedRoomIds.contains(r['id']);
+                                return GestureDetector(
+                                  onTap: () {
+                                    setSubState(() {
+                                      if (isSelected) {
+                                        selectedRoomIds.remove(r['id']);
+                                      } else {
+                                        // Optional: Limit selection to num_rooms?
+                                        // For now let's just allow multiple as requested.
+                                        selectedRoomIds.add(r['id'] as int);
+                                      }
+                                    });
+                                  },
+                                  child: AnimatedContainer(
+                                    duration: const Duration(milliseconds: 200),
+                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                    decoration: BoxDecoration(
+                                      color: isSelected ? AppColors.accent : Colors.white.withOpacity(0.05),
+                                      borderRadius: BorderRadius.circular(16),
+                                      border: Border.all(color: isSelected ? AppColors.accent : Colors.white10),
+                                      boxShadow: isSelected ? [BoxShadow(color: AppColors.accent.withOpacity(0.2), blurRadius: 8)] : null,
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          isSelected ? Icons.check_circle : Icons.add_circle_outline,
+                                          size: 14,
+                                          color: isSelected ? AppColors.onyx : Colors.white24,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          "ROOM ${r['number']}",
+                                          style: TextStyle(
+                                            color: isSelected ? AppColors.onyx : Colors.white70,
+                                            fontWeight: FontWeight.w900,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+                            ),
                           ),
                           const SizedBox(height: 24),
                         ],
@@ -1612,25 +1823,20 @@ class _ManagerBookingsScreenState extends State<ManagerBookingsScreen> with Sing
                                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("BOTH ID AND PORTRAIT ARE MANDATORY")));
                                 return;
                               }
-                              if (needsRoomAssignment && selectedRoomId == null) {
-                                ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text("PLEASE ASSIGN A ROOM")));
+                              if (needsRoomAssignment && selectedRoomIds.isEmpty) {
+                                ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text("PLEASE ASSIGN AT LEAST ONE ROOM")));
                                 return;
                               }
 
                               setSubState(() => isSubmittingSub = true);
                               try {
                                 final api = context.read<ApiService>();
-                                  final idBytes = await idProof!.readAsBytes();
-                                  final portraitBytes = await portrait!.readAsBytes();
-                                  final formData = FormData.fromMap({
-                                    'id_card_image': MultipartFile.fromBytes(idBytes, filename: 'id.jpg'),
-                                    'guest_photo': MultipartFile.fromBytes(portraitBytes, filename: 'portrait.jpg'),
-                                    if (selectedRoomId != null) 'room_ids': json.encode([selectedRoomId]),
-                                  });
-
-                                final response = await api.dio.put(
-                                  '/bookings/${booking['id']}/check-in',
-                                  data: formData,
+                                final response = await api.checkInBooking(
+                                  booking['id'],
+                                  isPackage: isPackage,
+                                  idCardImage: idProof,
+                                  guestPhoto: portrait,
+                                  roomIds: selectedRoomIds.isNotEmpty ? selectedRoomIds : null,
                                 );
 
                                 if (response.statusCode == 200) {
