@@ -12,11 +12,16 @@ try:
     conn = psycopg2.connect(db_url)
     cur = conn.cursor()
     
-    print("=== ROOM 301 PRICE ===")
-    cur.execute("SELECT id, number, price, status, room_type_id FROM rooms WHERE number = '301';")
+    print("=== ROOM 301 TYPE AND BASE PRICE ===")
+    cur.execute("""
+        SELECT r.id, r.number, rt.name, rt.base_price 
+        FROM rooms r
+        JOIN room_types rt ON r.room_type_id = rt.id
+        WHERE r.number = '301';
+    """)
     row = cur.fetchone()
     if row:
-        print(f"Room ID: {row[0]}, Number: {row[1]}, Price: {row[2]}, Status: {row[3]}, Room Type ID: {row[4]}")
+        print(f"Room ID: {row[0]}, Number: {row[1]}, Type Name: {row[2]}, Base Price: {row[3]}")
         
     cur.close()
     conn.close()
