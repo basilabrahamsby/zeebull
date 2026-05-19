@@ -61,8 +61,8 @@ def run_migration():
         else:
             print("[INFO] Column 'table_id' already exists in 'service_requests'.")
 
-        print("\nStep 4: Finding fake tables in 'rooms' table (names starting with 't' or 'T')...")
-        fake_rooms = conn.execute(text("SELECT id, number, branch_id FROM rooms WHERE number ILIKE 't%';")).fetchall()
+        print("\nStep 4: Finding fake tables in 'rooms' table (names starting with 't' or 'T' followed by a digit)...")
+        fake_rooms = conn.execute(text("SELECT id, number, branch_id FROM rooms WHERE number ~* '^t[0-9]';")).fetchall()
         
         if not fake_rooms:
             print("[INFO] No fake room tables found starting with 't'.")
