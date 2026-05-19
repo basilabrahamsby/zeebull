@@ -415,7 +415,7 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
       physics: const NeverScrollableScrollPhysics(),
       mainAxisSpacing: 16,
       crossAxisSpacing: 16,
-      childAspectRatio: 1.2,
+      childAspectRatio: 1.15,
       children: [
         _buildModuleCard("Bookings", Icons.hotel_outlined, "Manage Stay", Colors.purple,
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ManagerBookingsScreen(isClockedIn: isClockedIn)))),
@@ -438,29 +438,32 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
       onTap: onTap,
       borderRadius: BorderRadius.circular(32),
       child: OnyxGlassCard(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
                 color: color.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: color.withOpacity(0.3))
               ),
-              child: Icon(icon, color: color, size: 24),
+              child: Icon(icon, color: color, size: 20),
             ),
-            const SizedBox(height: 12),
-            Text(
-              title.toUpperCase(), 
-              style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15, color: Colors.white, letterSpacing: 0.5)
+            const SizedBox(height: 8),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                title.toUpperCase(), 
+                style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13, color: Colors.white, letterSpacing: 0.5)
+              ),
             ),
             const SizedBox(height: 2),
             Text(
               subtitle, 
-              style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 10, fontWeight: FontWeight.bold), 
+              style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 9, fontWeight: FontWeight.bold), 
               maxLines: 1, 
               overflow: TextOverflow.ellipsis
             ),

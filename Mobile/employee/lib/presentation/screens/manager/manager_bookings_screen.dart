@@ -426,12 +426,27 @@ class _ManagerBookingsScreenState extends State<ManagerBookingsScreen> with Sing
                           color: Colors.white.withOpacity(0.04),
                           borderRadius: BorderRadius.circular(20),
                         ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'TOTAL VALUE', 
+                                      style: TextStyle(fontSize: 8, color: Colors.white.withOpacity(0.3), fontWeight: FontWeight.w900, letterSpacing: 1.5)
+                                    ),
+                                    Text(
+                                      NumberFormat.currency(symbol: '₹', decimalDigits: 0).format(
+                                        double.tryParse((b['total_amount'] ?? 0).toString()) ?? 0
+                                      ),
+                                      style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w200, color: Colors.white, letterSpacing: -1),
+                                    ),
+                                  ],
+                                ),
                                 Row(
                                   children: [
                                     _buildFinanceSmallInfo('ADVANCE', double.tryParse((b['advance_deposit'] ?? 0).toString()) ?? 0, Colors.greenAccent),
@@ -439,82 +454,75 @@ class _ManagerBookingsScreenState extends State<ManagerBookingsScreen> with Sing
                                     _buildFinanceSmallInfo('BALANCE', (double.tryParse((b['total_amount'] ?? 0).toString()) ?? 0) - (double.tryParse((b['advance_deposit'] ?? 0).toString()) ?? 0), Colors.orangeAccent),
                                   ],
                                 ),
-                                const SizedBox(height: 12),
-                                Text(
-                                  'TOTAL VALUE', 
-                                  style: TextStyle(fontSize: 8, color: Colors.white.withOpacity(0.3), fontWeight: FontWeight.w900, letterSpacing: 1.5)
-                                ),
-                                Text(
-                                  NumberFormat.currency(symbol: '₹', decimalDigits: 0).format(
-                                    double.tryParse((b['total_amount'] ?? 0).toString()) ?? 0
-                                  ),
-                                  style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w200, color: Colors.white, letterSpacing: -1),
-                                ),
                               ],
                             ),
-                            const SizedBox(width: 24),
-                            // Action Grid (2x3)
-                            SizedBox(
-                              width: 180,
-                              child: Column(
-                                children: [
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      _buildGridActionButton(Icons.visibility_outlined, Colors.white38, () => _showBookingDetails(b, isPackage), isActive: true),
-                                      _buildGridActionButton(
-                                        Icons.bolt, 
-                                        (statusLabel == "CHECKED-IN" || statusLabel == "CHECKEDIN") ? Colors.amberAccent : Colors.deepPurpleAccent, 
-                                        () => _handleQuickAction(b, isPackage, statusLabel),
-                                        isActive: true,
-                                        isPrimary: true
-                                      ),
-                                      _buildGridActionButton(
-                                        Icons.inventory_2_outlined, 
-                                        Colors.tealAccent, 
-                                        () => Navigator.push(context, MaterialPageRoute(builder: (_) => ManagerGuestManagementScreen(booking: b, isPackage: isPackage))), 
-                                        isActive: (statusLabel == "CHECKED-IN" || statusLabel == "CHECKEDIN") 
-                                      ),
-                                      _buildGridActionButton(Icons.calendar_month_outlined, Colors.white30, () => _editBooking(b), isActive: true),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      _buildGridActionButton(Icons.delete_outline, Colors.redAccent.withOpacity(0.5), () => _deleteBooking(b['id'], b['guest_name']), isActive: true),
-                                      _buildGridActionButton(
-                                        Icons.verified, 
-                                        Colors.greenAccent, 
-                                        () => _showConfirmBookingDialog(b), 
-                                        isActive: b['status']?.toString().toLowerCase() == 'booked' || b['status']?.toString().toLowerCase() == 'confirmed',
-                                        isPrimary: b['status']?.toString().toLowerCase() == 'booked'
-                                      ),
-                                      _buildGridActionButton(
-                                        Icons.email_outlined, 
-                                        Colors.blueAccent.withOpacity(0.5), 
-                                        () {
-                                          final roomNum = isPackage 
-                                              ? (b['rooms'] != null && (b['rooms'] as List).isNotEmpty ? b['rooms'][0]['number'] : '') 
-                                              : (b['rooms'] != null && (b['rooms'] as List).isNotEmpty ? b['rooms'][0]['number'] : '');
-                                          _handleEmail(b, roomNum, b['branch_id']?.toString());
-                                        },
-                                        isActive: (statusLabel == "CHECKED-IN" || statusLabel == "CHECKEDIN")
-                                      ),
-                                      _buildGridActionButton(
-                                        Icons.comment_outlined, 
-                                        Colors.greenAccent.withOpacity(0.5), 
-                                        () {
-                                          final roomNum = isPackage 
-                                              ? (b['rooms'] != null && (b['rooms'] as List).isNotEmpty ? b['rooms'][0]['number'] : '') 
-                                              : (b['rooms'] != null && (b['rooms'] as List).isNotEmpty ? b['rooms'][0]['number'] : '');
-                                          _handleWhatsApp(b, roomNum, b['branch_id']?.toString());
-                                        },
-                                        isActive: (statusLabel == "CHECKED-IN" || statusLabel == "CHECKEDIN")
-                                      ),
-                                    ],
-                                  ),
-                                ],
+                            const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 12),
+                              child: Divider(color: Colors.white10, height: 1),
+                            ),
+                            Center(
+                              child: SizedBox(
+                                width: 180,
+                                child: Column(
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        _buildGridActionButton(Icons.visibility_outlined, Colors.white38, () => _showBookingDetails(b, isPackage), isActive: true),
+                                        _buildGridActionButton(
+                                          Icons.bolt, 
+                                          (statusLabel == "CHECKED-IN" || statusLabel == "CHECKEDIN") ? Colors.amberAccent : Colors.deepPurpleAccent, 
+                                          () => _handleQuickAction(b, isPackage, statusLabel),
+                                          isActive: true,
+                                          isPrimary: true
+                                        ),
+                                        _buildGridActionButton(
+                                          Icons.inventory_2_outlined, 
+                                          Colors.tealAccent, 
+                                          () => Navigator.push(context, MaterialPageRoute(builder: (_) => ManagerGuestManagementScreen(booking: b, isPackage: isPackage))), 
+                                          isActive: (statusLabel == "CHECKED-IN" || statusLabel == "CHECKEDIN") 
+                                        ),
+                                        _buildGridActionButton(Icons.calendar_month_outlined, Colors.white30, () => _editBooking(b), isActive: true),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        _buildGridActionButton(Icons.delete_outline, Colors.redAccent.withOpacity(0.5), () => _deleteBooking(b['id'], b['guest_name']), isActive: true),
+                                        _buildGridActionButton(
+                                          Icons.verified, 
+                                          Colors.greenAccent, 
+                                          () => _showConfirmBookingDialog(b), 
+                                          isActive: b['status']?.toString().toLowerCase() == 'booked' || b['status']?.toString().toLowerCase() == 'confirmed',
+                                          isPrimary: b['status']?.toString().toLowerCase() == 'booked'
+                                        ),
+                                        _buildGridActionButton(
+                                          Icons.email_outlined, 
+                                          Colors.blueAccent.withOpacity(0.5), 
+                                          () {
+                                            final roomNum = isPackage 
+                                                ? (b['rooms'] != null && (b['rooms'] as List).isNotEmpty ? b['rooms'][0]['number'] : '') 
+                                                : (b['rooms'] != null && (b['rooms'] as List).isNotEmpty ? b['rooms'][0]['number'] : '');
+                                            _handleEmail(b, roomNum, b['branch_id']?.toString());
+                                          },
+                                          isActive: (statusLabel == "CHECKED-IN" || statusLabel == "CHECKEDIN")
+                                        ),
+                                        _buildGridActionButton(
+                                          Icons.comment_outlined, 
+                                          Colors.greenAccent.withOpacity(0.5), 
+                                          () {
+                                            final roomNum = isPackage 
+                                                ? (b['rooms'] != null && (b['rooms'] as List).isNotEmpty ? b['rooms'][0]['number'] : '') 
+                                                : (b['rooms'] != null && (b['rooms'] as List).isNotEmpty ? b['rooms'][0]['number'] : '');
+                                            _handleWhatsApp(b, roomNum, b['branch_id']?.toString());
+                                          },
+                                          isActive: (statusLabel == "CHECKED-IN" || statusLabel == "CHECKEDIN")
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ],

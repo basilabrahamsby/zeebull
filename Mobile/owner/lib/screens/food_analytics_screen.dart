@@ -49,7 +49,7 @@ class _FoodAnalyticsScreenState extends State<FoodAnalyticsScreen> {
             physics: const NeverScrollableScrollPhysics(),
             crossAxisSpacing: 12,
             mainAxisSpacing: 12,
-            childAspectRatio: 1.6,
+            childAspectRatio: 1.35,
             children: [
               _buildKpiCard("Total Revenue", currency.format(provider.totalRevenue), Colors.green, Icons.attach_money),
               _buildKpiCard("Total Orders", "${provider.totalCompletedOrders}", Colors.blue, Icons.shopping_bag),
@@ -66,7 +66,7 @@ class _FoodAnalyticsScreenState extends State<FoodAnalyticsScreen> {
             physics: const NeverScrollableScrollPhysics(),
             crossAxisSpacing: 12,
             mainAxisSpacing: 12,
-            childAspectRatio: 1.6,
+            childAspectRatio: 1.35,
             children: [
               _buildKpiCard("Total Profit", currency.format(provider.totalProfit), Colors.teal, Icons.trending_up),
               _buildKpiCard("Total COGS", currency.format(provider.totalCOGS), Colors.red, Icons.inventory),
@@ -273,11 +273,18 @@ class _FoodAnalyticsScreenState extends State<FoodAnalyticsScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color)),
+              Expanded(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color)),
+                ),
+              ),
+              const SizedBox(width: 8),
               Icon(icon, color: color, size: 24),
             ],
           ),
-          Text(title, style: TextStyle(fontSize: 12, color: color.withOpacity(0.9))),
+          Text(title, style: TextStyle(fontSize: 12, color: color.withOpacity(0.9)), overflow: TextOverflow.ellipsis),
         ],
       ),
     );

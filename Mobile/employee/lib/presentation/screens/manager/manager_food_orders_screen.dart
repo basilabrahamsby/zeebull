@@ -376,7 +376,7 @@ class _ManagerFoodOrdersScreenState extends State<ManagerFoodOrdersScreen> with 
             physics: const NeverScrollableScrollPhysics(),
             mainAxisSpacing: 16,
             crossAxisSpacing: 16,
-            childAspectRatio: 1.8,
+            childAspectRatio: 1.4,
             children: [
               _buildModernKpi("REVENUE", "₹${_totalRevenue.toStringAsFixed(0)}", Colors.greenAccent, Icons.payments_outlined),
               _buildModernKpi("COMPLETED", "$_completedOrders", Colors.blueAccent, Icons.task_alt),
@@ -415,7 +415,7 @@ class _ManagerFoodOrdersScreenState extends State<ManagerFoodOrdersScreen> with 
     return OnyxGlassCard(
       padding: EdgeInsets.zero,
       child: Container(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: [color.withOpacity(0.1), Colors.transparent],
@@ -441,7 +441,10 @@ class _ManagerFoodOrdersScreenState extends State<ManagerFoodOrdersScreen> with 
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(value, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900)),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(value, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900)),
+                ),
                 Text(title, style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1)),
               ],
             ),

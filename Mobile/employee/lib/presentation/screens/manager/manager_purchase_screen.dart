@@ -385,8 +385,15 @@ class _ManagerPurchaseScreenState extends State<ManagerPurchaseScreen> with Sing
                   children: [
                     const Icon(Icons.receipt_long_outlined, size: 14, color: Colors.white24),
                     const SizedBox(width: 8),
-                    Text("PO: ${p['purchase_number'] ?? '#'}", style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.4), fontWeight: FontWeight.bold)),
-                    const Spacer(),
+                    Expanded(
+                      child: Text(
+                        "PO: ${p['purchase_number'] ?? '#'}", 
+                        style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.4), fontWeight: FontWeight.bold),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
                     Text(
                       NumberFormat.currency(symbol: '₹', decimalDigits: 2).format(totalAmt), 
                       style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.accent, fontSize: 16)

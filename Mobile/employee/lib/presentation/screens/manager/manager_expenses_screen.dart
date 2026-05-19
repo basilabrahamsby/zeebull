@@ -312,7 +312,7 @@ class _ManagerExpensesScreenState extends State<ManagerExpensesScreen> with Sing
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 crossAxisCount: 2,
-                childAspectRatio: 1.8,
+                childAspectRatio: 1.4,
                 crossAxisSpacing: 16,
                 mainAxisSpacing: 16,
                 children: [
@@ -331,15 +331,18 @@ class _ManagerExpensesScreenState extends State<ManagerExpensesScreen> with Sing
 
   Widget _buildKpiCard(String label, String value, IconData icon, Color color) {
     return OnyxGlassCard(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(icon, color: color, size: 20),
-          const SizedBox(height: 12),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: Colors.white)),
-          Text(label, style: TextStyle(color: Colors.white38, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
+          const SizedBox(height: 6),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(value, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15, color: Colors.white)),
+          ),
+          Text(label, style: TextStyle(color: Colors.white38, fontSize: 7.5, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
         ],
       ),
     );

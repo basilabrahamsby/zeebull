@@ -646,7 +646,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
       physics: const NeverScrollableScrollPhysics(),
       crossAxisSpacing: 12,
       mainAxisSpacing: 12,
-      childAspectRatio: 1.6,
+      childAspectRatio: 1.35,
       children: children,
     );
   }
@@ -685,7 +685,10 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
               ],
             ),
             const Spacer(),
-            Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
+            ),
             const SizedBox(height: 4),
             Text(title, style: TextStyle(fontSize: 12, color: Colors.grey.shade600), overflow: TextOverflow.ellipsis),
             if (subtitle != null) Text(subtitle, style: TextStyle(fontSize: 10, color: Colors.grey.shade400)),

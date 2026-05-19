@@ -219,7 +219,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             crossAxisCount: 2,
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            childAspectRatio: 1.4,
+            childAspectRatio: 1.2,
             crossAxisSpacing: 12,
             mainAxisSpacing: 12,
             children: [
@@ -353,7 +353,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             crossAxisCount: 2,
             crossAxisSpacing: 12,
             mainAxisSpacing: 12,
-            childAspectRatio: 1.5,
+            childAspectRatio: 1.3,
             children: [
               _buildFeatureCard(context, "Department\nReports", Icons.business, Colors.indigo, () {
                  if (kpi != null) {
@@ -614,7 +614,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
         child: Padding(
-          padding: EdgeInsets.all(isLarge ? 24.0 : 16.0),
+          padding: EdgeInsets.all(isLarge ? 20.0 : 12.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -626,22 +626,25 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                       title, 
                       style: TextStyle(
                         color: Colors.grey[600], 
-                        fontSize: isLarge ? 16 : 14,
+                        fontSize: isLarge ? 14 : 12,
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  Icon(icon, color: color, size: isLarge ? 32 : 24),
+                  Icon(icon, color: color, size: isLarge ? 28 : 20),
                 ],
               ),
-              SizedBox(height: isLarge ? 16 : 8),
-              Text(
-                value, 
-                style: TextStyle(
-                  fontSize: isLarge ? 32 : 20, 
-                  fontWeight: FontWeight.bold, 
-                  color: Colors.black87,
+              SizedBox(height: isLarge ? 12 : 6),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  value, 
+                  style: TextStyle(
+                    fontSize: isLarge ? 28 : 18, 
+                    fontWeight: FontWeight.bold, 
+                    color: Colors.black87,
+                  ),
                 ),
               ),
               if (onTap != null) ...[
@@ -649,7 +652,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                 Text(
                   'Tap for details',
                   style: TextStyle(
-                    fontSize: 10,
+                    fontSize: 9,
                     color: Colors.grey[500],
                     fontStyle: FontStyle.italic,
                   ),
