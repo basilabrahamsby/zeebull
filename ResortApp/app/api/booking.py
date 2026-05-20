@@ -398,9 +398,8 @@ def get_bookings(
             
             booking_results.append(booking_out)
         
-        # Get total count (only if limit is reasonable to avoid slow queries)
-        # For large datasets, skip count to improve performance
-        total_count = len(booking_results) if limit <= 100 else len(booking_results)
+        # Get total count
+        total_count = query.count()
         
         return {"total": total_count, "bookings": booking_results}
     except Exception as e:

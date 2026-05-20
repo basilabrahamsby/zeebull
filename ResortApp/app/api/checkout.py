@@ -3419,6 +3419,13 @@ def _calculate_bill_for_single_room(db: Session, room_number: str, branch_id: in
     charges.inventory_gst = gst_breakdown["inventory_gst"]
     charges.total_gst = gst_breakdown["total_gst"]
     
+    # Calculate Late Checkout Fee
+    charges.late_checkout_fee = calculate_late_checkout_fee(
+        booking.check_out,
+        get_ist_now(),
+        room.price or 0.0
+    )
+    
     charges.total_due = sum([
         charges.room_charges or 0, 
         charges.food_charges or 0, 
@@ -3426,14 +3433,15 @@ def _calculate_bill_for_single_room(db: Session, room_number: str, branch_id: in
         charges.package_charges or 0, 
         charges.consumables_charges or 0, 
         charges.inventory_charges or 0, 
-        charges.asset_damage_charges or 0
+        charges.asset_damage_charges or 0,
+        charges.late_checkout_fee or 0
     ])
 
     # Mobile Compatibility Mapping (Support for Modernized Flutter UI)
     charges.rent = (charges.room_charges or 0) + (charges.package_charges or 0)
     charges.food = (charges.food_charges or 0)
     charges.services = (charges.service_charges or 0)
-    charges.penalties = (charges.inventory_charges or 0) + (charges.asset_damage_charges or 0) + (charges.consumables_charges or 0)
+    charges.penalties = (charges.inventory_charges or 0) + (charges.asset_damage_charges or 0) + (charges.consumables_charges or 0) + (charges.late_checkout_fee or 0)
     charges.subtotal = (charges.total_due or 0)
     charges.gst = (charges.total_gst or 0)
     charges.grand_total = (charges.total_due or 0) + (charges.total_gst or 0)
@@ -4180,6 +4188,14 @@ def _calculate_bill_for_entire_booking(db: Session, room_number: str, branch_id:
     charges.inventory_gst = gst_breakdown["inventory_gst"]
     charges.total_gst = gst_breakdown["total_gst"]
     
+    # Calculate Late Checkout Fee
+    avg_room_rate = sum((r.price or 0.0) for r in all_rooms) / len(all_rooms) if all_rooms else 0.0
+    charges.late_checkout_fee = calculate_late_checkout_fee(
+        booking.check_out,
+        get_ist_now(),
+        avg_room_rate
+    )
+    
     charges.total_due = sum([
         charges.room_charges or 0, 
         charges.food_charges or 0, 
@@ -4187,14 +4203,15 @@ def _calculate_bill_for_entire_booking(db: Session, room_number: str, branch_id:
         charges.package_charges or 0,
         charges.consumables_charges or 0,
         charges.inventory_charges or 0,
-        charges.asset_damage_charges or 0
+        charges.asset_damage_charges or 0,
+        charges.late_checkout_fee or 0
     ])
 
     # Mobile Compatibility Mapping (Support for Modernized Flutter UI)
     charges.rent = (charges.room_charges or 0) + (charges.package_charges or 0)
     charges.food = (charges.food_charges or 0)
     charges.services = (charges.service_charges or 0)
-    charges.penalties = (charges.inventory_charges or 0) + (charges.asset_damage_charges or 0) + (charges.consumables_charges or 0)
+    charges.penalties = (charges.inventory_charges or 0) + (charges.asset_damage_charges or 0) + (charges.consumables_charges or 0) + (charges.late_checkout_fee or 0)
     charges.subtotal = (charges.total_due or 0)
     charges.gst = (charges.total_gst or 0)
     charges.grand_total = (charges.total_due or 0) + (charges.total_gst or 0)
@@ -4477,11 +4494,16 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, backgro
             
             # 2. Calculate Late Checkout Fee
             actual_checkout_time = request.actual_checkout_time or get_ist_now()
-            late_checkout_fee = calculate_late_checkout_fee(
-                booking.check_out,
-                actual_checkout_time,
-                room.price or 0.0
-            )
+            if request.enable_late_checkout_fee is False:
+                late_checkout_fee = 0.0
+            elif request.custom_late_checkout_fee is not None:
+                late_checkout_fee = request.custom_late_checkout_fee
+            else:
+                late_checkout_fee = calculate_late_checkout_fee(
+                    booking.check_out,
+                    actual_checkout_time,
+                    room.price or 0.0
+                )
             
             # 3. Get Advance Deposit
             advance_deposit = getattr(booking, 'advance_deposit', 0.0) or 0.0
@@ -4493,6 +4515,7 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, backgro
             # Subtract components that we will add back in subtotal to ensure consistency
             base_total -= (charges.consumables_charges or 0)
             base_total -= (charges.asset_damage_charges or 0)
+            base_total -= (charges.late_checkout_fee or 0)
             base_gst -= (charges.consumables_gst or 0)
             base_gst -= (charges.asset_damage_gst or 0)
 
@@ -5243,12 +5266,17 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, backgro
             
             # 2. Calculate Late Checkout Fee (based on average room rate)
             actual_checkout_time = request.actual_checkout_time or get_ist_now()
-            avg_room_rate = sum((r.price or 0.0) for r in all_rooms) / len(all_rooms) if all_rooms else 0.0
-            late_checkout_fee = calculate_late_checkout_fee(
-                booking.check_out,
-                actual_checkout_time,
-                avg_room_rate
-            )
+            if request.enable_late_checkout_fee is False:
+                late_checkout_fee = 0.0
+            elif request.custom_late_checkout_fee is not None:
+                late_checkout_fee = request.custom_late_checkout_fee
+            else:
+                avg_room_rate = sum((r.price or 0.0) for r in all_rooms) / len(all_rooms) if all_rooms else 0.0
+                late_checkout_fee = calculate_late_checkout_fee(
+                    booking.check_out,
+                    actual_checkout_time,
+                    avg_room_rate
+                )
             
             # 3. Get Advance Deposit
             advance_deposit = getattr(booking, 'advance_deposit', 0.0) or 0.0
@@ -5257,6 +5285,9 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, backgro
             # Start with the DB-calculated total
             base_total = charges.total_due
             base_gst = charges.total_gst or 0
+            
+            # Subtract components that we will add back in subtotal to ensure consistency
+            base_total -= (charges.late_checkout_fee or 0)
             
             # If we calculated fresh charges from verification data, subtract DB values to avoid double counting
             if request.room_verifications:

@@ -191,6 +191,8 @@ class CheckoutRequest(BaseModel):
     
     # Late checkout
     actual_checkout_time: Optional[datetime] = Field(None, description="Actual checkout time (for late checkout fee calculation)")
+    enable_late_checkout_fee: Optional[bool] = Field(True, description="Whether to apply a late checkout fee")
+    custom_late_checkout_fee: Optional[float] = Field(None, description="User-specified custom late checkout fee (overrides calculation)")
 
 class InventoryCheckItem(BaseModel):
     item_id: int

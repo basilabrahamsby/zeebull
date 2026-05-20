@@ -2998,9 +2998,16 @@ def _calculate_bill_for_single_room(db: Session, room_number: str):
     charges.inventory_gst = (charges.inventory_charges or 0) * 0.05
     charges.asset_damage_gst = 0.0 # Removed as per request (was 0.05)
     
+    # Calculate Late Checkout Fee
+    charges.late_checkout_fee = calculate_late_checkout_fee(
+        booking.check_out,
+        get_ist_now(),
+        room.price or 0.0
+    )
+    
     # Total calculation
     charges.total_gst = sum([charges.room_gst or 0, charges.food_gst or 0, charges.service_gst or 0, charges.package_gst or 0, charges.consumables_gst or 0, charges.inventory_gst or 0, charges.asset_damage_gst or 0])
-    charges.total_due = sum([charges.room_charges or 0, charges.food_charges or 0, charges.service_charges or 0, charges.package_charges or 0, charges.consumables_charges or 0, charges.inventory_charges or 0, charges.asset_damage_charges or 0])
+    charges.total_due = sum([charges.room_charges or 0, charges.food_charges or 0, charges.service_charges or 0, charges.package_charges or 0, charges.consumables_charges or 0, charges.inventory_charges or 0, charges.asset_damage_charges or 0, charges.late_checkout_fee or 0])
 
 
     
@@ -3636,6 +3643,14 @@ def _calculate_bill_for_entire_booking(db: Session, room_number: str):
     if charges.asset_damage_charges and charges.asset_damage_charges > 0:
         charges.asset_damage_gst = 0.0
     
+    # Calculate Late Checkout Fee
+    avg_room_rate = sum((r.price or 0.0) for r in all_rooms) / len(all_rooms) if all_rooms else 0.0
+    charges.late_checkout_fee = calculate_late_checkout_fee(
+        booking.check_out,
+        get_ist_now(),
+        avg_room_rate
+    )
+    
     # Total GST
     charges.total_gst = (charges.room_gst or 0) + (charges.food_gst or 0) + (charges.service_gst or 0) + (charges.package_gst or 0) + (charges.consumables_gst or 0) + (charges.inventory_gst or 0) + (charges.asset_damage_gst or 0)
     
@@ -3647,7 +3662,8 @@ def _calculate_bill_for_entire_booking(db: Session, room_number: str):
         charges.package_charges or 0,
         charges.consumables_charges or 0,
         charges.inventory_charges or 0,
-        charges.asset_damage_charges or 0
+        charges.asset_damage_charges or 0,
+        charges.late_checkout_fee or 0
     ])
     
     # Add advance deposit info to charges
@@ -3886,21 +3902,28 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, db: Ses
             
             # 2. Calculate Late Checkout Fee
             actual_checkout_time = request.actual_checkout_time or datetime.now()
-            late_checkout_fee = calculate_late_checkout_fee(
-                booking.check_out,
-                actual_checkout_time,
-                room.price or 0.0
-            )
+            if request.enable_late_checkout_fee is False:
+                late_checkout_fee = 0.0
+            elif request.custom_late_checkout_fee is not None:
+                late_checkout_fee = request.custom_late_checkout_fee
+            else:
+                late_checkout_fee = calculate_late_checkout_fee(
+                    booking.check_out,
+                    actual_checkout_time,
+                    room.price or 0.0
+                )
             
             # 3. Get Advance Deposit
             advance_deposit = getattr(booking, 'advance_deposit', 0.0) or 0.0
             
             # 4. Calculate final bill with all charges
-            # 4. Calculate final bill with all charges
             
             # Start with the DB-calculated total
             base_total = charges.total_due
             base_gst = charges.total_gst or 0
+            
+            # Subtract components that we will add back in subtotal to ensure consistency
+            base_total -= (charges.late_checkout_fee or 0)
             
             # If we calculated fresh charges from verification data, use them INSTEAD of what's in DB
             if request.room_verifications:
@@ -4622,18 +4645,26 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, db: Ses
             
             # 2. Calculate Late Checkout Fee (based on average room rate)
             actual_checkout_time = request.actual_checkout_time or datetime.now()
-            avg_room_rate = sum((r.price or 0.0) for r in all_rooms) / len(all_rooms) if all_rooms else 0.0
-            late_checkout_fee = calculate_late_checkout_fee(
-                booking.check_out,
-                actual_checkout_time,
-                avg_room_rate
-            )
+            if request.enable_late_checkout_fee is False:
+                late_checkout_fee = 0.0
+            elif request.custom_late_checkout_fee is not None:
+                late_checkout_fee = request.custom_late_checkout_fee
+            else:
+                avg_room_rate = sum((r.price or 0.0) for r in all_rooms) / len(all_rooms) if all_rooms else 0.0
+                late_checkout_fee = calculate_late_checkout_fee(
+                    booking.check_out,
+                    actual_checkout_time,
+                    avg_room_rate
+                )
             
             # 3. Get Advance Deposit
             advance_deposit = getattr(booking, 'advance_deposit', 0.0) or 0.0
             
             # 4. Calculate final bill with all charges
-            subtotal = charges.total_due + total_consumables_charges + total_asset_damage_charges + total_key_card_fee + late_checkout_fee
+            base_total = charges.total_due
+            base_total -= (charges.late_checkout_fee or 0)
+            
+            subtotal = base_total + total_consumables_charges + total_asset_damage_charges + total_key_card_fee + late_checkout_fee
             
             # Recalculate GST
             consumables_gst = total_consumables_charges * 0.05

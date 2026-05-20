@@ -897,6 +897,8 @@ const Billing = () => {
   const [billData, setBillData] = useState(null);
   const [paymentMethod, setPaymentMethod] = useState("Card");
   const [discount, setDiscount] = useState(0);
+  const [enableLateFee, setEnableLateFee] = useState(true);
+  const [lateFeeAmount, setLateFeeAmount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [bannerMessage, setBannerMessage] = useState({ type: null, text: "" });
   const [activeRooms, setActiveRooms] = useState([]);
@@ -936,6 +938,23 @@ const Billing = () => {
     license_number: "",
     resort_location: ""
   });
+
+  const getDynamicTotals = () => {
+    if (!billData) return { subtotal: 0, totalGST: 0, totalBill: 0, advanceDeposit: 0, netPayable: 0, refundAmount: 0 };
+    const originalLateFee = billData.charges?.late_checkout_fee || 0;
+    const currentLateFee = enableLateFee ? (parseFloat(lateFeeAmount) || 0) : 0;
+    const diff = currentLateFee - originalLateFee;
+
+    const subtotal = (billData.charges?.total_due || 0) + diff;
+    const totalGST = billData.charges?.total_gst || 0;
+    const totalBill = subtotal + totalGST;
+    const advanceDeposit = billData.charges?.advance_deposit || 0;
+    const discountAmount = parseFloat(discount) || 0;
+    const netPayable = totalBill - discountAmount - advanceDeposit;
+    const refundAmount = Math.max(0, advanceDeposit - (totalBill - discountAmount));
+
+    return { subtotal, totalGST, totalBill, advanceDeposit, netPayable, refundAmount };
+  };
 
   // Function to show banner message
   const showBannerMessage = (type, text) => {
@@ -1470,6 +1489,8 @@ const Billing = () => {
         console.log("DEBUG BILL DATA:", res.data);
         console.log("INVENTORY CHARGES:", res.data.charges?.inventory_charges);
         setBillData(res.data);
+        setEnableLateFee((res.data.charges?.late_checkout_fee || 0) > 0);
+        setLateFeeAmount(res.data.charges?.late_checkout_fee || 0);
         const roomCount = res.data.room_numbers.length;
         const modeText = checkoutMode === "single" ? "single room" : "all rooms in the booking";
         showBannerMessage("success", `Bill retrieved for ${roomCount} room(s) (${modeText}).`);
@@ -1509,8 +1530,8 @@ const Billing = () => {
       showBannerMessage("error", "Discount amount cannot be negative.");
       return;
     }
-    const totalWithGST = billData.charges.total_due + (billData.charges.total_gst || 0);
-    if (discountAmount > totalWithGST) {
+    const { totalBill } = getDynamicTotals();
+    if (discountAmount > totalBill) {
       showBannerMessage("error", "Discount cannot exceed the grand total.");
       return;
     }
@@ -1522,6 +1543,8 @@ const Billing = () => {
         payment_method: paymentMethod,
         discount_amount: discountAmount,
         checkout_mode: checkoutMode,
+        enable_late_checkout_fee: enableLateFee,
+        custom_late_checkout_fee: enableLateFee ? parseFloat(lateFeeAmount) || 0.0 : 0.0,
       });
       const roomCount = billData.room_numbers?.length || 1;
       const modeText = checkoutMode === "single" ? "single room" : "all rooms";
@@ -1698,6 +1721,16 @@ const Billing = () => {
       });
     }
 
+    // Late Checkout Fee
+    if (enableLateFee && parseFloat(lateFeeAmount) > 0) {
+      chargesBody.push([
+        idx++,
+        'Late Checkout Fee',
+        'Late check-out charge',
+        formatPDFCurrency(parseFloat(lateFeeAmount))
+      ]);
+    }
+
     autoTable(doc, {
       startY: 72,
       head: [['#', 'Description', 'Qty/Details', 'Amount']],
@@ -1716,10 +1749,8 @@ const Billing = () => {
     // 5. Financial Summary Y position
     const totalsY = doc.lastAutoTable.finalY + 8;
     
-    const subtotal = billData.charges.total_due || 0;
-    const totalGST = billData.charges.total_gst || 0;
+    const { subtotal, totalGST, netPayable } = getDynamicTotals();
     const advancePaid = billData.charges.advance_deposit || 0;
-    const netPayable = (subtotal + totalGST - (parseFloat(discount) || 0)) - advancePaid;
 
     const summaryRows = [
       ['SUBTOTAL', formatPDFCurrency(subtotal)],
@@ -1821,12 +1852,15 @@ const Billing = () => {
       });
     }
 
-    text += `${line}\n`;
-    const totalBillValue = billData.charges.total_due + (billData.charges.total_gst || 0);
-    const advancePaid = billData.charges.advance_deposit || 0;
-    const netPayable = totalBillValue - discount - advancePaid;
+    if (enableLateFee && parseFloat(lateFeeAmount) > 0) {
+      text += `\nLate Checkout Fee: ${formatCurrency(parseFloat(lateFeeAmount))}\n`;
+    }
 
-    text += `Subtotal: ${formatCurrency(billData.charges.total_due)}\n`;
+    text += `${line}\n`;
+    const { subtotal, totalGST, totalBill, netPayable } = getDynamicTotals();
+    const advancePaid = billData.charges.advance_deposit || 0;
+
+    text += `Subtotal: ${formatCurrency(subtotal)}\n`;
     // GST Breakdown
     if (billData.charges.room_gst > 0) {
       const gstRate = billData.charges.room_charges <= 7500 ? '12%' : '18%';
@@ -1845,8 +1879,8 @@ const Billing = () => {
     if (billData.charges.consumables_gst > 0) {
       text += `Consumables GST (5%): +${formatCurrency(billData.charges.consumables_gst || 0)}\n`;
     }
-    text += `Total GST: +${formatCurrency(billData.charges.total_gst || 0)}\n`;
-    text += `Total Bill Value: ${formatCurrency(totalBillValue)}\n`;
+    text += `Total GST: +${formatCurrency(totalGST || 0)}\n`;
+    text += `Total Bill Value: ${formatCurrency(totalBill)}\n`;
     if (discount > 0) text += `Discount: -${formatCurrency(parseFloat(discount))}\n`;
     if (advancePaid > 0) text += `Advance Paid: -${formatCurrency(advancePaid)}\n`;
     
@@ -2146,6 +2180,9 @@ const Billing = () => {
                     {billData.charges.consumables_charges > 0 && <li>Consumables Charges: {formatCurrency(billData.charges.consumables_charges)}</li>}
                     {billData.charges.inventory_charges > 0 && <li className="text-blue-700 font-semibold">Inventory/Rental Charges: {formatCurrency(billData.charges.inventory_charges)}</li>}
                     {billData.charges.asset_damage_charges > 0 && <li className="text-red-700 font-semibold">Asset Damage Charges: {formatCurrency(billData.charges.asset_damage_charges)}</li>}
+                    {enableLateFee && parseFloat(lateFeeAmount) > 0 && (
+                      <li className="text-amber-700 font-semibold">Late Checkout Fee: {formatCurrency(parseFloat(lateFeeAmount))}</li>
+                    )}
                   </ul>
 
                   {billData.charges.food_items.length > 0 && (
@@ -2234,7 +2271,7 @@ const Billing = () => {
                   )}
 
                   <div className="mt-4 pt-4 border-t text-right space-y-1">
-                    <p className="text-sm text-gray-600">Subtotal: {formatCurrency(billData.charges.total_due)}</p>
+                    <p className="text-sm text-gray-600">Subtotal: {formatCurrency(getDynamicTotals().subtotal)}</p>
                     {/* GST Breakdown */}
                     {billData.charges.room_gst > 0 && (
                       <p className="text-xs text-gray-500">Room GST ({
@@ -2263,21 +2300,21 @@ const Billing = () => {
                     {billData.charges.asset_damage_gst > 0 && (
                       <p className="text-xs text-gray-500">Damage GST (5%): +{formatCurrency(billData.charges.asset_damage_gst || 0)}</p>
                     )}
-                    <p className="text-sm text-gray-600 font-semibold">Total GST: +{formatCurrency(billData.charges.total_gst || 0)}</p>
-                    <p className="text-sm text-gray-700 font-bold border-t pt-1 mt-1">Total Bill: {formatCurrency(billData.charges.total_due + (billData.charges.total_gst || 0))}</p>
+                    <p className="text-sm text-gray-600 font-semibold">Total GST: +{formatCurrency(getDynamicTotals().totalGST)}</p>
+                    <p className="text-sm text-gray-700 font-bold border-t pt-1 mt-1">Total Bill: {formatCurrency(getDynamicTotals().totalBill)}</p>
 
                     {discount > 0 && (
                       <p className="text-sm text-green-600">Discount: -{formatCurrency(parseFloat(discount))}</p>
                     )}
-                    {billData.charges.advance_deposit > 0 && (
-                      <p className="text-sm text-emerald-600">Advance Paid: -{formatCurrency(billData.charges.advance_deposit)}</p>
+                    {getDynamicTotals().advanceDeposit > 0 && (
+                      <p className="text-sm text-emerald-600">Advance Paid: -{formatCurrency(getDynamicTotals().advanceDeposit)}</p>
                     )}
                     <p className="font-bold text-xl text-gray-900 mt-2 pt-2 border-t-2 border-gray-300">
-                      {billData.charges.total_due + (billData.charges.total_gst || 0) - discount - (billData.charges.advance_deposit || 0) >= 0 
+                      {getDynamicTotals().netPayable >= 0 
                         ? "Net Payable: " 
                         : "Refund Amount: "}
-                      <span className={billData.charges.total_due + (billData.charges.total_gst || 0) - discount - (billData.charges.advance_deposit || 0) < 0 ? "text-blue-600" : ""}>
-                        {formatCurrency(Math.abs(billData.charges.total_due + (billData.charges.total_gst || 0) - discount - (billData.charges.advance_deposit || 0)))}
+                      <span className={getDynamicTotals().netPayable < 0 ? "text-blue-600" : ""}>
+                        {formatCurrency(Math.abs(getDynamicTotals().netPayable))}
                       </span>
                     </p>
                   </div>
@@ -2288,6 +2325,51 @@ const Billing = () => {
 
           {billData && (
             <>
+              {/* Late Checkout Fee Settings */}
+              <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl mb-4 animate-fade-in">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id="enable-late-fee"
+                      checked={enableLateFee}
+                      onChange={(e) => {
+                        setEnableLateFee(e.target.checked);
+                        if (!e.target.checked) {
+                          setLateFeeAmount(0);
+                        } else {
+                          setLateFeeAmount(billData.charges?.late_checkout_fee || 0);
+                        }
+                      }}
+                      className="w-4 h-4 text-amber-600 border-gray-300 rounded focus:ring-amber-500 cursor-pointer"
+                    />
+                    <label htmlFor="enable-late-fee" className="text-sm font-semibold text-amber-900 cursor-pointer select-none">
+                      Apply Late Checkout Fee
+                    </label>
+                  </div>
+                  {enableLateFee && (
+                    <div className="flex items-center space-x-2">
+                      <span className="text-xs text-amber-700 font-medium">Amount:</span>
+                      <div className="relative rounded-md shadow-sm">
+                        <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center text-gray-500 text-xs">₹</span>
+                        <input
+                          type="number"
+                          value={lateFeeAmount}
+                          onChange={(e) => setLateFeeAmount(e.target.value)}
+                          className="w-28 pl-6 pr-2 py-1 text-sm border border-amber-300 rounded-md focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 bg-white"
+                          placeholder="0.00"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+                {enableLateFee && billData.charges?.late_checkout_fee > 0 && parseFloat(lateFeeAmount) !== billData.charges.late_checkout_fee && (
+                  <p className="text-xs text-amber-600 mt-2 font-medium">
+                    * Overriding automatically calculated late checkout fee of {formatCurrency(billData.charges.late_checkout_fee)}
+                  </p>
+                )}
+              </div>
+
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <div>
                   <label htmlFor="discount" className="block text-gray-700 font-medium mb-2">Discount (₹)</label>
