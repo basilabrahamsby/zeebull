@@ -1010,14 +1010,26 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
   }
 
   Widget _buildGrid(List<Widget> children) {
-    return GridView.count(
-      crossAxisCount: 2,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisSpacing: 12,
-      mainAxisSpacing: 12,
-      childAspectRatio: 1.35,
-      children: children,
+    List<Widget> rows = [];
+    for (int i = 0; i < children.length; i += 2) {
+      rows.add(
+        Row(
+          children: [
+            Expanded(child: children[i]),
+            if (i + 1 < children.length) ...[
+              const SizedBox(width: 12),
+              Expanded(child: children[i + 1]),
+            ] else
+              const Expanded(child: SizedBox()),
+          ],
+        ),
+      );
+      if (i + 2 < children.length) {
+        rows.add(const SizedBox(height: 12));
+      }
+    }
+    return Column(
+      children: rows,
     );
   }
 
@@ -1026,7 +1038,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
       onTap: onTap,
       borderRadius: BorderRadius.circular(18),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
         decoration: BoxDecoration(
           color: Colors.white, 
           borderRadius: BorderRadius.circular(18),
@@ -1041,6 +1053,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1056,7 +1069,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                 const Icon(Icons.chevron_right_rounded, size: 16, color: Color(0xFF94A3B8)),
               ],
             ),
-            const Spacer(),
+            const SizedBox(height: 12),
             FittedBox(
               fit: BoxFit.scaleDown,
               child: Text(
@@ -1069,7 +1082,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 2),
+            const SizedBox(height: 4),
             Text(
               title,
               style: const TextStyle(
@@ -1080,7 +1093,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
               overflow: TextOverflow.ellipsis,
             ),
             if (subtitle != null) ...[
-              const SizedBox(height: 1),
+              const SizedBox(height: 2),
               Text(
                 subtitle,
                 style: const TextStyle(
