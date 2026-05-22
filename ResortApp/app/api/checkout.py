@@ -2655,16 +2655,11 @@ def _calculate_bill_for_single_room(db: Session, room_number: str, branch_id: in
         
         package_price = package.price if package else 0
         
-        if is_whole_property:
-            # For whole_property packages: package price is the total amount (not multiplied by days)
-            # Note: For single room checkout, we still use the full package price
-            # as it's a whole property package (all rooms included)
-            charges.package_charges = package_price
-            charges.room_charges = 0
-        else:
-            # For room_type packages: package price is per room, per night
-            charges.package_charges = package_price * stay_days
-            charges.room_charges = 0
+        # Package price * nights (no room count multiplier)
+        charges.package_charges = package_price * stay_days
+        charges.room_charges = 0
+
+
     else:
         charges.package_charges = 0
         # For regular bookings: calculate room charges. 
@@ -3582,15 +3577,11 @@ def _calculate_bill_for_entire_booking(db: Session, room_number: str, branch_id:
         
         package_price = package.price if package else 0
         
-        if is_whole_property:
-            # For whole_property packages: package price is the total amount (not multiplied by rooms/days)
-            charges.package_charges = package_price
-            charges.room_charges = 0  # Room charges are included in the package price
-        else:
-            # For room_type packages: package price is per room, per night
-            num_rooms_in_package = len(all_rooms)
-            charges.package_charges = package_price * num_rooms_in_package * stay_days
-            charges.room_charges = 0  # Room charges are included in the package price
+        # Package price * nights (no room count multiplier)
+        charges.package_charges = package_price * stay_days
+        charges.room_charges = 0  # Room charges are included in the package price
+
+
     else:
         charges.package_charges = 0
         # For regular bookings: calculate total room charges from ALL rooms using dynamic pricing

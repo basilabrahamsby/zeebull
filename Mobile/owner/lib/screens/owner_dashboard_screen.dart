@@ -86,33 +86,84 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     double revpar = totalRooms > 0 ? (kpi.totalRevenue / totalRooms) : 0.0;
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text('Admin Dashboard'),
+        backgroundColor: const Color(0xFFF8FAFC),
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF15803D).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.dashboard_rounded, color: Color(0xFF15803D), size: 20),
+            ),
+            const SizedBox(width: 12),
+            const Text(
+              'Dashboard',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF1E293B),
+              ),
+            ),
+          ],
+        ),
         actions: [
           if (branchProvider.branches.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(right: 16),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  value: branchProvider.activeBranchId,
-                  icon: const Icon(Icons.business, color: Color(0xFF15803D)),
-                  onChanged: (String? newValue) {
-                    if (newValue != null) {
-                       branchProvider.switchBranch(newValue).then((_) => _refreshAllData());
-                    }
-                  },
-                  items: [
-                    const DropdownMenuItem<String>(
-                      value: 'all',
-                      child: Text('Enterprise View', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF15803D))),
-                    ),
-                    ...branchProvider.branches.map<DropdownMenuItem<String>>((Branch branch) {
-                      return DropdownMenuItem<String>(
-                        value: branch.id.toString(),
-                        child: Text(branch.name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-                      );
-                    }).toList(),
-                  ],
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.02),
+                      blurRadius: 4,
+                      offset: const Offset(0, 1),
+                    )
+                  ]
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: branchProvider.activeBranchId,
+                    icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF64748B)),
+                    onChanged: (String? newValue) {
+                      if (newValue != null) {
+                         branchProvider.switchBranch(newValue).then((_) => _refreshAllData());
+                      }
+                    },
+                    items: [
+                      const DropdownMenuItem<String>(
+                        value: 'all',
+                        child: Row(
+                          children: [
+                            Icon(Icons.business_rounded, color: Color(0xFF15803D), size: 16),
+                            SizedBox(width: 8),
+                            Text('Enterprise', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF15803D))),
+                          ],
+                        ),
+                      ),
+                      ...branchProvider.branches.map<DropdownMenuItem<String>>((Branch branch) {
+                        return DropdownMenuItem<String>(
+                          value: branch.id.toString(),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.storefront_rounded, color: Color(0xFF64748B), size: 16),
+                              const SizedBox(width: 8),
+                              Text(branch.name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF334155))),
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -131,39 +182,118 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
               _buildSectionTitle("Live Operations"),
               Container(
                 margin: const EdgeInsets.only(bottom: 16),
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1E293B), // Slate 800
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [BoxShadow(color: const Color(0xFF15803D).withOpacity(0.2), blurRadius: 12, offset: const Offset(0, 6))]
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF064E3B), Color(0xFF0F766E)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF064E3B).withOpacity(0.25),
+                      blurRadius: 16,
+                      offset: const Offset(0, 8),
+                    )
+                  ]
                 ),
                 child: Row(
                   children: [
                     Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text("Occupancy Rate", style: TextStyle(color: const Color(0xFF94A3B8), fontSize: 12)),
-                            Text("${occupancyRate.toStringAsFixed(1)}%", style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)),
-                            const SizedBox(height: 8),
-                            Text("Available: ${daily['available_rooms'] ?? roomStats['available'] ?? 0}  •  Occupied: ${roomStats['occupied'] ?? 0}", style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 12)),
-                          ],
-                        )
-                    ),
-                    Container(
-                      width: 80, height: 80,
-                      child: PieChart(PieChartData(
-                        sectionsSpace: 0, centerSpaceRadius: 0,
-                        sections: totalRooms > 0 
-                          ? [
-                              PieChartSectionData(color: const Color(0xFF15803D), value: occupiedRooms.toDouble(), radius: 35, showTitle: false),
-                              PieChartSectionData(color: const Color(0xFF334155), value: (totalRooms - occupiedRooms).toDouble(), radius: 30, showTitle: false),
-                            ]
-                          : [
-                              PieChartSectionData(color: const Color(0xFF334155).withOpacity(0.5), value: 1, radius: 30, showTitle: false),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Icon(Icons.trending_up_rounded, color: Colors.white, size: 16),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                "Live Room Occupancy",
+                                style: TextStyle(
+                                  color: Colors.white.withOpacity(0.9),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
                             ],
-                      )),
-                    )
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            "${occupancyRate.toStringAsFixed(1)}%",
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 34,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: -0.5,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            "Available: ${daily['available_rooms'] ?? roomStats['available'] ?? 0}  •  Occupied: ${roomStats['occupied'] ?? 0}",
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.85),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        SizedBox(
+                          width: 80,
+                          height: 80,
+                          child: PieChart(
+                            PieChartData(
+                              sectionsSpace: 0,
+                              centerSpaceRadius: 26,
+                              startDegreeOffset: -90,
+                              sections: totalRooms > 0 
+                                ? [
+                                    PieChartSectionData(
+                                      color: Colors.white,
+                                      value: occupiedRooms.toDouble(),
+                                      radius: 7,
+                                      showTitle: false,
+                                    ),
+                                    PieChartSectionData(
+                                      color: Colors.white.withOpacity(0.2),
+                                      value: (totalRooms - occupiedRooms).toDouble(),
+                                      radius: 7,
+                                      showTitle: false,
+                                    ),
+                                  ]
+                                : [
+                                    PieChartSectionData(
+                                      color: Colors.white.withOpacity(0.2),
+                                      value: 1,
+                                      radius: 7,
+                                      showTitle: false,
+                                    ),
+                                  ],
+                            ),
+                          ),
+                        ),
+                        Text(
+                          "${occupancyRate.toStringAsFixed(0)}%",
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -205,29 +335,69 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
               if (recentActivity.isEmpty)
                 const Padding(padding: EdgeInsets.symmetric(vertical: 20), child: Center(child: Text("No recent activity", style: TextStyle(color: Colors.grey))))
               else
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade100)),
-                  child: ListView.separated(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: recentActivity.length > 5 ? 5 : recentActivity.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
-                    itemBuilder: (context, index) {
-                      final item = recentActivity[index];
-                      return ListTile(
-                        dense: true,
-                        leading: CircleAvatar(
-                          backgroundColor: Colors.blue.shade50,
-                          child: Icon(Icons.person, size: 16, color: Colors.blue.shade800),
+                ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: recentActivity.length > 5 ? 5 : recentActivity.length,
+                  itemBuilder: (context, index) {
+                    final item = recentActivity[index];
+                    final checkInStr = item['check_in'] ?? 'N/A';
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: const Color(0xFFF1F5F9), width: 1.2),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.01),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          )
+                        ]
+                      ),
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                        leading: Container(
+                          width: 38,
+                          height: 38,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF15803D).withOpacity(0.08),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.person_rounded, size: 18, color: Color(0xFF15803D)),
                         ),
-                        title: Text(item['guest_name'] ?? "Unknown Guest", style: const TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Text("Check-in: ${item['check_in'] ?? 'N/A'} • Status: ${item['status'] ?? 'Unknown'}"),
-                        trailing: const Icon(Icons.chevron_right, size: 16),
+                        title: Text(
+                          item['guest_name'] ?? "Unknown Guest",
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                            color: Color(0xFF1E293B),
+                          ),
+                        ),
+                        subtitle: Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text(
+                            "Check-in: $checkInStr",
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Color(0xFF64748B),
+                            ),
+                          ),
+                        ),
+                        trailing: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            _buildStatusChip(item['status']),
+                            const SizedBox(height: 4),
+                            const Icon(Icons.chevron_right_rounded, size: 16, color: Color(0xFF94A3B8)),
+                          ],
+                        ),
                         onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BookingsScreen())),
-                      );
-                    },
-                  ),
+                      ),
+                    );
+                  },
                 ),
 
               const SizedBox(height: 24),
@@ -248,7 +418,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
               _buildGrid([
                 _kpi("Food Orders", "${kpi.foodOrders}", Icons.restaurant, Colors.brown, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const FoodAnalyticsScreen()))),
                 _kpi("Services", "${kpi.assignedServices}", Icons.cleaning_services, Colors.blueGrey, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ServicesScreen()))),
-                _kpi("Service Rev", currencyFormat.format(kpi.totalServiceRevenue), Icons.attach_money, Colors.indigo, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ServicesScreen()))),
+                _kpi("Service Rev", currencyFormat.format(kpi.totalServiceRevenue), Icons.indigo, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ServicesScreen()))),
                 _kpi("Food Items", "${kpi.foodItemsAvailable}", Icons.menu_book, Colors.orangeAccent, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const FoodAnalyticsScreen()))),
               ]),
 
@@ -267,34 +437,49 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
               
               InkWell(
                 onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PnLScreen())),
-                 child: Container(
-                    height: 200, 
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white, 
-                      borderRadius: BorderRadius.circular(16), 
-                      border: Border.all(color: Colors.grey.shade100, width: 1.5),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.015),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        )
-                      ]
-                    ),
-                   child: Column(
-                     children: [
-                       Row(
-                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                         children: [
-                           const Text("Weekly Revenue", style: TextStyle(fontWeight: FontWeight.bold)),
-                           const Icon(Icons.open_in_new, size: 14, color: Colors.blue),
-                         ],
-                       ),
-                       const SizedBox(height: 10),
-                       Expanded(child: _buildRevenueChart(chartData['weekly_performance'] ?? [])),
-                     ],
-                   )
+                borderRadius: BorderRadius.circular(20),
+                child: Container(
+                  height: 220, 
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white, 
+                    borderRadius: BorderRadius.circular(20), 
+                    border: Border.all(color: const Color(0xFFF1F5F9), width: 1.2),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.02),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                      )
+                    ]
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            "Weekly Revenue",
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                              color: Color(0xFF1E293B),
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF15803D).withOpacity(0.08),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.chevron_right_rounded, size: 16, color: Color(0xFF15803D)),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Expanded(child: _buildRevenueChart(chartData['weekly_performance'] ?? [])),
+                    ],
+                  ),
                 ),
               ),
 
@@ -307,23 +492,30 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                 children: [
                   Expanded(
                     child: Container(
-                      padding: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.all(18),
                       decoration: BoxDecoration(
                         color: Colors.white, 
-                        borderRadius: BorderRadius.circular(16), 
-                        border: Border.all(color: Colors.grey.shade100, width: 1.5),
+                        borderRadius: BorderRadius.circular(20), 
+                        border: Border.all(color: const Color(0xFFF1F5F9), width: 1.2),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.015),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
+                            color: Colors.black.withOpacity(0.02),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
                           )
                         ]
                       ),
                       child: Column(
                         children: [
-                          const Text("Sources", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                          const SizedBox(height: 10),
+                          const Text(
+                            "Sources",
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                              color: Color(0xFF1E293B),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
                           SizedBox(height: 150, child: _buildSourcePieChart(chartData['revenue_breakdown'] ?? [])),
                         ],
                       ),
@@ -332,37 +524,60 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: Container(
-                      padding: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.all(18),
                       decoration: BoxDecoration(
                         color: Colors.white, 
-                        borderRadius: BorderRadius.circular(16), 
-                        border: Border.all(color: Colors.grey.shade100, width: 1.5),
+                        borderRadius: BorderRadius.circular(20), 
+                        border: Border.all(color: const Color(0xFFF1F5F9), width: 1.2),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.015),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
+                            color: Colors.black.withOpacity(0.02),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
                           )
                         ]
                       ),
                       child: Column(
                         children: [
-                          const Text("Payment Modes", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                          const SizedBox(height: 10),
+                          const Text(
+                            "Payment Modes",
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                              color: Color(0xFF1E293B),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
                           if (kpi.revenueByMode.isEmpty)
                             const SizedBox(height: 150, child: Center(child: Text("No Data", style: TextStyle(color: Colors.grey))))
                           else
                             Column(
-                              children: kpi.revenueByMode.entries.map((e) => Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 4),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(e.key, style: const TextStyle(fontSize: 12)),
-                                    Text(currencyFormat.format(e.value), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
-                                  ],
-                                ),
-                              )).toList(),
+                              children: kpi.revenueByMode.entries.map((e) {
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 6),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(
+                                        e.key,
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                          color: Color(0xFF64748B),
+                                        ),
+                                      ),
+                                      Text(
+                                        currencyFormat.format(e.value),
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xFF1E293B),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }).toList(),
                             )
                         ],
                       ),
@@ -375,22 +590,36 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
 
               // 7. Financial Trends
               _buildSectionTitle("Financial Trends (6 Months)"),
-                Container(
-                  height: 250, 
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white, 
-                    borderRadius: BorderRadius.circular(16), 
-                    border: Border.all(color: Colors.grey.shade100, width: 1.5),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.015),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      )
-                    ]
-                  ),
-                 child: _buildTrendsChart(financialTrends),
+              Container(
+                height: 260, 
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white, 
+                  borderRadius: BorderRadius.circular(20), 
+                  border: Border.all(color: const Color(0xFFF1F5F9), width: 1.2),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.02),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    )
+                  ]
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        _buildLegendItem("Revenue", const Color(0xFF15803D)),
+                        const SizedBox(width: 12),
+                        _buildLegendItem("Expense", const Color(0xFFEF4444)),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Expanded(child: _buildTrendsChart(financialTrends)),
+                  ],
+                ),
               ),
 
               const SizedBox(height: 24),
@@ -407,22 +636,56 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                    itemBuilder: (context, index) {
                      final deptName = kpi.departmentKpis.keys.elementAt(index);
                      final data = kpi.departmentKpis[deptName];
-                     return Card(
+                     return Container(
                        margin: const EdgeInsets.only(bottom: 12),
-                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                       decoration: BoxDecoration(
+                         color: Colors.white,
+                         borderRadius: BorderRadius.circular(18),
+                         border: Border.all(color: const Color(0xFFF1F5F9), width: 1.2),
+                         boxShadow: [
+                           BoxShadow(
+                             color: Colors.black.withOpacity(0.015),
+                             blurRadius: 10,
+                             offset: const Offset(0, 4),
+                           )
+                         ]
+                       ),
                        child: Padding(
                          padding: const EdgeInsets.all(16),
                          child: Column(
                            crossAxisAlignment: CrossAxisAlignment.start,
                            children: [
-                             Text(deptName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                             const Divider(),
+                             Row(
+                               children: [
+                                 Container(
+                                   padding: const EdgeInsets.all(6),
+                                   decoration: BoxDecoration(
+                                     color: const Color(0xFF15803D).withOpacity(0.08),
+                                     borderRadius: BorderRadius.circular(8),
+                                   ),
+                                   child: const Icon(Icons.business_center_rounded, color: Color(0xFF15803D), size: 16),
+                                 ),
+                                 const SizedBox(width: 10),
+                                 Text(
+                                   deptName,
+                                   style: const TextStyle(
+                                     fontWeight: FontWeight.bold,
+                                     fontSize: 15,
+                                     color: Color(0xFF1E293B),
+                                   ),
+                                 ),
+                               ],
+                             ),
+                             const Padding(
+                               padding: EdgeInsets.symmetric(vertical: 10),
+                               child: Divider(color: Color(0xFFF1F5F9), height: 1),
+                             ),
                              Row(
                                mainAxisAlignment: MainAxisAlignment.spaceAround,
                                children: [
-                                 _departmentStat("Income", data['income'], Colors.green, currencyFormat),
-                                 _departmentStat("Expense", data['expenses'], Colors.red, currencyFormat),
-                                 _departmentStat("Assets", data['assets'], Colors.blue, currencyFormat),
+                                 _departmentStat("Income", data['income'], const Color(0xFF15803D), currencyFormat),
+                                 _departmentStat("Expense", data['expenses'], const Color(0xFFEF4444), currencyFormat),
+                                 _departmentStat("Assets", data['assets'], const Color(0xFF3B82F6), currencyFormat),
                                ],
                              )
                            ],
@@ -444,6 +707,78 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: const Icon(Icons.add_rounded, color: Colors.white, size: 28),
       ),
+    );
+  }
+
+  Widget _buildStatusChip(String? status) {
+    if (status == null) return const SizedBox();
+    final s = status.toLowerCase().replaceAll('_', ' ').replaceAll('-', ' ').trim();
+    
+    Color bgColor;
+    Color textColor;
+    String displayLabel = status;
+    
+    if (s.contains('check in') || s.contains('checked in') || s.contains('active')) {
+      bgColor = const Color(0xFFDCFCE7);
+      textColor = const Color(0xFF15803D);
+      displayLabel = 'Checked In';
+    } else if (s.contains('checkout') || s.contains('checked out') || s.contains('completed')) {
+      bgColor = const Color(0xFFF1F5F9);
+      textColor = const Color(0xFF475569);
+      displayLabel = 'Checked Out';
+    } else if (s.contains('book') || s.contains('confirmed') || s.contains('pending')) {
+      bgColor = const Color(0xFFEFF6FF);
+      textColor = const Color(0xFF1D4ED8);
+      displayLabel = 'Booked';
+    } else if (s.contains('cancel')) {
+      bgColor = const Color(0xFFFEE2E2);
+      textColor = const Color(0xFFB91C1C);
+      displayLabel = 'Cancelled';
+    } else {
+      bgColor = const Color(0xFFFEF9C3);
+      textColor = const Color(0xFFA16207);
+      displayLabel = status.toUpperCase();
+    }
+    
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        displayLabel,
+        style: TextStyle(
+          color: textColor,
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLegendItem(String label, Color color) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+          ),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF64748B),
+          ),
+        ),
+      ],
     );
   }
 
@@ -567,7 +902,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                   const SizedBox(height: 2),
                   Text(
                     subtitle,
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontSize: 12,
                       color: Color(0xFF64748B),
                     ),
@@ -585,57 +920,92 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
   Widget _buildAlertCard(String title, String count, IconData icon, Color color, VoidCallback onTap) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(18),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: const EdgeInsets.all(16),
         width: 150,
-        height: 120,
+        height: 125,
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.grey.shade100, width: 1.5),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: color.withOpacity(0.15), width: 1.2),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.015),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
+              color: color.withOpacity(0.04),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
             )
           ]
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Container(
-                  padding: const EdgeInsets.all(6),
+                  padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
                     color: color.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Icon(icon, size: 16, color: color),
+                  child: Icon(icon, size: 18, color: color),
                 ),
-                const Spacer(),
-                const Icon(Icons.arrow_outward_rounded, size: 14, color: Color(0xFF94A3B8)),
+                Icon(Icons.arrow_forward_rounded, size: 14, color: color.withOpacity(0.6)),
               ],
             ),
             const Spacer(),
-            Text(count, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: color)),
-            const SizedBox(height: 2),
-            Text(title, style: const TextStyle(fontSize: 11, color: Color(0xFF64748B), fontWeight: FontWeight.w500)),
+            Text(
+              count,
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: color,
+                letterSpacing: -0.5,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 12,
+                color: Color(0xFF64748B),
+                fontWeight: FontWeight.w600,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ],
         ),
       ),
     );
   }
 
-
-
   Widget _buildSectionTitle(String title) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+      padding: const EdgeInsets.only(top: 8, bottom: 12),
+      child: Row(
+        children: [
+          Container(
+            width: 4,
+            height: 16,
+            decoration: BoxDecoration(
+              color: const Color(0xFF15803D),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF1E293B),
+              letterSpacing: 0.3,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -654,77 +1024,155 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
   Widget _kpi(String title, String value, IconData icon, Color color, {String? subtitle, VoidCallback? onTap}) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(18),
       child: Container(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
           color: Colors.white, 
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.grey.shade100, width: 1.5),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: const Color(0xFFF1F5F9), width: 1.2),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.015),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
+              color: Colors.black.withOpacity(0.02),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
             )
           ]
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-                  child: Icon(icon, color: color, size: 20),
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(icon, color: color, size: 18),
                 ),
-                const Icon(Icons.arrow_outward_rounded, size: 14, color: Color(0xFF94A3B8)),
+                const Icon(Icons.chevron_right_rounded, size: 16, color: Color(0xFF94A3B8)),
               ],
             ),
             const Spacer(),
             FittedBox(
               fit: BoxFit.scaleDown,
-              child: Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
+              child: Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF0F172A),
+                  letterSpacing: -0.3,
+                ),
+              ),
             ),
-            const SizedBox(height: 4),
-            Text(title, style: TextStyle(fontSize: 12, color: Colors.grey.shade600), overflow: TextOverflow.ellipsis),
-            if (subtitle != null) Text(subtitle, style: TextStyle(fontSize: 10, color: Colors.grey.shade400)),
+            const SizedBox(height: 2),
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF64748B),
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+            if (subtitle != null) ...[
+              const SizedBox(height: 1),
+              Text(
+                subtitle,
+                style: const TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w500,
+                  color: Color(0xFF94A3B8),
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ]
           ],
         ),
       ),
     );
   }
 
-
   Widget _buildRevenueChart(List<dynamic> weeklyData) {
     if (weeklyData.isEmpty) return const Center(child: Text("No data"));
     List<FlSpot> spots = [];
     List<String> titles = [];
+    
     for (int i = 0; i < weeklyData.length; i++) {
-        spots.add(FlSpot(i.toDouble(), (weeklyData[i]['revenue'] ?? 0).toDouble()));
+        double rev = (weeklyData[i]['revenue'] ?? 0).toDouble();
+        spots.add(FlSpot(i.toDouble(), rev));
         titles.add(weeklyData[i]['day'].toString());
     }
+    
     return LineChart(
       LineChartData(
-        gridData: const FlGridData(show: false),
+        gridData: FlGridData(
+          show: true,
+          drawVerticalLine: false,
+          getDrawingHorizontalLine: (value) {
+            return FlLine(
+              color: const Color(0xFFE2E8F0),
+              strokeWidth: 1,
+              dashArray: [5, 5],
+            );
+          },
+        ),
         titlesData: FlTitlesData(
           leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
           topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
           rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, getTitlesWidget: (val, _) => Text(titles[val.toInt()], style: const TextStyle(fontSize: 10)))),
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              getTitlesWidget: (val, _) {
+                int idx = val.toInt();
+                if (idx >= 0 && idx < titles.length) {
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      titles[idx],
+                      style: const TextStyle(fontSize: 10, color: Color(0xFF94A3B8), fontWeight: FontWeight.bold),
+                    ),
+                  );
+                }
+                return const Text("");
+              },
+            ),
+          ),
         ),
         borderData: FlBorderData(show: false),
         lineBarsData: [
           LineChartBarData(
             spots: spots,
             isCurved: true,
-            color: Colors.blue,
-            barWidth: 3,
-            dotData: const FlDotData(show: false),
-            belowBarData: BarAreaData(show: true, color: Colors.blue.withOpacity(0.1)),
+            curveMode: CurveMode.cubic,
+            color: const Color(0xFF15803D),
+            barWidth: 3.5,
+            isStrokeCapRound: true,
+            dotData: FlDotData(
+              show: true,
+              getDotPainter: (spot, percent, barData, index) => FlDotCirclePainter(
+                radius: 4,
+                color: Colors.white,
+                strokeWidth: 2,
+                strokeColor: const Color(0xFF15803D),
+              ),
+            ),
+            belowBarData: BarAreaData(
+              show: true,
+              gradient: LinearGradient(
+                colors: [
+                  const Color(0xFF15803D).withOpacity(0.2),
+                  const Color(0xFF15803D).withOpacity(0.0),
+                ],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
+            ),
           ),
         ],
       ),
@@ -735,7 +1183,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     return Column(
       children: [
         Text(fmt.format(value ?? 0), style: TextStyle(fontWeight: FontWeight.bold, color: color, fontSize: 14)),
-        Text(label, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+        Text(label, style: const TextStyle(color: Color(0xFF64748B), fontSize: 12, fontWeight: FontWeight.w500)),
       ],
     );
   }
@@ -743,9 +1191,13 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
   Widget _buildSourcePieChart(List<dynamic> data) {
     if (data.isEmpty) return const Center(child: Text("No Data"));
     
-    // Parse data
     List<PieChartSectionData> sections = [];
-    final colors = [Colors.blue, Colors.orange, Colors.green, Colors.purple];
+    final colors = [
+      const Color(0xFF0F766E),
+      const Color(0xFF15803D),
+      const Color(0xFFF59E0B),
+      const Color(0xFF6366F1),
+    ];
     
     for (int i = 0; i < data.length; i++) {
         final val = (data[i]['value'] ?? 0).toDouble();
@@ -754,17 +1206,17 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
              color: colors[i % colors.length],
              value: val,
              title: '${(val/1000).toStringAsFixed(1)}k',
-             radius: 30,
+             radius: 26,
              titleStyle: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold)
            ));
         }
-    }
-    
-    return PieChart(PieChartData(
-       sections: sections,
-       centerSpaceRadius: 20,
-       sectionsSpace: 2,
-    ));
+     }
+     
+     return PieChart(PieChartData(
+        sections: sections,
+        centerSpaceRadius: 24,
+        sectionsSpace: 2,
+     ));
   }
 
   Widget _buildTrendsChart(List<dynamic> trends) {
@@ -775,27 +1227,101 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     List<String> titles = [];
     
     for (int i = 0; i < trends.length; i++) {
-       titles.add(trends[i]['month'].toString().split(' ')[0]); // "Jan"
+       titles.add(trends[i]['month'].toString().split(' ')[0]);
        revSpots.add(FlSpot(i.toDouble(), (trends[i]['revenue'] ?? 0).toDouble()));
        expSpots.add(FlSpot(i.toDouble(), (trends[i]['expense'] ?? 0).toDouble()));
     }
 
     return LineChart(
       LineChartData(
-        gridData: const FlGridData(show: true, drawVerticalLine: false),
+        gridData: FlGridData(
+          show: true,
+          drawVerticalLine: false,
+          getDrawingHorizontalLine: (value) {
+            return FlLine(
+              color: const Color(0xFFE2E8F0),
+              strokeWidth: 1,
+              dashArray: [5, 5],
+            );
+          },
+        ),
         titlesData: FlTitlesData(
           leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
           rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
           topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, getTitlesWidget: (val, _) {
-             if (val.toInt() >= 0 && val.toInt() < titles.length) return Text(titles[val.toInt()], style: const TextStyle(fontSize: 10));
-             return const Text("");
-          })),
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              getTitlesWidget: (val, _) {
+                int idx = val.toInt();
+                if (idx >= 0 && idx < titles.length) {
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      titles[idx],
+                      style: const TextStyle(fontSize: 10, color: Color(0xFF94A3B8), fontWeight: FontWeight.bold),
+                    ),
+                  );
+                }
+                return const Text("");
+              },
+            ),
+          ),
         ),
         borderData: FlBorderData(show: false),
         lineBarsData: [
-          LineChartBarData(spots: revSpots, color: Colors.green, isCurved: true, barWidth: 3, dotData: const FlDotData(show: true)),
-          LineChartBarData(spots: expSpots, color: Colors.red, isCurved: true, barWidth: 3, dotData: const FlDotData(show: true)),
+          LineChartBarData(
+            spots: revSpots,
+            color: const Color(0xFF15803D),
+            isCurved: true,
+            barWidth: 3,
+            dotData: FlDotData(
+              show: true,
+              getDotPainter: (spot, percent, barData, index) => FlDotCirclePainter(
+                radius: 3,
+                color: Colors.white,
+                strokeWidth: 1.5,
+                strokeColor: const Color(0xFF15803D),
+              ),
+            ),
+            belowBarData: BarAreaData(
+              show: true,
+              gradient: LinearGradient(
+                colors: [
+                  const Color(0xFF15803D).withOpacity(0.12),
+                  const Color(0xFF15803D).withOpacity(0.0),
+                ],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
+            ),
+          ),
+          LineChartBarData(
+            spots: expSpots,
+            color: const Color(0xFFEF4444),
+            isCurved: true,
+            barWidth: 3,
+            dotData: FlDotData(
+              show: true,
+              getDotPainter: (spot, percent, barData, index) => FlDotCirclePainter(
+                radius: 3,
+                color: Colors.white,
+                strokeWidth: 1.5,
+                strokeColor: const Color(0xFFEF4444),
+              ),
+            ),
+            belowBarData: BarAreaData(
+              show: true,
+              gradient: LinearGradient(
+                colors: [
+                  const Color(0xFFEF4444).withOpacity(0.08),
+                  const Color(0xFFEF4444).withOpacity(0.0),
+                ],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
+            ),
+          ),
         ],
       ),
     );

@@ -312,10 +312,8 @@ def book_package(db: Session, booking: PackageBookingCreate, branch_id: int = No
     
     calc_total_amount = 0.0
     if selected_package:
-        # Assuming price is per night per package unit (often per room for packages)
-        # If booking.room_ids has multiple rooms, we multiply.
-        num_rooms = len(booking.room_ids) if booking.room_ids else 1
-        calc_total_amount = selected_package.price * stay_nights * num_rooms
+        # Package price * nights (no room count multiplier)
+        calc_total_amount = selected_package.price * stay_nights
 
     # All conflict checks passed - now create the booking
     db_booking = PackageBooking(

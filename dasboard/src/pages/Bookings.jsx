@@ -3095,7 +3095,14 @@ const CheckInModal = ({
 const BookingStatusChart = React.memo(({ data }) => {
   const chartData = useMemo(() => {
     const statusCounts = data.reduce((acc, booking) => {
-      acc[booking.status] = (acc[booking.status] || 0) + 1;
+      const rawStatus = booking.status || "";
+      const normalizedStatus = rawStatus.toLowerCase().trim().replace(/[-_]/g, "-");
+      // Format status nicely, e.g., 'checked-in' -> 'Checked In', 'booked' -> 'Booked'
+      const formattedStatus = normalizedStatus
+        .split("-")
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(" ");
+      acc[formattedStatus] = (acc[formattedStatus] || 0) + 1;
       return acc;
     }, {});
 
@@ -3895,23 +3902,31 @@ const Bookings = () => {
       const allBookings = [...allRegularBookings, ...allPackageBookings];
       setCalendarBookings(allBookings); // Use full 500-limit for Calendar accuracy
 
-      const activeBookingsCount = allBookings.filter(
-        (b) => b.status === "booked" || b.status === "checked-in",
-      ).length;
-      const cancelledBookingsCount = allBookings.filter(
-        (b) => b.status === "cancelled",
-      ).length;
+      const activeBookingsCount = allBookings.filter((b) => {
+        const status = (b.status || "").toLowerCase().trim().replace(/[-_]/g, "-");
+        return status === "booked" || status === "checked-in";
+      }).length;
+      const cancelledBookingsCount = allBookings.filter((b) => {
+        const status = (b.status || "").toLowerCase().trim().replace(/[-_]/g, "-");
+        return status === "cancelled";
+      }).length;
       const availableRoomsCount = allRooms.filter(
         (r) => r.status === "Available",
       ).length;
 
       // Fix: Filter by actual dates and status for check-in/out KPIs
       const todaysGuestsCheckin = allBookings
-        .filter((b) => b.check_in === todaysDate && b.status !== "cancelled")
-        .reduce((sum, b) => sum + b.adults + b.children, 0);
+        .filter((b) => {
+          const status = (b.status || "").toLowerCase().trim().replace(/[-_]/g, "-");
+          return b.check_in === todaysDate && status !== "cancelled";
+        })
+        .reduce((sum, b) => sum + (b.adults || 0) + (b.children || 0), 0);
       const todaysGuestsCheckout = allBookings
-        .filter((b) => b.check_out === todaysDate && b.status !== "cancelled")
-        .reduce((sum, b) => sum + b.adults + b.children, 0);
+        .filter((b) => {
+          const status = (b.status || "").toLowerCase().trim().replace(/[-_]/g, "-");
+          return b.check_out === todaysDate && status !== "cancelled";
+        })
+        .reduce((sum, b) => sum + (b.adults || 0) + (b.children || 0), 0);
 
       // Store all rooms for filtering
       console.log("[Bookings fetchData] All rooms from API:", allRooms?.length, allRooms?.map(r => r.number));

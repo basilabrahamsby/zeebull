@@ -415,9 +415,11 @@ def book_package_api(
             check_out_date = result.check_out if isinstance(result.check_out, date) else datetime.strptime(str(result.check_out), '%Y-%m-%d').date()
             stay_nights = max(1, (check_out_date - check_in_date).days)
             
-            # Calculate package charges (package price per night per room)
+            # Calculate package charges (package price * nights, no room count multiplier)
             package_price = package.price if package else 0
-            package_charges = package_price * stay_nights * len(booking.room_ids) if booking.room_ids else package_price * stay_nights
+            package_charges = package_price * stay_nights
+
+
             
             # Get room details with prices
             rooms_data = []
@@ -496,9 +498,11 @@ def book_package_guest_api(
                     check_out_date = result.check_out if isinstance(result.check_out, date) else datetime.strptime(str(result.check_out), '%Y-%m-%d').date()
                     stay_nights = max(1, (check_out_date - check_in_date).days)
                     
-                    # Calculate package charges (package price per night per room)
+                    # Calculate package charges (package price * nights, no room count multiplier)
                     package_price = package.price if package else 0
-                    package_charges = package_price * stay_nights * len(booking.room_ids) if booking.room_ids else package_price * stay_nights
+                    package_charges = package_price * stay_nights
+
+
                     
                     # Get room details with prices
                     rooms_data = []
@@ -621,13 +625,10 @@ def get_bookings(
                         
                     stay_days = (d_out - d_in).days
                     stay_nights = max(1, stay_days)
-                    # For packages, price is per unit (usually room). Count rooms if available, else 1.
-                    # We need to access rooms relationship if loaded, or assume 1 if not.
-                    # Warning: rooms might not be eager loaded here based on lines above.
-                    # But checking len(booking.rooms) might trigger lazy load if not detached.
-                    num_rooms = len(booking.rooms) if booking.rooms else 1
-                    
-                    calc_amount = booking.package.price * stay_nights * num_rooms
+                    # For packages, price is package price * nights (no room count multiplier)
+                    calc_amount = booking.package.price * stay_nights
+
+
                     
                     if calc_amount > 0:
                          booking.total_amount = calc_amount

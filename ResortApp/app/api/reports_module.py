@@ -85,14 +85,12 @@ def get_daily_arrival_report(
             if hasattr(pkg_booking, 'total_amount'):
                 calculated_total = pkg_booking.total_amount
             elif pkg_booking.package:
-                # Basic calculation: Price per night * nights * rooms
+                # Package price * nights (no room count multiplier)
                 try:
                     check_in = pkg_booking.check_in
                     check_out = pkg_booking.check_out
-                    nights = (check_out - check_in).days
-                    nights = max(1, nights)
-                    num_rooms = len(pkg_booking.rooms) if pkg_booking.rooms else 1
-                    calculated_total = pkg_booking.package.price * nights * num_rooms
+                    nights = max(1, (check_out - check_in).days)
+                    calculated_total = pkg_booking.package.price * nights
                 except:
                     calculated_total = 0.0
 
