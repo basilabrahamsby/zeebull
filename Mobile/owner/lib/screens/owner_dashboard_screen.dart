@@ -418,7 +418,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
               _buildGrid([
                 _kpi("Food Orders", "${kpi.foodOrders}", Icons.restaurant, Colors.brown, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const FoodAnalyticsScreen()))),
                 _kpi("Services", "${kpi.assignedServices}", Icons.cleaning_services, Colors.blueGrey, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ServicesScreen()))),
-                _kpi("Service Rev", currencyFormat.format(kpi.totalServiceRevenue), Icons.indigo, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ServicesScreen()))),
+                _kpi("Service Rev", currencyFormat.format(kpi.totalServiceRevenue), Icons.receipt, Colors.indigo, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ServicesScreen()))),
                 _kpi("Food Items", "${kpi.foodItemsAvailable}", Icons.menu_book, Colors.orangeAccent, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const FoodAnalyticsScreen()))),
               ]),
 
@@ -1149,7 +1149,6 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
           LineChartBarData(
             spots: spots,
             isCurved: true,
-            curveMode: CurveMode.cubic,
             color: const Color(0xFF15803D),
             barWidth: 3.5,
             isStrokeCapRound: true,
