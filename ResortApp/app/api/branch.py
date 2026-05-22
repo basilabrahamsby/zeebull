@@ -68,6 +68,7 @@ async def create_branch(
     instagram: Optional[str] = Form(None),
     twitter: Optional[str] = Form(None),
     linkedin: Optional[str] = Form(None),
+    location: Optional[str] = Form(None),
     image: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
     admin: User = Depends(verify_superadmin) # Only superadmin can create branches
@@ -95,7 +96,8 @@ async def create_branch(
         facebook=facebook,
         instagram=instagram,
         twitter=twitter,
-        linkedin=linkedin
+        linkedin=linkedin,
+        location=location
     )
 
 @router.put("/branches/{branch_id}", response_model=Branch)
@@ -111,6 +113,7 @@ async def update_branch(
     instagram: Optional[str] = Form(None),
     twitter: Optional[str] = Form(None),
     linkedin: Optional[str] = Form(None),
+    location: Optional[str] = Form(None),
     is_active: Optional[bool] = Form(None),
     image: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
@@ -129,6 +132,7 @@ async def update_branch(
     if instagram is not None: update_data["instagram"] = instagram
     if twitter is not None: update_data["twitter"] = twitter
     if linkedin is not None: update_data["linkedin"] = linkedin
+    if location is not None: update_data["location"] = location
     if is_active is not None: update_data["is_active"] = is_active
     
     if image:

@@ -17,6 +17,7 @@ class Branch(Base):
     instagram = Column(String, nullable=True)
     twitter = Column(String, nullable=True)
     linkedin = Column(String, nullable=True)
+    location = Column(String, nullable=True)
     is_active = Column(Boolean, nullable=False, default=True, server_default=text('true'))
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc), server_default=text('CURRENT_TIMESTAMP'))
     

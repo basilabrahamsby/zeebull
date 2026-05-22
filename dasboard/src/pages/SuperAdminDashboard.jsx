@@ -25,6 +25,76 @@ const SuperAdminKPICard = ({ label, value, sub, icon: Icon, colorClass }) => (
     </div>
 );
 
+const renderLocationLink = (branch, defaultText = "N/A") => {
+    if (!branch) return defaultText;
+    const loc = (branch.location || "").trim();
+    const addr = (branch.address || "").trim();
+    
+    const isUrl = (str) => {
+        if (!str) return false;
+        const s = str.toLowerCase();
+        return s.startsWith("http://") || 
+               s.startsWith("https://") || 
+               s.startsWith("www.") ||
+               s.includes("google.com/maps") ||
+               s.includes("maps.google") ||
+               s.includes("maps.app.goo.gl");
+    };
+    
+    const getHref = (str) => {
+        if (!str) return "";
+        let s = str.trim();
+        if (s.toLowerCase().startsWith("http://") || s.toLowerCase().startsWith("https://")) {
+            return s;
+        }
+        return `https://${s}`;
+    };
+    
+    // Check if either is a URL
+    let url = "";
+    if (isUrl(loc)) {
+        url = getHref(loc);
+    } else if (isUrl(addr)) {
+        url = getHref(addr);
+    }
+    
+    // Determine display text for location name
+    let locDisplay = "";
+    if (loc && !isUrl(loc)) {
+        locDisplay = loc;
+    }
+    
+    // Determine display text for address
+    let addrDisplay = "";
+    if (addr && !isUrl(addr)) {
+        addrDisplay = addr;
+    }
+    
+    if (url) {
+        return (
+            <div className="flex flex-col">
+                {locDisplay && <span className="font-bold text-gray-800 text-xs uppercase tracking-wider">{locDisplay}</span>}
+                <a 
+                    href={url} 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    className="text-indigo-600 hover:text-indigo-800 underline font-medium text-sm transition-colors mt-0.5 inline-block"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    {addrDisplay || "View on Google Maps"}
+                </a>
+            </div>
+        );
+    }
+    
+    return (
+        <div className="flex flex-col">
+            {locDisplay && <span className="font-bold text-gray-800 text-xs uppercase tracking-wider">{locDisplay}</span>}
+            <span className="text-sm text-gray-600">{addrDisplay || defaultText}</span>
+        </div>
+    );
+};
+
 export default function SuperAdminDashboard() {
     const [loading, setLoading] = useState(true);
     const [err, setErr] = useState(null);
@@ -220,7 +290,9 @@ export default function SuperAdminDashboard() {
                                 {branches.map(branch => (
                                     <tr key={branch.id} className="hover:bg-gray-50/50 transition-colors">
                                         <td className="px-6 py-4 font-medium text-gray-900">{branch.name}</td>
-                                        <td className="px-6 py-4 text-gray-600">{branch.address || "N/A"}</td>
+                                        <td className="px-6 py-4 text-gray-600">
+                                            {renderLocationLink(branch, "N/A")}
+                                        </td>
                                         <td className="px-6 py-4 text-gray-600 font-mono text-xs">{branch.gst_number || "N/A"}</td>
                                         <td className="px-6 py-4">
                                             <span className="px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">

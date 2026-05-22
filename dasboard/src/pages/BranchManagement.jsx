@@ -5,6 +5,76 @@ import toast from 'react-hot-toast';
 import api from '../services/api';
 import DashboardLayout from '../layout/DashboardLayout';
 
+const renderLocationLink = (branch, defaultText = "No address provided") => {
+    if (!branch) return defaultText;
+    const loc = (branch.location || "").trim();
+    const addr = (branch.address || "").trim();
+    
+    const isUrl = (str) => {
+        if (!str) return false;
+        const s = str.toLowerCase();
+        return s.startsWith("http://") || 
+               s.startsWith("https://") || 
+               s.startsWith("www.") ||
+               s.includes("google.com/maps") ||
+               s.includes("maps.google") ||
+               s.includes("maps.app.goo.gl");
+    };
+    
+    const getHref = (str) => {
+        if (!str) return "";
+        let s = str.trim();
+        if (s.toLowerCase().startsWith("http://") || s.toLowerCase().startsWith("https://")) {
+            return s;
+        }
+        return `https://${s}`;
+    };
+    
+    // Check if either is a URL
+    let url = "";
+    if (isUrl(loc)) {
+        url = getHref(loc);
+    } else if (isUrl(addr)) {
+        url = getHref(addr);
+    }
+    
+    // Determine display text for location name
+    let locDisplay = "";
+    if (loc && !isUrl(loc)) {
+        locDisplay = loc;
+    }
+    
+    // Determine display text for address
+    let addrDisplay = "";
+    if (addr && !isUrl(addr)) {
+        addrDisplay = addr;
+    }
+    
+    if (url) {
+        return (
+            <div className="flex flex-col">
+                {locDisplay && <span className="font-bold text-gray-800 text-xs uppercase tracking-wider">{locDisplay}</span>}
+                <a 
+                    href={url} 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    className="text-indigo-600 hover:text-indigo-800 underline font-medium text-sm transition-colors mt-0.5 inline-block"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    {addrDisplay || "View on Google Maps"}
+                </a>
+            </div>
+        );
+    }
+    
+    return (
+        <div className="flex flex-col">
+            {locDisplay && <span className="font-bold text-gray-800 text-xs uppercase tracking-wider">{locDisplay}</span>}
+            <span className="font-medium text-gray-600 line-clamp-1">{addrDisplay || defaultText}</span>
+        </div>
+    );
+};
+
 export default function BranchManagement() {
     const { refreshBranches } = useBranch();
     const [localBranches, setLocalBranches] = useState([]);
@@ -24,7 +94,8 @@ export default function BranchManagement() {
         facebook: '',
         instagram: '',
         twitter: '',
-        linkedin: ''
+        linkedin: '',
+        location: ''
     });
 
     const fetchAllBranches = async () => {
@@ -59,7 +130,8 @@ export default function BranchManagement() {
                 facebook: branch.facebook || '',
                 instagram: branch.instagram || '',
                 twitter: branch.twitter || '',
-                linkedin: branch.linkedin || ''
+                linkedin: branch.linkedin || '',
+                location: branch.location || ''
             });
             if (branch.image_url) {
                 setImagePreview(branch.image_url.startsWith('http') ? branch.image_url : `${api.defaults.baseURL.replace('/api', '')}${branch.image_url}`);
@@ -76,7 +148,8 @@ export default function BranchManagement() {
                 facebook: '',
                 instagram: '',
                 twitter: '',
-                linkedin: ''
+                linkedin: '',
+                location: ''
             });
         }
         setIsModalOpen(true);
@@ -221,8 +294,8 @@ export default function BranchManagement() {
 
                             <div className="px-5 pb-5 space-y-3 relative z-10">
                                 <div className="flex items-start gap-3 text-sm text-gray-600">
-                                    <MapPin size={18} className="mt-0.5 shrink-0 text-gray-400" />
-                                    <span className="font-medium line-clamp-1">{branch.address || 'No address provided'}</span>
+                                    <MapPin size={18} className="mt-0.5 shrink-0 text-indigo-500" />
+                                    {renderLocationLink(branch, "No address provided")}
                                 </div>
                                 <div className="flex items-center gap-3 text-sm text-gray-600">
                                     <Phone size={18} className="shrink-0 text-gray-400" />
@@ -306,6 +379,16 @@ export default function BranchManagement() {
                                                     onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
                                                     className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
                                                     placeholder="e.g., BEACH"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Location</label>
+                                                <input
+                                                    type="text"
+                                                    value={formData.location}
+                                                    onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                                                    className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                                                    placeholder="e.g., Varkala"
                                                 />
                                             </div>
                                         </div>

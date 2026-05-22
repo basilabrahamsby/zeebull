@@ -14,6 +14,7 @@ class BranchBase(BaseModel):
     instagram: Optional[str] = None
     twitter: Optional[str] = None
     linkedin: Optional[str] = None
+    location: Optional[str] = None
     is_active: bool = True
 
     @field_validator('email', mode='before')
@@ -40,6 +41,7 @@ class BranchUpdate(BaseModel):
     instagram: Optional[str] = None
     twitter: Optional[str] = None
     linkedin: Optional[str] = None
+    location: Optional[str] = None
     is_active: Optional[bool] = None
 
     @field_validator('email', mode='before')

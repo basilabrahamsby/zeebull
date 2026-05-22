@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback, memo } from "react";
 import localLogo from "./assets/zeebulllogo.png";
 // Lucide React is used for elegant icons
-import { BedDouble, Coffee, ConciergeBell, MapPin, Package, Clock, Users, User, Calendar, Check, ChevronRight, ChevronLeft, ChevronDown, Image as ImageIcon, Star, Quote, ChevronUp, MessageSquare, Send, X, Facebook, Instagram, Linkedin, Twitter, Moon, Sun, Droplet, Menu } from 'lucide-react';
+import { BedDouble, Coffee, ConciergeBell, MapPin, Package, Clock, Users, User, Calendar, Check, ChevronRight, ChevronLeft, ChevronDown, Image as ImageIcon, Star, Quote, ChevronUp, MessageSquare, Send, X, Facebook, Instagram, Linkedin, Twitter, Moon, Sun, Droplet, Menu, Phone, Mail } from 'lucide-react';
 import { SiGooglemaps, SiGhost } from "react-icons/si";
 // Currency formatting utility
 import { formatCurrency } from './utils/currency';
@@ -1062,6 +1062,66 @@ const formatUrl = (url) => {
     return `https://${url}`;
 };
 
+const renderLocationLink = (branch, defaultText = "Exclusive Location") => {
+    if (!branch) return defaultText;
+    const loc = (branch.location || "").trim();
+    const addr = (branch.address || "").trim();
+    
+    const isUrl = (str) => {
+        if (!str) return false;
+        const s = str.toLowerCase();
+        return s.startsWith("http://") || 
+               s.startsWith("https://") || 
+               s.startsWith("www.") ||
+               s.includes("google.com/maps") ||
+               s.includes("maps.google") ||
+               s.includes("maps.app.goo.gl");
+    };
+    
+    const getHref = (str) => {
+        if (!str) return "";
+        let s = str.trim();
+        if (s.toLowerCase().startsWith("http://") || s.toLowerCase().startsWith("https://")) {
+            return s;
+        }
+        return `https://${s}`;
+    };
+    
+    // Check if either is a URL
+    let url = "";
+    if (isUrl(loc)) {
+        url = getHref(loc);
+    } else if (isUrl(addr)) {
+        url = getHref(addr);
+    }
+    
+    // Determine the display text
+    let displayText = "";
+    if (loc && !isUrl(loc)) {
+        displayText = loc;
+    } else if (addr && !isUrl(addr)) {
+        displayText = addr;
+    } else {
+        displayText = "View on Map";
+    }
+    
+    if (url) {
+        return (
+            <a 
+                href={url} 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="hover:text-amber-500 underline transition-colors"
+                onClick={(e) => e.stopPropagation()}
+            >
+                {displayText}
+            </a>
+        );
+    }
+    
+    return displayText || defaultText;
+};
+
 const PropertyPortal = ({ branches, onSelect, theme }) => {
     return (
         <div className={`min-h-screen ${theme.bgPrimary} flex flex-col items-center justify-center p-6 relative overflow-hidden`}>
@@ -1106,7 +1166,7 @@ const PropertyPortal = ({ branches, onSelect, theme }) => {
                                         <h3 className="text-2xl font-display text-neutral-900 group-hover:text-amber-700 transition-colors uppercase tracking-wider">{branch.name}</h3>
                                         <p className="text-sm text-neutral-500 font-body flex items-center gap-2 mt-1">
                                             <SiGooglemaps className="w-3 h-3 text-amber-600" />
-                                            {branch.address || "Exclusive Location"}
+                                            {renderLocationLink(branch, "Exclusive Location")}
                                         </p>
                                     </div>
                                 </div>
@@ -3209,7 +3269,7 @@ export default function App() {
                                                 <h3 className="text-xl md:text-2xl font-display text-white uppercase tracking-widest mb-1 shadow-sm">{branch.name}</h3>
                                                 <div className="flex items-center gap-1.5 text-white/80 text-[10px] md:text-xs font-body mb-3">
                                                     <MapPin className="w-3 h-3 text-amber-400" />
-                                                    <span className="tracking-wide">{branch.address || "Exclusive Destination"}</span>
+                                                    <span className="tracking-wide">{renderLocationLink(branch, "Exclusive Destination")}</span>
                                                 </div>
                                                 <div className="flex items-center gap-2 text-amber-400 text-[9px] uppercase tracking-[0.2em] font-bold opacity-0 group-hover:opacity-100 transform translate-y-3 group-hover:translate-y-0 transition-all duration-500">
                                                     <span>Explore Sanctuary</span>
@@ -5394,8 +5454,24 @@ export default function App() {
                                             </h5>
                                             <div className="flex items-start gap-2 text-gray-500 text-xs leading-relaxed group-hover:text-gray-300 transition-colors">
                                                 <MapPin className="w-3 h-3 mt-0.5 flex-shrink-0 text-amber-500/40" />
-                                                <span>{branch.address || 'Exclusive Property Location'}</span>
+                                                <span>{renderLocationLink(branch, "Exclusive Property Location")}</span>
                                             </div>
+                                            {branch.phone && (
+                                                <div className="flex items-center gap-2 text-gray-500 text-xs leading-relaxed mt-1 group-hover:text-gray-300 transition-colors">
+                                                    <Phone className="w-3 h-3 flex-shrink-0 text-amber-500/40" />
+                                                    <a href={`tel:${branch.phone}`} onClick={(e) => e.stopPropagation()} className="hover:text-amber-500 transition-colors">
+                                                        {branch.phone}
+                                                    </a>
+                                                </div>
+                                            )}
+                                            {branch.email && (
+                                                <div className="flex items-center gap-2 text-gray-500 text-xs leading-relaxed mt-1 group-hover:text-gray-300 transition-colors">
+                                                    <Mail className="w-3 h-3 flex-shrink-0 text-amber-500/40" />
+                                                    <a href={`mailto:${branch.email}`} onClick={(e) => e.stopPropagation()} className="hover:text-amber-500 transition-colors">
+                                                        {branch.email}
+                                                    </a>
+                                                </div>
+                                            )}
                                             <div className="mt-3 flex items-center gap-4 text-[9px] uppercase tracking-widest font-bold text-amber-500/40 opacity-0 group-hover:opacity-100 transition-all transform translate-x-[-10px] group-hover:translate-x-0">
                                                 Visit Destination <ChevronRight className="w-3 h-3" />
                                             </div>

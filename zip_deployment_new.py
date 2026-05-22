@@ -31,6 +31,7 @@ shutil.copy('ResortApp/app/api/booking.py', 'temp_deploy_fix/app/api/booking.py'
 shutil.copy('ResortApp/app/core/aiosell_triggers.py', 'temp_deploy_fix/app/core/aiosell_triggers.py')
 shutil.copy('ResortApp/app/models/room.py', 'temp_deploy_fix/app/models/room.py')
 shutil.copy('ResortApp/app/schemas/room_type.py', 'temp_deploy_fix/app/schemas/room_type.py')
+shutil.copy('ResortApp/app/schemas/checkout.py', 'temp_deploy_fix/app/schemas/checkout.py')
 
 # Include the force sync script at the root of the update
 shutil.copy('ResortApp/force_aiosell_sync.py', 'temp_deploy_fix/force_aiosell_sync.py')
