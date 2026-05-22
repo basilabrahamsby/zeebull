@@ -1,14 +1,14 @@
 {
   "files": {
-    "main.css": "/static/css/main.a59b117b.css",
-    "main.js": "/static/js/main.d6f43930.js",
+    "main.css": "/static/css/main.99308c48.css",
+    "main.js": "/static/js/main.65cd4bc4.js",
     "static/media/zeebulllogo.png": "/static/media/zeebulllogo.0b1ace71bd22eb394651.png",
     "index.html": "/index.html",
-    "main.a59b117b.css.map": "/static/css/main.a59b117b.css.map",
-    "main.d6f43930.js.map": "/static/js/main.d6f43930.js.map"
+    "main.99308c48.css.map": "/static/css/main.99308c48.css.map",
+    "main.65cd4bc4.js.map": "/static/js/main.65cd4bc4.js.map"
   },
   "entrypoints": [
-    "static/css/main.a59b117b.css",
-    "static/js/main.d6f43930.js"
+    "static/css/main.99308c48.css",
+    "static/js/main.65cd4bc4.js"
   ]
 }

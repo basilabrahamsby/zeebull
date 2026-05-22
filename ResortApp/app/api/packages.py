@@ -580,7 +580,7 @@ def get_bookings(
         # We must filter to only include bookings that still have a valid package_id.
         query = db.query(PackageBooking).options(
             joinedload(PackageBooking.package),
-            joinedload(PackageBooking.checkout),
+            joinedload(PackageBooking.checkouts),
             joinedload(PackageBooking.rooms).joinedload(PackageBookingRoom.room),
             joinedload(PackageBooking.payments)
         ).filter(PackageBooking.package_id.is_not(None))
@@ -713,7 +713,7 @@ def get_package_bookings_history(package_id: int, db: Session = Depends(get_db),
     bookings = db.query(PackageBooking).options(
         joinedload(PackageBooking.rooms).joinedload(PackageBookingRoom.room),
         joinedload(PackageBooking.user),
-        joinedload(PackageBooking.checkout),
+        joinedload(PackageBooking.checkouts),
         joinedload(PackageBooking.package).joinedload(Package.images)
     ).filter(PackageBooking.package_id == package_id).order_by(desc(PackageBooking.created_at)).all()
     

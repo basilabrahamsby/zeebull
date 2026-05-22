@@ -1,4 +1,4 @@
-package com.teqmates.orchid.orchid_mobile
+package com.zeebull.owner
 
 import io.flutter.embedding.android.FlutterFragmentActivity
 

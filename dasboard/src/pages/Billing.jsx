@@ -149,6 +149,10 @@ const CheckoutDetailModal = React.memo(({ checkout, onClose, onUpdateSuccess }) 
     doc.text('Guest Name:', 14, 55);
     doc.setFont('helvetica', 'normal');
     doc.text((details.guest_name || 'N/A').toUpperCase(), 45, 55);
+    doc.setFont('helvetica', 'bold');
+    doc.text('PAN Number:', 14, 58);
+    doc.setFont('helvetica', 'normal');
+    doc.text(details.pan_number || 'N/A', 45, 58);
 
     doc.setFont('helvetica', 'bold');
     doc.text('Check-in:', 14, 62);
@@ -386,8 +390,8 @@ const CheckoutDetailModal = React.memo(({ checkout, onClose, onUpdateSuccess }) 
             {/* Basic Information */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <p className="text-sm text-gray-500">Guest Name</p>
-                <p className="font-semibold">{details.guest_name || 'N/A'}</p>
+                <p className="text-sm text-gray-500">PAN Number</p>
+                <p className="font-semibold">{details.pan_number || 'N/A'}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-500">Rooms</p>
@@ -677,6 +681,7 @@ const EditCheckoutModal = ({ checkout, onClose, onSuccess }) => {
     tax_amount: checkout?.tax_amount || 0,
     discount_amount: checkout?.discount_amount || 0,
     grand_total: checkout?.grand_total || 0,
+    pan_number: checkout?.pan_number || "",
     notes: checkout?.notes || "",
     invoice_number: checkout?.invoice_number || ""
   });
@@ -765,6 +770,16 @@ const EditCheckoutModal = ({ checkout, onClose, onSuccess }) => {
               <option value="Bank Transfer">Bank Transfer</option>
               <option value="Split">Split</option>
             </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">PAN Number</label>
+            <input
+              type="text"
+              name="pan_number"
+              value={formData.pan_number}
+              onChange={handleChange}
+              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Invoice Number</label>
@@ -896,6 +911,7 @@ const Billing = () => {
   const [checkoutMode, setCheckoutMode] = useState("multiple");
   const [billData, setBillData] = useState(null);
   const [paymentMethod, setPaymentMethod] = useState("Card");
+  const [panNumber, setPanNumber] = useState("");
   const [discount, setDiscount] = useState(0);
   const [enableLateFee, setEnableLateFee] = useState(true);
   const [lateFeeAmount, setLateFeeAmount] = useState(0);
@@ -1480,6 +1496,7 @@ const Billing = () => {
 
     setLoading(true);
     setBillData(null);
+    setPanNumber("");
     setDiscount(0); // Reset discount when fetching a new bill
     try {
       // Extract actual room number from composite key if needed
@@ -1489,6 +1506,7 @@ const Billing = () => {
         console.log("DEBUG BILL DATA:", res.data);
         console.log("INVENTORY CHARGES:", res.data.charges?.inventory_charges);
         setBillData(res.data);
+        setPanNumber(res.data.pan_number || "");
         setEnableLateFee((res.data.charges?.late_checkout_fee || 0) > 0);
         setLateFeeAmount(res.data.charges?.late_checkout_fee || 0);
         const roomCount = res.data.room_numbers.length;
@@ -1502,6 +1520,7 @@ const Billing = () => {
       const message = typeof errorMsg === 'string' ? errorMsg : (error.message || 'Unknown error');
       showBannerMessage("error", `Error: ${message}`);
       setBillData(null);
+      setPanNumber("");
       console.error("Error fetching bill:", error);
     } finally {
       setLoading(false);
@@ -1545,10 +1564,12 @@ const Billing = () => {
         checkout_mode: checkoutMode,
         enable_late_checkout_fee: enableLateFee,
         custom_late_checkout_fee: enableLateFee ? parseFloat(lateFeeAmount) || 0.0 : 0.0,
+        pan_number: panNumber,
       });
       const roomCount = billData.room_numbers?.length || 1;
       const modeText = checkoutMode === "single" ? "single room" : "all rooms";
       setBillData(null);
+      setPanNumber("");
       setDiscount(0);
       setRoomNumber(""); // Clear input on successful checkout
       setCheckoutMode("multiple"); // Reset to default
@@ -1565,6 +1586,7 @@ const Billing = () => {
           : `This booking or room has already been checked out. ${errorMessage}`;
         showBannerMessage("error", conflictMessage);
         setBillData(null);
+        setPanNumber("");
         setDiscount(0);
         setRoomNumber("");
         // Refresh active rooms list immediately
@@ -1573,6 +1595,7 @@ const Billing = () => {
         // Booking not found - might have been checked out already
         showBannerMessage("error", "Booking not found. It may have already been checked out. Refreshing...");
         setBillData(null);
+        setPanNumber("");
         setRoomNumber("");
         fetchInitialData();
       } else {
@@ -1615,6 +1638,11 @@ const Billing = () => {
     doc.text('Guest Name:', 14, 55);
     doc.setFont('helvetica', 'normal');
     doc.text((billData.guest_name || 'N/A').toUpperCase(), 45, 55);
+
+    doc.setFont('helvetica', 'bold');
+    doc.text('PAN Number:', 14, 58);
+    doc.setFont('helvetica', 'normal');
+    doc.text(panNumber || billData.pan_number || 'N/A', 45, 58);
 
     doc.setFont('helvetica', 'bold');
     doc.text('Check-in:', 14, 62);
@@ -1986,6 +2014,7 @@ const Billing = () => {
                   setRoomNumber("");
                   setCheckoutMode("multiple");
                   setBillData(null);
+                  setPanNumber("");
                   return;
                 }
                 // Use composite key: booking_id-room_number-checkout_mode
@@ -2001,6 +2030,7 @@ const Billing = () => {
                   if (selected) {
                     setCheckoutMode(selected.checkout_mode || mode || "multiple");
                     setBillData(null); // Clear bill data when selection changes
+                    setPanNumber("");
                   }
                 } else {
                   // Fallback for old format (shouldn't happen, but just in case)
@@ -2009,6 +2039,7 @@ const Billing = () => {
                   if (selected) {
                     setCheckoutMode(selected.checkout_mode || "multiple");
                     setBillData(null);
+                    setPanNumber("");
                   }
                 }
               }}
@@ -2388,6 +2419,19 @@ const Billing = () => {
                     <option value="Online">Online</option>
                   </select>
                 </div>
+              </div>
+
+              <div className="mb-4">
+                <label htmlFor="pan-number" className="block text-gray-700 font-medium mb-2">Guest PAN Number</label>
+                <input
+                  type="text"
+                  id="pan-number"
+                  value={panNumber}
+                  onChange={(e) => setPanNumber(e.target.value.toUpperCase())}
+                  className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Enter Guest PAN (e.g. ABCDE1234F) - Optional"
+                  maxLength={10}
+                />
               </div>
               <div className="space-y-3">
                 <div className="flex space-x-2">

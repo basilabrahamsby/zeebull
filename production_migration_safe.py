@@ -57,6 +57,27 @@ def run_safe_migration():
                 print("Adding column price_offset...")
                 cur.execute("ALTER TABLE rate_plans ADD COLUMN price_offset FLOAT DEFAULT 0.0;")
 
+        # Check for pan_number in checkouts
+        print("Checking for checkouts.pan_number...")
+        cur.execute("SELECT COLUMN_NAME FROM information_schema.columns WHERE table_name='checkouts' AND column_name='pan_number';")
+        if not cur.fetchone():
+            print("Adding column pan_number to checkouts...")
+            cur.execute("ALTER TABLE checkouts ADD COLUMN pan_number VARCHAR;")
+
+        # Check for pan_number in bookings
+        print("Checking for bookings.pan_number...")
+        cur.execute("SELECT COLUMN_NAME FROM information_schema.columns WHERE table_name='bookings' AND column_name='pan_number';")
+        if not cur.fetchone():
+            print("Adding column pan_number to bookings...")
+            cur.execute("ALTER TABLE bookings ADD COLUMN pan_number VARCHAR;")
+
+        # Check for location column in branches
+        print("Checking for branches.location...")
+        cur.execute("SELECT COLUMN_NAME FROM information_schema.columns WHERE table_name='branches' AND column_name='location';")
+        if not cur.fetchone():
+            print("Adding column location to branches...")
+            cur.execute("ALTER TABLE branches ADD COLUMN location VARCHAR;")
+
         conn.commit()
         print("\nSUCCESS: Production database is now up to date.")
         cur.close()

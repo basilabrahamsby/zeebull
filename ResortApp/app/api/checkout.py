@@ -1888,6 +1888,12 @@ def update_checkout(
     update_data = checkout_update.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(checkout, key, value)
+        
+    # Sync PAN number back to associated booking if updated
+    if "pan_number" in update_data and update_data["pan_number"] and checkout.booking_id:
+        booking = db.query(Booking).filter(Booking.id == checkout.booking_id).first()
+        if booking:
+            booking.pan_number = update_data["pan_number"]
     
     # Clear old PDF path as it's now invalid
     checkout.invoice_pdf_path = None
@@ -2351,11 +2357,11 @@ def get_checkout_details(checkout_id: int, db: Session = Depends(get_db), curren
         "food_orders": food_orders,
         "services": services,
         "booking_details": booking_details,
-        "booking_details": booking_details,
         "bill_details": bill_details,
         "invoice_pdf_path": checkout.invoice_pdf_path,
         "advance_deposit": checkout.advance_deposit,
-        "refund_amount": checkout.refund_amount
+        "refund_amount": checkout.refund_amount,
+        "pan_number": checkout.pan_number or (booking.pan_number if ('booking' in locals() and booking) else None)
     }
 
 @router.get("/active-rooms", response_model=List[dict])
@@ -2413,25 +2419,26 @@ def get_active_rooms(db: Session = Depends(get_db), current_user: User = Depends
         
         # Process regular bookings
         for booking in active_bookings:
-            # CRITICAL FIX: If booking is checked-in but rooms are "Available", repair the room status
-            # This handles cases where room status was incorrectly set or changed
-            # REFINED: Check for existing checkouts first to avoid repairing genuinely checked-out rooms
+            # Build set of rooms that have a completed checkout record for this booking.
+            # Rooms in this set are legitimately checked out (single-room partial checkout).
             booking_checkouts = db.query(Checkout).filter(Checkout.booking_id == booking.id).all()
             checked_out_rooms = set()
             for c in booking_checkouts:
                 if c.room_number:
+                    # Each single-room checkout stores exactly one room_number.
+                    # Split by comma to handle legacy multi-room records too.
                     checked_out_rooms.update([r.strip() for r in c.room_number.split(',')])
 
             for link in booking.booking_rooms:
                 if link.room and link.room.status and link.room.status.lower() == "available":
-                    # Check if room is effectively checked out
-                    if link.room.number in checked_out_rooms:
-                        continue # Do not repair, it is correctly checked out
+                    room_num = str(link.room.number).strip() if link.room.number else None
+                    # If this room has a checkout record, it was legitimately checked out. Keep it Available.
+                    if room_num and room_num in checked_out_rooms:
+                        continue  # Do not repair - this room is correctly checked out
                     
-                    # Booking is checked-in but room shows as Available - this is inconsistent
-                    # Repair: Set room status to "Checked-in" to match booking status
-                    # print(f"[DEBUG active-rooms] Repairing room {link.room.number}: status was 'Available', setting to 'Checked-in' (booking {booking.id} is checked-in)")
-
+                    # Room is Available but has NO checkout record AND booking is still checked-in.
+                    # This is a genuinely inconsistent state - repair it.
+                    print(f"[REPAIR active-rooms] Room {room_num}: resetting to 'Checked-in' (no checkout record, booking {booking.id} still active)")
                     link.room.status = "Checked-in"
                     db.add(link.room)
             
@@ -2476,8 +2483,7 @@ def get_active_rooms(db: Session = Depends(get_db), current_user: User = Depends
         
         # Process package bookings
         for pkg_booking in active_package_bookings:
-            # CRITICAL FIX: If booking is checked-in but rooms are "Available", repair the room status
-            # REFINED: Check for existing checkouts first
+            # Build set of rooms that have a completed checkout record for this package booking.
             pkg_checkouts = db.query(Checkout).filter(Checkout.package_booking_id == pkg_booking.id).all()
             pkg_checked_out_rooms = set()
             for c in pkg_checkouts:
@@ -2486,14 +2492,14 @@ def get_active_rooms(db: Session = Depends(get_db), current_user: User = Depends
 
             for link in pkg_booking.rooms:
                 if link.room and link.room.status and link.room.status.lower() == "available":
-                    # Check if room is effectively checked out
-                    if link.room.number in pkg_checked_out_rooms:
-                        continue # Do not repair, it is correctly checked out
+                    room_num = str(link.room.number).strip() if link.room.number else None
+                    # If this room has a checkout record, it was legitimately checked out. Keep it Available.
+                    if room_num and room_num in pkg_checked_out_rooms:
+                        continue  # Do not repair - this room is correctly checked out
 
-                    # Booking is checked-in but room shows as Available - this is inconsistent
-                    # Repair: Set room status to "Checked-in" to match booking status
-                    # print(f"[DEBUG active-rooms] Repairing room {link.room.number}: status was 'Available', setting to 'Checked-in' (package booking {pkg_booking.id} is checked-in)")
-
+                    # Room is Available but has NO checkout record AND package booking is still checked-in.
+                    # This is a genuinely inconsistent state - repair it.
+                    print(f"[REPAIR active-rooms] Room {room_num}: resetting to 'Checked-in' (no checkout record, pkg_booking {pkg_booking.id} still active)")
                     link.room.status = "Checked-in"
                     db.add(link.room)
             
@@ -4246,7 +4252,9 @@ def get_bill_for_booking(room_number: str, checkout_mode: str = "multiple", db: 
             stay_nights=bill_data["stay_nights"],
             check_in=bill_data["booking"].check_in,
             check_out=effective_checkout,  # Use effective checkout date (today if late, booking.check_out if early)
-            charges=bill_data["charges"]
+            charges=bill_data["charges"],
+            pan_number=getattr(bill_data["booking"], "pan_number", None),
+            booking_id=bill_data["booking"].id
         )
     else:
         bill_data = _calculate_bill_for_entire_booking(db, room_number, branch_id)
@@ -4258,7 +4266,9 @@ def get_bill_for_booking(room_number: str, checkout_mode: str = "multiple", db: 
             stay_nights=bill_data["stay_nights"],
             check_in=bill_data["booking"].check_in,
             check_out=effective_checkout,  # Use effective checkout date (today if late, booking.check_out if early)
-            charges=bill_data["charges"]
+            charges=bill_data["charges"],
+            pan_number=getattr(bill_data["booking"], "pan_number", None),
+            booking_id=bill_data["booking"].id
         )
 
 
@@ -4374,15 +4384,18 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, backgro
             func.date(Checkout.checkout_date) == today
         ).first()
         
-        # Also check for any checkout for this booking (not just today)
+        # SINGLE ROOM MODE: Only check for a checkout specific to THIS room, not the whole booking.
+        # Other rooms in the same booking may have their own valid checkout records already.
         existing_booking_checkout = None
         if not is_package:
             existing_booking_checkout = db.query(Checkout).filter(
-                Checkout.booking_id == booking.id
+                Checkout.booking_id == booking.id,
+                func.trim(Checkout.room_number) == func.trim(room_number)  # Scope to THIS room only
             ).first()
         else:
             existing_booking_checkout = db.query(Checkout).filter(
-                Checkout.package_booking_id == booking.id
+                Checkout.package_booking_id == booking.id,
+                func.trim(Checkout.room_number) == func.trim(room_number)  # Scope to THIS room only
             ).first()
         
         # If checkout exists, verify the room status matches
@@ -4564,20 +4577,27 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, backgro
                     if attempt == max_retries - 1:
                         invoice_number = None
             
-            # 7. Check if there's already a checkout with this booking_id (unique constraint)
-            # This MUST be checked BEFORE creating the checkout to avoid unique constraint violation
-            # Also check for orphaned checkouts and clean them up
+            # 7. Check if there's already a checkout for THIS SPECIFIC ROOM in single mode.
+            # IMPORTANT: In single-room checkout mode, multiple rooms in the same booking
+            # each get their own checkout record. We must NOT delete a prior room's checkout
+            # record when a subsequent room is being checked out.
             existing_booking_checkout = None
             if not is_package:
-                existing_booking_checkout = db.query(Checkout).filter(Checkout.booking_id == booking.id).first()
+                existing_booking_checkout = db.query(Checkout).filter(
+                    Checkout.booking_id == booking.id,
+                    func.trim(Checkout.room_number) == func.trim(room_number)  # Scope to THIS room only
+                ).first()
             else:
-                existing_booking_checkout = db.query(Checkout).filter(Checkout.package_booking_id == booking.id).first()
+                existing_booking_checkout = db.query(Checkout).filter(
+                    Checkout.package_booking_id == booking.id,
+                    func.trim(Checkout.room_number) == func.trim(room_number)  # Scope to THIS room only
+                ).first()
             
-            # If checkout already exists, check if it's orphaned (room still checked-in)
+            # If checkout already exists for THIS room, check if it's orphaned (room still checked-in)
             if existing_booking_checkout:
                 # Check room status - if room is still checked-in, this is an orphaned checkout
                 if room.status != "Available":
-                    print(f"[CLEANUP] Found orphaned checkout {existing_booking_checkout.id} for booking {booking.id} (room {room_number} status: {room.status}). Deleting it.")
+                    print(f"[CLEANUP] Found orphaned checkout {existing_booking_checkout.id} for room {room_number} in booking {booking.id}. Deleting it.")
                     try:
                         # Also delete related records first to avoid foreign key constraints
                         # Delete checkout verifications
@@ -4604,7 +4624,7 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, backgro
                         )
                 else:
                     # Room is available, checkout is valid - return it
-                    print(f"[INFO] Valid checkout already exists for booking {booking.id} (ID: {existing_booking_checkout.id}), returning it")
+                    print(f"[INFO] Valid checkout already exists for room {room_number} in booking {booking.id} (ID: {existing_booking_checkout.id}), returning it")
                     return CheckoutSuccess(
                         checkout_id=existing_booking_checkout.id,
                         grand_total=existing_booking_checkout.grand_total,
@@ -4671,8 +4691,12 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, backgro
                 is_b2b=request.is_b2b or False,
                 invoice_number=invoice_number,
                 bill_details=bill_details_data,  # Store the detailed bill
-                branch_id=effective_branch_id
+                branch_id=effective_branch_id,
+                pan_number=request.pan_number
             )
+            # Sync PAN number back to associated booking if provided
+            if not is_package and booking and request.pan_number:
+                booking.pan_number = request.pan_number
             # Add checkout to session first, then set invoice_number if needed
             db.add(new_checkout)
             db.flush()  # Flush to get checkout ID
@@ -5391,8 +5415,12 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, backgro
                 is_b2b=request.is_b2b or False,
                 invoice_number=invoice_number,
                 bill_details=bill_details_data,
-                branch_id=effective_branch_id
+                branch_id=effective_branch_id,
+                pan_number=request.pan_number
             )
+            # Sync PAN number back to associated booking if provided
+            if not is_package and booking and request.pan_number:
+                booking.pan_number = request.pan_number
             # If invoice_number wasn't generated, create one based on checkout ID after flush
             if not invoice_number:
                 db.add(new_checkout)

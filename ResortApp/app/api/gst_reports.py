@@ -1879,7 +1879,7 @@ def get_advance_receipt_report(
         
         # Regular bookings
         for b in bookings:
-            checkout = b.checkout if hasattr(b, 'checkout') else None
+            checkout = (b.checkouts[-1] if b.checkouts else None) if hasattr(b, 'checkouts') else None
             invoice_raised = checkout is not None
             
             # Only include unadjusted advances (invoice not raised)
@@ -1942,7 +1942,7 @@ def get_advance_receipt_report(
 
         # Package bookings
         for pb in package_bookings:
-            checkout = pb.checkout if hasattr(pb, 'checkout') else None
+            checkout = (pb.checkouts[-1] if pb.checkouts else None) if hasattr(pb, 'checkouts') else None
             invoice_raised = checkout is not None
             
             if not invoice_raised:

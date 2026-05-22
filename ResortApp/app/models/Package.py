@@ -83,7 +83,8 @@ class PackageBooking(Base):
     package = relationship("Package", back_populates="bookings")
     user = relationship("User", back_populates="package_bookings")
     
-    checkout = relationship("Checkout", back_populates="package_booking", uselist=False)
+    # One package booking can have multiple checkout records (one per room for single-room checkouts)
+    checkouts = relationship("Checkout", back_populates="package_booking", uselist=True)
 
     rooms = relationship(
         "PackageBookingRoom",
