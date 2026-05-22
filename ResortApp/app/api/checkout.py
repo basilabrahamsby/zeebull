@@ -3470,11 +3470,6 @@ def _calculate_bill_for_entire_booking(db: Session, room_number: str, branch_id:
     Core logic: Finds an entire booking from a single room number and calculates the total bill
     for all associated rooms and services.
     """
-    # 1. Find the initial room to identify the parent booking
-    initial_room = db.query(Room).filter(Room.number == room_number, Room.branch_id == branch_id).first()
-    if not initial_room:
-        raise HTTPException(status_code=404, detail="Initial room not found.")
-
     # 1. Find the initial room to get the booking context
     q = db.query(Room).filter(Room.number == room_number)
     if branch_id is not None:
