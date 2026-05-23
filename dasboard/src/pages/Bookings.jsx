@@ -81,6 +81,28 @@ KPI_Card.displayName = "KPI_Card";
 
 // Utility moved to utils/imageUtils.js
 
+export const determineBookingStatus = (booking) => {
+  if (!booking) return "pending";
+  const rawStatus = booking.status || "pending";
+  const normalized = rawStatus.toLowerCase().trim().replace(/[-_]/g, "");
+  if (normalized === "checkedin") {
+    const rooms = booking.rooms || [];
+    if (rooms.length > 0) {
+      const checkedOutRooms = rooms.filter(room => {
+        const r = booking.is_package ? room?.room : room;
+        const statusStr = r?.status?.toLowerCase().trim();
+        return statusStr === "available";
+      });
+      if (checkedOutRooms.length === rooms.length) {
+        return "checked-out";
+      } else if (checkedOutRooms.length > 0) {
+        return "partially-checked-out";
+      }
+    }
+  }
+  return rawStatus;
+};
+
 const BookingStatusBadge = React.memo(({ status, isPackage, packageName, isConfirmed, advanceDeposit }) => {
   const normalizedStatus = status?.toLowerCase().trim().replace(/[-_]/g, "-") || "pending";
 
@@ -102,6 +124,12 @@ const BookingStatusBadge = React.memo(({ status, isPackage, packageName, isConfi
       icon: Zap,
       className: "bg-indigo-50 text-indigo-600 border-indigo-100",
       dot: "bg-indigo-500"
+    },
+    "partially-checked-out": {
+      label: "Partially Checked Out",
+      icon: LogOut,
+      className: "bg-fuchsia-50 text-fuchsia-600 border-fuchsia-100",
+      dot: "bg-fuchsia-500"
     },
     "checked-out": {
       label: "Checked Out",
@@ -207,9 +235,41 @@ const BookingDetailsModal = ({
         ? `${booking.room_type_name}${booking.rate_plan_code ? ` (${booking.rate_plan_code})` : ""}`
         : "-";
 
+  const roomBadges = booking.rooms && booking.rooms.length > 0 ? (
+    <div className="flex flex-wrap gap-2 mt-1.5">
+      {booking.rooms.map((room, idx) => {
+        let r = booking.is_package ? room?.room : room;
+        if (!r?.number && room?.room_id && roomIdToRoom && roomIdToRoom[room.room_id]) {
+          r = roomIdToRoom[room.room_id];
+        }
+        const isRoomCheckedOut = r?.status?.toLowerCase().trim() === "available";
+        const roomNumber = r?.number || "-";
+        const roomType = r?.type || "Room";
+        return (
+          <span
+            key={idx}
+            className={`px-3 py-1.5 border rounded-xl text-[10px] font-bold shadow-sm transition-all duration-300 ${
+              isRoomCheckedOut
+                ? "bg-slate-100 text-slate-400 border-slate-200 line-through opacity-75 hover:opacity-100"
+                : "bg-white text-slate-600 border-slate-100 hover:border-indigo-100"
+            }`}
+            title={isRoomCheckedOut ? `Room ${roomNumber} Checked Out` : `Room ${roomNumber} Active`}
+          >
+            {roomNumber} <span className="text-[8px] font-normal text-slate-400">({roomType})</span>
+          </span>
+        );
+      })}
+    </div>
+  ) : booking.room_type_name ? (
+    <span className="inline-block px-3 py-1.5 bg-slate-50 border border-slate-100 rounded-xl text-[10px] font-bold text-slate-600">
+      {booking.room_type_name}{booking.rate_plan_code ? ` (${booking.rate_plan_code})` : ""}
+    </span>
+  ) : "-";
+
   const isCheckedIn =
     booking.status &&
-    booking.status.toLowerCase().replace(/[-_]/g, "") === "checkedin";
+    (booking.status.toLowerCase().replace(/[-_]/g, "") === "checkedin" ||
+     determineBookingStatus(booking) === "partially-checked-out");
 
   return (
     <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-[150] p-4 sm:p-6 overflow-y-auto">
@@ -231,7 +291,7 @@ const BookingDetailsModal = ({
               <h2 className="text-xl sm:text-2xl font-bold text-slate-800 tracking-tight leading-none mb-1">Booking Details</h2>
               <div className="flex items-center gap-2">
                 <BookingStatusBadge
-                  status={booking.status || "Pending"}
+                  status={determineBookingStatus(booking)}
                   isPackage={booking.is_package}
                   packageName={booking.package?.title}
                   isConfirmed={booking.is_confirmed}
@@ -293,7 +353,7 @@ const BookingDetailsModal = ({
               </div>
               <div className="bg-slate-50/80 rounded-2xl p-4 border border-slate-100">
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Units (Manifest)</p>
-                <p className="font-bold text-slate-700 leading-tight">{roomInfo}</p>
+                {roomBadges}
               </div>
               <div className="bg-slate-50/80 rounded-2xl p-4 border border-slate-100">
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Quantity (Rooms)</p>
@@ -3146,6 +3206,7 @@ BookingStatusChart.displayName = "BookingStatusChart";
 const BookingFormModal = ({
   isOpen, onClose, bookingTab, setBookingTab,
   formData, handleChange, handleRoomTypeChange, handleSubmit,
+  handleAddRoomType, handleRemoveRoomType,
   isSubmitting, isLoading, roomTypes, roomTypeObjects, filteredRooms, handleRoomNumberToggle,
   packageBookingForm, handlePackageBookingChange, handlePackageBookingSubmit,
   packages, packageRooms, handlePackageRoomSelect,
@@ -3153,6 +3214,54 @@ const BookingFormModal = ({
   showBannerMessage
 }) => {
   if (!isOpen) return null;
+
+  const selectedItems = formData.selectedRoomTypes || [];
+
+  const nights = React.useMemo(() => {
+    if (!formData.checkIn || !formData.checkOut) return 0;
+    const from = new Date(formData.checkIn);
+    const to = new Date(formData.checkOut);
+    const diffTime = to.getTime() - from.getTime();
+    return Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+  }, [formData.checkIn, formData.checkOut]);
+
+  const currentUnsavedItem = React.useMemo(() => {
+    if (!formData.room_type_id) return null;
+    const selectedType = roomTypeObjects.find(rt => rt.id === Number(formData.room_type_id));
+    if (!selectedType) return null;
+
+    const customRate = formData.custom_room_rate !== "" ? parseFloat(formData.custom_room_rate) : (selectedType.base_price || 0.0);
+    const numRooms = parseInt(formData.num_rooms) || 1;
+
+    return {
+      room_type_id: selectedType.id,
+      room_type_name: selectedType.name,
+      custom_room_rate: customRate,
+      num_rooms: numRooms,
+      adults: parseInt(formData.adults) || 1,
+      children: parseInt(formData.children) || 0,
+      isUnsavedPreview: true
+    };
+  }, [formData.room_type_id, formData.custom_room_rate, formData.num_rooms, formData.adults, formData.children, roomTypeObjects]);
+
+  const allBookingItems = React.useMemo(() => {
+    const list = [...selectedItems];
+    if (currentUnsavedItem) {
+      list.push(currentUnsavedItem);
+    }
+    return list;
+  }, [selectedItems, currentUnsavedItem]);
+
+  const grandTotal = React.useMemo(() => {
+    return allBookingItems.reduce((sum, item) => {
+      const rate = item.custom_room_rate || 0;
+      return sum + (rate * item.num_rooms * nights);
+    }, 0);
+  }, [allBookingItems, nights]);
+
+  const totalRoomsCount = React.useMemo(() => {
+    return allBookingItems.reduce((sum, item) => sum + (item.num_rooms || 1), 0);
+  }, [allBookingItems]);
 
   return (
     <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-[100] p-2 sm:p-4 overflow-y-auto overflow-x-hidden">
@@ -3371,11 +3480,11 @@ const BookingFormModal = ({
 
                 {/* Right Column: Room Selection & Capacity */}
                 <div className="lg:col-span-5 flex flex-col gap-6">
-                  <div className="bg-slate-50/50 rounded-[1.5rem] p-6 border border-slate-200/60 flex-1 flex flex-col">
+                  {/* Configuration Input Card */}
+                  <div className="bg-slate-50/50 rounded-[1.5rem] p-6 border border-slate-200/60 flex flex-col">
                     <div className="space-y-4 flex-1">
                       <div className="flex items-center justify-between">
-                        <h3 className="text-base font-bold text-slate-800 tracking-tight">Configuration</h3>
-
+                        <h3 className="text-base font-bold text-slate-800 tracking-tight font-sans">Configuration</h3>
                       </div>
 
                       <div className="space-y-4">
@@ -3386,7 +3495,7 @@ const BookingFormModal = ({
                             value={formData.room_type_id || ""}
                             onChange={handleRoomTypeChange}
                             className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all outline-none appearance-none font-bold text-slate-700 shadow-sm text-sm"
-                            required
+                            required={!formData.selectedRoomTypes || formData.selectedRoomTypes.length === 0}
                           >
                             <option value="">Choose Category</option>
                             {roomTypeObjects.map((type) => (
@@ -3448,9 +3557,107 @@ const BookingFormModal = ({
                         </div>
                       </div>
 
-                      {/* Removed Room Selection for Soft Allocation flow */}
+                      {formData.room_type_id && (
+                        <button
+                          type="button"
+                          onClick={handleAddRoomType}
+                          className="w-full mt-4 py-2.5 px-4 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-extrabold rounded-xl transition-all duration-300 flex items-center justify-center gap-2 border border-indigo-100/50 hover:border-indigo-200 active:scale-95 text-xs uppercase tracking-wider"
+                        >
+                          <Plus className="w-4 h-4" />
+                          Add Room Type
+                        </button>
+                      )}
                     </div>
                   </div>
+
+                  {/* Selections / Booking Summary Card */}
+                  {allBookingItems.length > 0 && (
+                    <div className="bg-slate-50/50 rounded-[1.5rem] p-6 border border-slate-200/60 flex flex-col gap-4">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-bold text-slate-800 tracking-tight font-sans">Selected Categories</h3>
+                        <span className="px-2.5 py-1 bg-indigo-50 text-indigo-700 text-[10px] font-bold rounded-lg uppercase tracking-wide">
+                          {totalRoomsCount} {totalRoomsCount === 1 ? "Room" : "Rooms"} • {nights} {nights === 1 ? "Night" : "Nights"}
+                        </span>
+                      </div>
+                      
+                      <div className="space-y-3 max-h-[220px] overflow-y-auto pr-1 custom-scrollbar">
+                        {selectedItems.map((item) => (
+                          <div key={item.id} className="bg-white p-3.5 rounded-xl border border-slate-100 shadow-sm flex items-center justify-between gap-3 group/item hover:border-slate-200 transition-all duration-300">
+                            <div className="flex-1 min-w-0">
+                              <p className="font-bold text-slate-700 text-sm truncate flex items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
+                                {item.room_type_name}
+                              </p>
+                              <p className="text-[10px] text-slate-400 font-semibold mt-0.5">
+                                {item.num_rooms} {item.num_rooms === 1 ? "Room" : "Rooms"} • {item.adults} Adults {item.children > 0 ? `, ${item.children} Children` : ""}
+                              </p>
+                              <p className="text-[10px] text-indigo-600 font-bold mt-1">
+                                {formatCurrency ? formatCurrency(item.custom_room_rate) : '₹' + item.custom_room_rate.toFixed(2)} / night per room
+                              </p>
+                            </div>
+                            <div className="text-right shrink-0 flex items-center gap-3">
+                              <div>
+                                <p className="font-extrabold text-slate-800 text-sm">
+                                  {formatCurrency ? formatCurrency(item.custom_room_rate * item.num_rooms * nights) : '₹' + (item.custom_room_rate * item.num_rooms * nights).toFixed(2)}
+                                </p>
+                                <p className="text-[8px] text-slate-400 font-bold uppercase tracking-wider">Subtotal</p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveRoomType(item.id)}
+                                className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-500 hover:text-rose-600 rounded-lg transition-colors border border-rose-100"
+                                title="Remove room type"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+
+                        {currentUnsavedItem && (
+                          <div className="bg-amber-50/40 p-3.5 rounded-xl border border-amber-100/70 border-dashed shadow-sm flex items-center justify-between gap-3 relative overflow-hidden">
+                            <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/5 rounded-full blur-xl pointer-events-none"></div>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-bold text-amber-800 text-sm truncate flex items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                                {currentUnsavedItem.room_type_name}
+                              </p>
+                              <p className="text-[10px] text-amber-600 font-semibold mt-0.5">
+                                {currentUnsavedItem.num_rooms} {currentUnsavedItem.num_rooms === 1 ? "Room" : "Rooms"} • {currentUnsavedItem.adults} Guests (Configuring)
+                              </p>
+                              <p className="text-[10px] text-amber-700 font-bold mt-1">
+                                {formatCurrency ? formatCurrency(currentUnsavedItem.custom_room_rate) : '₹' + currentUnsavedItem.custom_room_rate.toFixed(2)} / night per room
+                              </p>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <p className="font-extrabold text-amber-800 text-sm">
+                                {formatCurrency ? formatCurrency(currentUnsavedItem.custom_room_rate * currentUnsavedItem.num_rooms * nights) : '₹' + (currentUnsavedItem.custom_room_rate * currentUnsavedItem.num_rooms * nights).toFixed(2)}
+                              </p>
+                              <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 text-[8px] font-bold rounded uppercase tracking-wider">Unsaved Preview</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Grand Total Glassmorphic Card */}
+                      <div className="mt-2 bg-gradient-to-br from-slate-900 to-indigo-950 p-5 rounded-2xl text-white shadow-xl relative overflow-hidden border border-slate-800">
+                        <div className="absolute -right-10 -bottom-10 w-32 h-32 bg-indigo-500/20 rounded-full blur-2xl pointer-events-none"></div>
+                        <div className="absolute -left-10 -top-10 w-32 h-32 bg-rose-500/15 rounded-full blur-2xl pointer-events-none"></div>
+                        <div className="flex justify-between items-center relative z-10">
+                          <div>
+                            <p className="text-[10px] text-slate-300 font-bold uppercase tracking-widest leading-none mb-1">Grand Total Amount</p>
+                            <p className="text-[10px] text-indigo-200 font-semibold">Includes {totalRoomsCount} rooms for {nights} nights</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-2xl font-extrabold tracking-tight text-white leading-none mb-1">
+                              {formatCurrency ? formatCurrency(grandTotal) : '₹' + grandTotal.toLocaleString()}
+                            </p>
+                            <p className="text-[9px] text-slate-300 font-bold uppercase tracking-wider leading-none">Net Payable</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Submit Action Bar */}
@@ -3464,7 +3671,7 @@ const BookingFormModal = ({
                   </button>
                   <button
                     type="submit"
-                    disabled={isSubmitting || isLoading || (!formData.room_type_id && formData.roomNumbers.length === 0)}
+                    disabled={isSubmitting || isLoading || (!formData.room_type_id && formData.roomNumbers.length === 0 && (!formData.selectedRoomTypes || formData.selectedRoomTypes.length === 0))}
                     className="group px-8 py-3 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-xl font-bold uppercase tracking-wide text-[10px] hover:shadow-xl hover:shadow-indigo-500/30 transition-all duration-500 flex items-center justify-center gap-2 active:scale-95 disabled:opacity-30 disabled:grayscale disabled:cursor-not-allowed"
                   >
                     {isSubmitting ? (
@@ -3679,6 +3886,7 @@ const Bookings = () => {
     num_rooms: 1, // Added for Soft Allocation multiplier
     source: "Admin", // Added for source tracking
     custom_room_rate: "",
+    selectedRoomTypes: [], // NEW: List of chosen room types
   });
   const today = getCurrentDateIST();
 
@@ -3761,6 +3969,7 @@ const Bookings = () => {
       num_rooms: 1,
       source: "Admin",
       custom_room_rate: "",
+      selectedRoomTypes: [], // Initialize selectedRoomTypes
     });
 
     setPackageBookingForm({
@@ -4904,6 +5113,90 @@ const Bookings = () => {
     }));
   };
 
+  // NEW: Add selected room type to current booking selection
+  const handleAddRoomType = () => {
+    if (!formData.room_type_id) {
+      showBannerMessage("error", "Please select a room category first.");
+      return;
+    }
+
+    const selectedType = roomTypeObjects.find(rt => rt.id === Number(formData.room_type_id));
+    if (!selectedType) {
+      showBannerMessage("error", "Invalid room category selected.");
+      return;
+    }
+
+    const customRate = formData.custom_room_rate !== "" ? parseFloat(formData.custom_room_rate) : (selectedType.base_price || 0.0);
+    const numRooms = parseInt(formData.num_rooms) || 1;
+    const adults = parseInt(formData.adults) || 1;
+    const children = parseInt(formData.children) || 0;
+
+    const newItem = {
+      id: Date.now(), // unique timestamp ID
+      room_type_id: selectedType.id,
+      room_type_name: selectedType.name,
+      custom_room_rate: customRate,
+      num_rooms: numRooms,
+      adults: adults,
+      children: children,
+      roomNumbers: formData.roomNumbers || []
+    };
+
+    setFormData((prev) => ({
+      ...prev,
+      selectedRoomTypes: [...(prev.selectedRoomTypes || []), newItem],
+      // Reset only configuration inputs so they can add another
+      room_type_id: "",
+      custom_room_rate: "",
+      num_rooms: 1,
+      adults: 1,
+      children: 0,
+      roomNumbers: []
+    }));
+  };
+
+  // NEW: Remove selected room type from booking selection
+  const handleRemoveRoomType = (itemId) => {
+    setFormData((prev) => ({
+      ...prev,
+      selectedRoomTypes: (prev.selectedRoomTypes || []).filter(item => item.id !== itemId)
+    }));
+  };
+
+  // NEW: Automatically query dynamic price when dates or room category changes
+  useEffect(() => {
+    const fetchDynamicPrice = async () => {
+      if (formData.room_type_id && formData.checkIn && formData.checkOut) {
+        try {
+          const selectedType = roomTypeObjects.find(rt => rt.id === Number(formData.room_type_id));
+          const response = await API.post("/bookings/calculate-price", {
+            room_type_id: Number(formData.room_type_id),
+            check_in: formData.checkIn,
+            check_out: formData.checkOut,
+            room_count: 1
+          });
+          const totalVal = response.data?.total_amount || 0.0;
+          
+          const from = new Date(formData.checkIn);
+          const to = new Date(formData.checkOut);
+          const diffTime = to.getTime() - from.getTime();
+          const nights = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+          const dailyUnitRate = totalVal / nights;
+
+          setFormData((prev) => {
+            if (prev.custom_room_rate === "" || Number(prev.custom_room_rate) === selectedType?.base_price) {
+              return { ...prev, custom_room_rate: dailyUnitRate.toFixed(2) };
+            }
+            return prev;
+          });
+        } catch (err) {
+          console.error("Error fetching dynamic price:", err);
+        }
+      }
+    };
+    fetchDynamicPrice();
+  }, [formData.room_type_id, formData.checkIn, formData.checkOut, roomTypeObjects]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -4933,95 +5226,135 @@ const Bookings = () => {
         }
       }
 
-      // Updated validation: Either roomNumbers OR room_type_id must be present
-      if (formData.roomNumbers.length === 0 && !formData.room_type_id) {
-        showBannerMessage("error", "Please select at least one room or a room category.");
-        setIsSubmitting(false);
-        return;
+      // Construct list of items to book. Auto-include the active unsaved preview configuration if not already added.
+      let itemsToBook = [...(formData.selectedRoomTypes || [])];
+      
+      if (formData.room_type_id) {
+        const isAlreadyAdded = itemsToBook.some(item => String(item.room_type_id) === String(formData.room_type_id));
+        if (!isAlreadyAdded) {
+          itemsToBook.push({
+            room_type_id: parseInt(formData.room_type_id),
+            custom_room_rate: formData.custom_room_rate ? parseFloat(formData.custom_room_rate) : null,
+            num_rooms: parseInt(formData.num_rooms) || 1,
+            adults: parseInt(formData.adults) || 1,
+            children: parseInt(formData.children) || 0,
+            roomNumbers: formData.roomNumbers || []
+          });
+        }
       }
 
-      const adultsRequested = parseInt(formData.adults);
-      const childrenRequested = parseInt(formData.children);
-
-      // Simple validation for room numbers if selected
-      const roomIds = formData.roomNumbers
-        .map((roomNumber) => {
-          const room = rooms.find((r) => r.number === roomNumber);
-          return room ? room.id : null;
-        })
-        .filter((id) => id !== null);
-
-      // --- CONFLICT DETECTION (Only for specific room assignments) ---
-      if (roomIds.length > 0) {
-        const requestedCheckIn = new Date(formData.checkIn);
-        const requestedCheckOut = new Date(formData.checkOut);
-
-        const conflicts = [];
-        roomIds.forEach((roomId) => {
-          const room = allRooms.find((r) => r.id === roomId);
-          if (!room) return;
-
-          const conflictingBookings = bookings.filter((booking) => {
-            const normalizedStatus = booking.status?.toLowerCase().replace(/[-_]/g, "");
-            if (normalizedStatus !== "booked" && normalizedStatus !== "checkedin") return false;
-
-            const bookingHasRoom = booking.rooms?.some((r) => {
-              const bookingRoomId = r.room?.id || r.id || r.room_id;
-              return bookingRoomId === roomId;
-            });
-            if (!bookingHasRoom) return false;
-
-            const bookingCheckIn = new Date(booking.check_in);
-            const bookingCheckOut = new Date(booking.check_out);
-            return requestedCheckIn < bookingCheckOut && requestedCheckOut > bookingCheckIn;
-          });
-
-          if (conflictingBookings.length > 0) {
-            conflicts.push({
-              room: room.number,
-              bookings: conflictingBookings.map((b) => ({
-                id: b.display_id || `${b.is_package ? 'PK' : 'BK'}-${String(b.id).padStart(6, '0')}`,
-                guest: b.guest_name,
-                checkIn: b.check_in,
-                checkOut: b.check_out,
-                status: b.status,
-              })),
-            });
-          }
+      // Fallback fallback if both are empty
+      if (itemsToBook.length === 0) {
+        itemsToBook.push({
+          room_type_id: null,
+          custom_room_rate: null,
+          num_rooms: 1,
+          adults: 1,
+          children: 0,
+          roomNumbers: []
         });
+      }
 
-        if (conflicts.length > 0) {
-          const conflictMessages = conflicts.map((c) => {
-            const bookingDetails = c.bookings.map((b) => `${b.id} (${b.guest}, ${b.checkIn} to ${b.checkOut})`).join(", ");
-            return `Room ${c.room}: ${bookingDetails}`;
-          }).join("\n");
-
-          showBannerMessage("error", `Conflict detected in assigned rooms:\n${conflictMessages}`);
+      // Validate each item has either room category or specific room numbers
+      for (const item of itemsToBook) {
+        if (!item.room_type_id && (!item.roomNumbers || item.roomNumbers.length === 0)) {
+          showBannerMessage("error", "Please configure at least one room category or select rooms.");
           setIsSubmitting(false);
           return;
         }
       }
 
-      const response = await API.post(
-        "/bookings",
-        {
-          room_ids: roomIds,
-          room_type_id: formData.room_type_id ? parseInt(formData.room_type_id) : null,
-          source: formData.source,
-          guest_name: formData.guestName,
-          guest_mobile: formData.guestMobile,
-          guest_email: formData.guestEmail,
-          check_in: formData.checkIn,
-          check_out: formData.checkOut,
-          adults: parseInt(formData.adults),
-          children: parseInt(formData.children),
-          num_rooms: parseInt(formData.num_rooms) || 1,
-          custom_room_rate: formData.custom_room_rate ? parseFloat(formData.custom_room_rate) : null,
-        },
-        authHeader(),
-      );
+      const createdBookings = [];
 
-      showBannerMessage("success", "Bookings created successfully!");
+      for (const item of itemsToBook) {
+        const roomIds = (item.roomNumbers || [])
+          .map((roomNumber) => {
+            const room = rooms.find((r) => r.number === roomNumber);
+            return room ? room.id : null;
+          })
+          .filter((id) => id !== null);
+
+        // --- CONFLICT DETECTION (Only for specific physical room assignments) ---
+        if (roomIds.length > 0) {
+          const requestedCheckIn = new Date(formData.checkIn);
+          const requestedCheckOut = new Date(formData.checkOut);
+
+          const conflicts = [];
+          roomIds.forEach((roomId) => {
+            const room = allRooms.find((r) => r.id === roomId);
+            if (!room) return;
+
+            const conflictingBookings = bookings.filter((booking) => {
+              const normalizedStatus = booking.status?.toLowerCase().replace(/[-_]/g, "");
+              if (normalizedStatus !== "booked" && normalizedStatus !== "checkedin") return false;
+
+              const bookingHasRoom = booking.rooms?.some((r) => {
+                const bookingRoomId = r.room?.id || r.id || r.room_id;
+                return bookingRoomId === roomId;
+              });
+              if (!bookingHasRoom) return false;
+
+              const bookingCheckIn = new Date(booking.check_in);
+              const bookingCheckOut = new Date(booking.check_out);
+              return requestedCheckIn < bookingCheckOut && requestedCheckOut > bookingCheckIn;
+            });
+
+            if (conflictingBookings.length > 0) {
+              conflicts.push({
+                room: room.number,
+                bookings: conflictingBookings.map((b) => ({
+                  id: b.display_id || `${b.is_package ? 'PK' : 'BK'}-${String(b.id).padStart(6, '0')}`,
+                  guest: b.guest_name,
+                  checkIn: b.check_in,
+                  checkOut: b.check_out,
+                  status: b.status,
+                })),
+              });
+            }
+          });
+
+          if (conflicts.length > 0) {
+            const conflictMessages = conflicts.map((c) => {
+              const bookingDetails = c.bookings.map((b) => `${b.id} (${b.guest}, ${b.checkIn} to ${b.checkOut})`).join(", ");
+              return `Room ${c.room}: ${bookingDetails}`;
+            }).join("\n");
+
+            showBannerMessage("error", `Conflict detected in assigned rooms:\n${conflictMessages}`);
+            setIsSubmitting(false);
+            return;
+          }
+        }
+
+        // Calculate rate to pass to backend. In backend: stored_room_rate = custom_room_rate / num_rooms.
+        // Therefore, we pass (item.custom_room_rate * item.num_rooms) so that each room's stored_room_rate equals item.custom_room_rate.
+        const postCustomRate = item.custom_room_rate ? (item.custom_room_rate * item.num_rooms) : null;
+
+        const response = await API.post(
+          "/bookings",
+          {
+            room_ids: roomIds,
+            room_type_id: item.room_type_id ? parseInt(item.room_type_id) : null,
+            source: formData.source,
+            guest_name: formData.guestName,
+            guest_mobile: formData.guestMobile,
+            guest_email: formData.guestEmail,
+            check_in: formData.checkIn,
+            check_out: formData.checkOut,
+            adults: parseInt(item.adults),
+            children: parseInt(item.children),
+            num_rooms: parseInt(item.num_rooms) || 1,
+            custom_room_rate: postCustomRate,
+          },
+          authHeader(),
+        );
+
+        createdBookings.push({
+          ...response.data,
+          is_package: false,
+        });
+      }
+
+      showBannerMessage("success", `${createdBookings.length} booking(s) executed successfully!`);
       setFormData({
         guestName: "",
         guestMobile: "",
@@ -5034,20 +5367,15 @@ const Bookings = () => {
         children: 0,
         num_rooms: 1,
         source: "Admin",
+        custom_room_rate: "",
+        selectedRoomTypes: [],
       });
-      // Add the new booking to the state - use response data as-is from backend
-      const newBooking = {
-        ...response.data,
-        is_package: false,
-        // Backend already returns rooms in the response, so we don't need to reconstruct them
-      };
 
-      // Use functional update to prevent duplicates
-      setBookings((prev) => dedupeBookings([newBooking, ...prev]));
+      // Use functional update to add all created bookings and deduplicate
+      setBookings((prev) => dedupeBookings([...createdBookings, ...prev]));
       setIsBookingModalOpen(false);
     } catch (err) {
       console.error("Booking creation error:", err);
-      // API routes in FastAPI usually place the error reason in the detail param instead of message
       const errorMessage =
         err.response?.data?.detail || err.response?.data?.message || "Error creating booking.";
       showBannerMessage("error", errorMessage);
@@ -6216,36 +6544,31 @@ const Bookings = () => {
                   </thead>
                   <tbody className="divide-y divide-gray-200">
                     {bookings.map((booking) => {
-                      const roomInfo =
-                        booking.rooms && booking.rooms.length > 0
-                          ? booking.rooms
-                            .map((room) => {
-                              if (booking.is_package) {
-                                if (room?.room?.number)
-                                  return room.room.number;
-                                if (
-                                  room?.room_id &&
-                                  roomIdToRoom &&
-                                  roomIdToRoom[room.room_id]
-                                ) {
-                                  return roomIdToRoom[room.room_id].number;
-                                }
-                                return "-";
-                              } else {
-                                if (room?.number) return room.number;
-                                if (
-                                  room?.room_id &&
-                                  roomIdToRoom &&
-                                  roomIdToRoom[room.room_id]
-                                ) {
-                                  return roomIdToRoom[room.room_id].number;
-                                }
-                                return "-";
-                              }
-                            })
-                            .filter(Boolean)
-                            .join(", ") || "-"
-                          : "-";
+                      const roomBadges = booking.rooms && booking.rooms.length > 0 ? (
+                        <div className="flex flex-wrap gap-1.5 max-w-[150px]">
+                          {booking.rooms.map((room, idx) => {
+                            let r = booking.is_package ? room?.room : room;
+                            if (!r?.number && room?.room_id && roomIdToRoom && roomIdToRoom[room.room_id]) {
+                              r = roomIdToRoom[room.room_id];
+                            }
+                            const isRoomCheckedOut = r?.status?.toLowerCase().trim() === "available";
+                            const roomNumber = r?.number || "-";
+                            return (
+                              <span
+                                key={idx}
+                                className={`px-2 py-0.5 border rounded text-[9px] font-bold shadow-sm transition-all duration-300 ${
+                                  isRoomCheckedOut
+                                    ? "bg-slate-100 text-slate-400 border-slate-200 line-through opacity-75 hover:opacity-100"
+                                    : "bg-white text-slate-600 border-slate-100 hover:border-indigo-100"
+                                }`}
+                                title={isRoomCheckedOut ? `Room ${roomNumber} Checked Out` : `Room ${roomNumber} Active`}
+                              >
+                                {roomNumber}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      ) : "-";
 
                       return (
                         <tr
@@ -6287,7 +6610,7 @@ const Bookings = () => {
                             {booking.num_rooms || 1}
                           </td>
                           <td className="px-4 py-3 text-gray-700">
-                            {roomInfo}
+                            {roomBadges}
                           </td>
                           <td className="px-4 py-3 text-gray-700">
                             {formatDateShort(booking.check_in)}
@@ -6297,7 +6620,7 @@ const Bookings = () => {
                           </td>
                           <td className="px-4 py-3">
                             <BookingStatusBadge
-                              status={booking.status}
+                              status={determineBookingStatus(booking)}
                               isPackage={booking.is_package}
                               packageName={booking.package?.title || (booking.is_package ? packages.find(p => p.id == booking.package_id)?.title : null)}
                               isConfirmed={booking.is_confirmed}
@@ -6459,11 +6782,24 @@ const Bookings = () => {
                             </td>
                             <td className="px-8 py-6 bg-slate-50/50 group-hover:bg-white border-y-2 border-transparent group-hover:border-indigo-100 transition-all">
                               <div className="flex flex-wrap gap-2">
-                                {b.rooms?.map((room, idx) => (
-                                  <span key={idx} className="px-3 py-1 bg-white border border-slate-100 rounded-lg text-[10px] font-bold text-slate-600 shadow-sm">
-                                    {b.is_package ? (room.room?.number || "-") : (room.number || "-")}
-                                  </span>
-                                ))}
+                                {b.rooms?.map((room, idx) => {
+                                  const r = b.is_package ? room.room : room;
+                                  const isRoomCheckedOut = r?.status?.toLowerCase().trim() === "available";
+                                  const roomNumber = r?.number || "-";
+                                  return (
+                                    <span
+                                      key={idx}
+                                      className={`px-3 py-1 border rounded-lg text-[10px] font-bold shadow-sm transition-all duration-300 ${
+                                        isRoomCheckedOut
+                                          ? "bg-slate-100 text-slate-400 border-slate-200 line-through opacity-75 hover:opacity-100"
+                                          : "bg-white text-slate-600 border-slate-100 hover:border-indigo-100"
+                                      }`}
+                                      title={isRoomCheckedOut ? `Room ${roomNumber} Checked Out` : `Room ${roomNumber} Active`}
+                                    >
+                                      {roomNumber}
+                                    </span>
+                                  );
+                                })}
                               </div>
                             </td>
                             <td className="px-8 py-6 bg-slate-50/50 group-hover:bg-white border-y-2 border-transparent group-hover:border-indigo-100 transition-all">
@@ -6494,7 +6830,7 @@ const Bookings = () => {
                             </td>
                             <td className="px-8 py-6 bg-slate-50/50 group-hover:bg-white border-y-2 border-transparent group-hover:border-indigo-100 transition-all">
                               <BookingStatusBadge
-                                status={b.status}
+                                status={determineBookingStatus(b)}
                                 isPackage={b.is_package}
                                 packageName={b.package?.title || (b.is_package ? packages.find(p => p.id == b.package_id)?.title : null)}
                                 isConfirmed={b.is_confirmed}
@@ -6625,24 +6961,13 @@ const Bookings = () => {
                   </table>
                 </div>
                 {filteredBookings.length > 0 && hasMoreBookings && (
-                  <div className="text-center p-8 mt-4">
-                    <button
-                      onClick={loadMoreBookings}
-                      disabled={isSubmitting}
-                      className="group px-8 py-4 bg-white hover:bg-indigo-50 text-indigo-600 rounded-2xl font-bold uppercase tracking-widest text-[10px] border-2 border-indigo-100 hover:border-indigo-200 transition-all duration-300 shadow-sm flex items-center gap-3 mx-auto disabled:opacity-50"
-                    >
-                      {isSubmitting ? (
-                        <>
-                          <Clock className="w-4 h-4 animate-spin" />
-                          Processing...
-                        </>
-                      ) : (
-                        <>
-                          <PlusCircle className="w-4 h-4 group-hover:scale-110 transition-transform" />
-                          View More Bookings
-                        </>
-                      )}
-                    </button>
+                  <div ref={loadMoreRef} className="text-center p-8 mt-4 min-h-[50px] flex items-center justify-center">
+                    {isSubmitting && (
+                      <div className="flex items-center gap-3 px-8 py-4 bg-white/80 backdrop-blur-xl text-indigo-600 rounded-2xl font-bold uppercase tracking-widest text-[10px] border border-indigo-100 shadow-md animate-pulse">
+                        <Clock className="w-4 h-4 animate-spin text-indigo-500" />
+                        Loading More Bookings...
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -6757,6 +7082,8 @@ const Bookings = () => {
               handleChange={handleChange}
               handleRoomTypeChange={handleRoomTypeChange}
               handleSubmit={handleSubmit}
+              handleAddRoomType={handleAddRoomType}
+              handleRemoveRoomType={handleRemoveRoomType}
               isSubmitting={isSubmitting}
               isLoading={isLoading}
               roomTypes={roomTypes}

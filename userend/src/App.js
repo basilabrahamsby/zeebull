@@ -2955,7 +2955,10 @@ export default function App() {
                                                 if (el) el.scrollIntoView({ behavior: 'smooth' });
                                             }, 100);
                                         } else {
-                                            if (!selectedBranch) {
+                                            if (target === '[data-contact-section]') {
+                                                const el = document.querySelector(target);
+                                                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                            } else if (!selectedBranch) {
                                                 const el = document.getElementById('properties');
                                                 if (el) el.scrollIntoView({ behavior: 'smooth' });
                                             } else {
@@ -3020,7 +3023,10 @@ export default function App() {
                                                     if (el) el.scrollIntoView({ behavior: 'smooth' });
                                                 }, 100);
                                             } else {
-                                                if (!selectedBranch) {
+                                                if (target === '[data-contact-section]') {
+                                                    const el = document.querySelector(target);
+                                                    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                                } else if (!selectedBranch) {
                                                     const el = document.getElementById('properties');
                                                     if (el) el.scrollIntoView({ behavior: 'smooth' });
                                                 } else {

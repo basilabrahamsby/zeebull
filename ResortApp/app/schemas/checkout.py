@@ -77,6 +77,8 @@ class BillSummary(BaseModel):
     check_in: date
     check_out: date
     charges: BillBreakdown
+    pan_number: Optional[str] = None
+    booking_id: Optional[int] = None
 
 class CheckoutFull(BaseModel):
     id: int
@@ -96,6 +98,7 @@ class CheckoutFull(BaseModel):
     room_number: Optional[str] = ""
     advance_deposit: float = 0
     refund_amount: float = 0
+    pan_number: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -121,6 +124,7 @@ class CheckoutDetail(BaseModel):
     booking_details: Optional[dict] = None
     advance_deposit: float = 0
     refund_amount: float = 0
+    pan_number: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -185,6 +189,7 @@ class CheckoutRequest(BaseModel):
     tips_gratuity: Optional[float] = Field(0.0, description="Tips/gratuity amount")
     guest_gstin: Optional[str] = Field(None, description="GSTIN for B2B invoices")
     is_b2b: Optional[bool] = Field(False, description="Is this a B2B transaction")
+    pan_number: Optional[str] = Field(None, description="PAN number for GST/tax purposes")
     
     # Pre-checkout verification
     room_verifications: Optional[List[RoomVerificationData]] = Field(None, description="Room verification data for each room")
@@ -242,3 +247,4 @@ class CheckoutUpdate(BaseModel):
     room_number: Optional[str] = None
     notes: Optional[str] = None
     invoice_number: Optional[str] = None
+    pan_number: Optional[str] = None

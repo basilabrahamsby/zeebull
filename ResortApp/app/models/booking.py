@@ -45,6 +45,7 @@ class Booking(Base):
     # New Fields
     source = Column(String, default="Direct")  # Direct, OTA, Walk-in
     package_name = Column(String, nullable=True)  # Name of package if any
+    pan_number = Column(String, nullable=True)  # Optional PAN for GST verification
     
     is_id_verified = Column(Boolean, default=False)
     digital_signature_url = Column(String, nullable=True)
@@ -52,7 +53,8 @@ class Booking(Base):
     preferences = Column(String, nullable=True)
     
     # Relationships
-    checkout = relationship("Checkout", back_populates="booking", uselist=False)
+    # One booking can have multiple checkout records (one per room for single-room checkouts)
+    checkouts = relationship("Checkout", back_populates="booking", uselist=True)
 
     user = relationship("User", back_populates="bookings")
     booking_rooms = relationship(

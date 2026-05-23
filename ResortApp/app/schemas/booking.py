@@ -1,4 +1,5 @@
 from pydantic import BaseModel, validator, field_validator, model_validator, EmailStr
+import re
 from typing import List, Optional, Union
 from datetime import date, datetime
 from .user import UserOut
@@ -44,8 +45,17 @@ class BookingCreate(BaseModel):
     num_rooms: int = 1
     branch_id: Optional[int] = None
     custom_room_rate: Optional[float] = None
+    pan_number: Optional[str] = None  # Optional PAN for GST verification
 
-    @validator('guest_email', pre=True)
+
+    @validator('pan_number')
+    def validate_pan(cls, v):
+        if v is None or v == '':
+            return None
+        pattern = r'^[A-Z]{5}[0-9]{4}[A-Z]$'
+        if not re.fullmatch(pattern, v):
+            raise ValueError('Invalid PAN format')
+        return v
     def blank_email_to_none(cls, v):
         if v == "" or v is None:
             return None
@@ -80,6 +90,7 @@ class BookingOut(BaseModel):
     # --- CRITICAL FIX: Add the missing image URL fields ---
     id_card_image_url: Optional[str] = None
     guest_photo_url: Optional[str] = None
+    pan_number: Optional[str] = None
     user: Optional[UserOut] = None
     is_package: bool = False
     total_amount: float = 0.0

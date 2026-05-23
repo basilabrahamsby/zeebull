@@ -217,6 +217,11 @@ def _handle_new_booking(payload: dict, db: Session, branch_id: int):
     # Check if we already have it
     res_id = payload.get("bookingID") or payload.get("bookingId")
     existing = db.query(Booking).filter(Booking.external_id == res_id).first()
+    
+    if existing:
+        logger.info(f"[AIOSELL WEBHOOK] Booking with external_id {res_id} already exists (Display ID: {existing.display_id}). Routing to modify instead.")
+        return _handle_modify_booking(payload, db)
+        
     # Best-effort guest info extraction across multiple possible objects
     guest_objs = [
         payload.get("guest"), 

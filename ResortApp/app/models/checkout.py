@@ -138,6 +138,7 @@ class Checkout(Base):
     
     # B2B/GSTIN
     guest_gstin = Column(String, nullable=True)  # For B2B invoices
+    pan_number = Column(String, nullable=True)  # Optional PAN for GST/Tax purposes
     is_b2b = Column(Boolean, default=False)
     invoice_number = Column(String, nullable=True, unique=True, index=True)
     
@@ -146,8 +147,10 @@ class Checkout(Base):
     gate_pass_path = Column(String, nullable=True)
     feedback_sent = Column(Boolean, default=False)
     
-    booking_id = Column(Integer, ForeignKey("bookings.id"), nullable=True, unique=True)
-    package_booking_id = Column(Integer, ForeignKey("package_bookings.id"), nullable=True, unique=True)
+    # booking_id and package_booking_id are NOT unique - one booking can have
+    # multiple checkout records when rooms are checked out individually (single-room mode).
+    booking_id = Column(Integer, ForeignKey("bookings.id"), nullable=True)
+    package_booking_id = Column(Integer, ForeignKey("package_bookings.id"), nullable=True)
     payment_status = Column(String) 
     notes = Column(Text, nullable=True) # General notes for the checkout record
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False, index=True)
@@ -155,7 +158,8 @@ class Checkout(Base):
     branch = relationship("Branch")
 
 
-    booking = relationship("Booking", back_populates="checkout", uselist=False)
-    package_booking = relationship("PackageBooking", back_populates="checkout", uselist=False)
+    # uselist=True: one booking can now have multiple checkout records (one per room).
+    booking = relationship("Booking", back_populates="checkouts", uselist=True)
+    package_booking = relationship("PackageBooking", back_populates="checkouts", uselist=True)
     verifications = relationship("CheckoutVerification", back_populates="checkout", cascade="all, delete-orphan")
     payments = relationship("CheckoutPayment", back_populates="checkout", cascade="all, delete-orphan")

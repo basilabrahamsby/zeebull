@@ -9,7 +9,7 @@ def zip_dir(path, zip_handle, exclude_dirs=None, exclude_files=None):
     
     for root, dirs, files in os.walk(path):
         # Exclude directories
-        to_keep = [d for d in dirs if d not in exclude_dirs and not d.startswith('.')]
+        to_keep = [d for d in dirs if d not in exclude_dirs and not d.startswith('.') and not d.startswith('uploads_backup') and not d.startswith('backup')]
         dirs.clear()
         dirs.extend(to_keep)
         

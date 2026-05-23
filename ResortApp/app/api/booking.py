@@ -643,7 +643,7 @@ def get_booking_details(booking_id: Union[str, int], is_package: bool, db: Sessi
                 joinedload(PackageBooking.rooms).joinedload(PackageBookingRoom.room),
                 joinedload(PackageBooking.user),
                 joinedload(PackageBooking.package),
-                joinedload(PackageBooking.checkout),
+                joinedload(PackageBooking.checkouts),
                 joinedload(PackageBooking.payments)
             ).filter(PackageBooking.id == booking_id)
             
@@ -658,11 +658,12 @@ def get_booking_details(booking_id: Union[str, int], is_package: bool, db: Sessi
 
             # Calc total
             total_amt = 0.0
-            if booking.checkout:
-                total_amt = booking.checkout.grand_total
+            # Sum all per-room checkout grand_totals for this booking
+            if booking.checkouts:
+                total_amt = sum(c.grand_total or 0 for c in booking.checkouts)
             elif booking.status in ['checked_out', 'checked-out', 'checked out']:
-                 checkout_rec = db.query(Checkout).filter(Checkout.package_booking_id == booking.id).order_by(Checkout.id.desc()).first()
-                 if checkout_rec: total_amt = checkout_rec.grand_total
+                 checkout_recs = db.query(Checkout).filter(Checkout.package_booking_id == booking.id).all()
+                 if checkout_recs: total_amt = sum(c.grand_total or 0 for c in checkout_recs)
 
             room_ids = [r.room_id for r in booking.rooms if r.room_id]
             start_filter = booking.checked_in_at or booking.check_in
@@ -687,7 +688,8 @@ def get_booking_details(booking_id: Union[str, int], is_package: bool, db: Sessi
                 room_type_name=booking.package.title if booking.package else "Package Details Implied",
                 checked_in_at=booking.checked_in_at,
                 checked_out_at=booking.checked_out_at,
-                checkout=booking.checkout,
+                # Pass the most recent checkout for display in the dossier
+                checkout=booking.checkouts[-1] if booking.checkouts else None,
                 rooms=[pbr.room for pbr in booking.rooms if pbr.room],
                 food_orders=_fetch_extras(db, room_ids, start_filter, booking.check_out),
                 service_requests=_fetch_services(db, room_ids, start_filter, booking.check_out),
@@ -698,7 +700,7 @@ def get_booking_details(booking_id: Union[str, int], is_package: bool, db: Sessi
             query = db.query(Booking).options(
                 joinedload(Booking.booking_rooms).joinedload(BookingRoom.room),
                 joinedload(Booking.user).joinedload(User.role),
-                joinedload(Booking.checkout),
+                joinedload(Booking.checkouts),
                 joinedload(Booking.room_type),
                 joinedload(Booking.payments)
             ).filter(Booking.id == booking_id)
@@ -713,11 +715,12 @@ def get_booking_details(booking_id: Union[str, int], is_package: bool, db: Sessi
                 raise HTTPException(status_code=404, detail="Booking not found")
             
             total_amt = getattr(booking, 'total_amount', 0.0)
-            if booking.checkout:
-                total_amt = booking.checkout.grand_total
+            # Sum all per-room checkout grand_totals for this booking
+            if booking.checkouts:
+                total_amt = sum(c.grand_total or 0 for c in booking.checkouts)
             elif booking.status in ['checked_out', 'checked-out', 'checked out'] and (total_amt is None or total_amt == 0):
-                 checkout_rec = db.query(Checkout).filter(Checkout.booking_id == booking.id).order_by(Checkout.id.desc()).first()
-                 if checkout_rec: total_amt = checkout_rec.grand_total
+                 checkout_recs = db.query(Checkout).filter(Checkout.booking_id == booking.id).all()
+                 if checkout_recs: total_amt = sum(c.grand_total or 0 for c in checkout_recs)
             
             # Fallback for active regular bookings without a total (legacy data)
             if (total_amt is None or total_amt == 0) and booking.check_in and booking.check_out and booking.booking_rooms:
@@ -788,7 +791,8 @@ def get_booking_details(booking_id: Union[str, int], is_package: bool, db: Sessi
                 rate_plan_code=getattr(booking, 'rate_plan_code', None),
                 checked_in_at=booking.checked_in_at,
                 checked_out_at=booking.checked_out_at,
-                checkout=booking.checkout,
+                # Pass the most recent checkout for display in the dossier
+                checkout=booking.checkouts[-1] if booking.checkouts else None,
                 rooms=[br.room for br in booking.booking_rooms if br.room],
                 food_orders=_fetch_extras(db, room_ids, start_filter, end_filter),
                 service_requests=_fetch_services(db, room_ids, start_filter, end_filter),

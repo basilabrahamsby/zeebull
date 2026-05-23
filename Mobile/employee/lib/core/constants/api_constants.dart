@@ -2,8 +2,8 @@ import 'package:flutter/foundation.dart';
 
 class ApiConstants {
   // Use production domain for build
-  static const String baseUrl = 'http://localhost:8011/api';
-  static const String imageBaseUrl = 'http://localhost:8011';
+  static const String baseUrl = 'https://zeebull.com/api';
+  static const String imageBaseUrl = 'https://zeebull.com';
   static const String login = '/auth/login';
   static const String profile = '/auth/me';
   
