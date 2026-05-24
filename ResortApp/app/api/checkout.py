@@ -5644,14 +5644,25 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, backgro
 def print_bill_pdf(
     room_number: str,
     checkout_mode: str = "multiple",
+    include_sections: str = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     branch_id: int = Depends(get_branch_id)
 ):
     """
     Generate and return a PDF bill for the given room.
+    
+    include_sections: comma-separated list of sections to include.
+    Valid values: room, food, service, consumables, inventory, asset_damage
+    If not provided, all sections are included.
     """
     from types import SimpleNamespace
+    
+    # Parse include_sections
+    if include_sections:
+        sections = set(s.strip().lower() for s in include_sections.split(',') if s.strip())
+    else:
+        sections = {'room', 'food', 'service', 'consumables', 'inventory', 'asset_damage'}
     
     # Use the existing route handler for calculation logic
     try:
@@ -5659,29 +5670,57 @@ def print_bill_pdf(
     except HTTPException as e:
         raise e
 
-    # Create a mock object for the PDF generator which expects model instances/attributes
+    # Apply section filtering - zero out excluded sections
+    room_total = (bill_summary.charges.room_charges or 0.0) if 'room' in sections else 0.0
+    package_total = (bill_summary.charges.package_charges or 0.0) if 'room' in sections else 0.0
+    food_total = (bill_summary.charges.food_charges or 0.0) if 'food' in sections else 0.0
+    service_total = (bill_summary.charges.service_charges or 0.0) if 'service' in sections else 0.0
+    consumables_charges = (bill_summary.charges.consumables_charges or 0.0) if 'consumables' in sections else 0.0
+    inventory_charges = (bill_summary.charges.inventory_charges or 0.0) if 'inventory' in sections else 0.0
+    asset_damage_charges = (bill_summary.charges.asset_damage_charges or 0.0) if 'asset_damage' in sections else 0.0
+    
+    # Recalculate GST for included sections only
+    room_gst = (bill_summary.charges.room_gst or 0.0) if 'room' in sections else 0.0
+    package_gst = (bill_summary.charges.package_gst or 0.0) if 'room' in sections else 0.0
+    food_gst = (bill_summary.charges.food_gst or 0.0) if 'food' in sections else 0.0
+    service_gst = (bill_summary.charges.service_gst or 0.0) if 'service' in sections else 0.0
+    consumables_gst = (bill_summary.charges.consumables_gst or 0.0) if 'consumables' in sections else 0.0
+    inventory_gst = (bill_summary.charges.inventory_gst or 0.0) if 'inventory' in sections else 0.0
+    asset_damage_gst = (bill_summary.charges.asset_damage_gst or 0.0) if 'asset_damage' in sections else 0.0
+    
+    filtered_tax = room_gst + package_gst + food_gst + service_gst + consumables_gst + inventory_gst + asset_damage_gst
+    filtered_subtotal = room_total + package_total + food_total + service_total + consumables_charges + inventory_charges + asset_damage_charges
+
+    # Create a mock object for the PDF generator
     mock_checkout = SimpleNamespace(
         id=f"PRE-{room_number}-{datetime.now().strftime('%H%M%S')}",
         guest_name=bill_summary.guest_name,
         room_number=", ".join(bill_summary.room_numbers),
         invoice_number=None,
-        room_total=bill_summary.charges.room_charges or 0.0,
-        package_total=bill_summary.charges.package_charges or 0.0,
-        food_total=bill_summary.charges.food_charges or 0.0,
-        service_total=bill_summary.charges.service_charges or 0.0,
-        consumables_charges=bill_summary.charges.consumables_charges or 0.0,
-        inventory_charges=bill_summary.charges.inventory_charges or 0.0,
-        asset_damage_charges=bill_summary.charges.asset_damage_charges or 0.0,
+        check_in=bill_summary.check_in,
+        check_out=bill_summary.check_out,
+        room_total=room_total,
+        package_total=package_total,
+        food_total=food_total,
+        service_total=service_total,
+        consumables_charges=consumables_charges,
+        inventory_charges=inventory_charges,
+        asset_damage_charges=asset_damage_charges,
         late_checkout_fee=0.0,
         key_card_fee=0.0,
-        tax_amount=bill_summary.charges.total_gst or 0.0,
+        tax_amount=filtered_tax,
         discount_amount=0.0,
-        grand_total=(bill_summary.charges.total_due or 0.0) + (bill_summary.charges.total_gst or 0.0),
+        advance_deposit=bill_summary.charges.advance_deposit or 0.0,
+        grand_total=filtered_subtotal + filtered_tax,
         payment_method="Unspecified"
     )
 
-    # Convert Pydantic model to dict for generator
+    # Convert Pydantic model to dict for generator, filtering out excluded section details
     bill_details = bill_summary.charges.dict()
+    if 'consumables' not in sections:
+        bill_details['consumables_items'] = []
+    if 'asset_damage' not in sections:
+        bill_details['asset_damages'] = []
     
     # Generate temporary file
     fd, temp_path = tempfile.mkstemp(suffix=".pdf", prefix=f"bill_{room_number}_")
@@ -5698,3 +5737,4 @@ def print_bill_pdf(
         if os.path.exists(temp_path):
             os.remove(temp_path)
         raise HTTPException(status_code=500, detail=f"Failed to generate PDF: {str(e)}")
+

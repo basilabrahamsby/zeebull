@@ -382,10 +382,10 @@ class _ManagerBookingsScreenState extends State<ManagerBookingsScreen> with Sing
                               Icons.hotel_outlined,
                               isPackage 
                                   ? (b['package_name'] ?? 'PREMIUM') 
-                                  : (b['rooms'] != null && (b['rooms'] as List).isNotEmpty 
-                                      ? (b['rooms'][0]['number'] ?? 'N/A') 
-                                      : (b['room_type_name'] ?? 'N/A')),
-                              isPackage ? 'PACKAGE' : 'ROOM',
+                                  : _formatRoomDisplay(b),
+                              isPackage 
+                                  ? 'PACKAGE' 
+                                  : _getRoomLabel(b),
                             ),
                           ),
                           Expanded(
@@ -611,6 +611,38 @@ class _ManagerBookingsScreenState extends State<ManagerBookingsScreen> with Sing
   }
 
 
+  /// Groups rooms by type and returns a formatted display string
+  /// e.g., "2x Deluxe (101, 102), 1x Suite (201)"
+  String _formatRoomDisplay(dynamic b) {
+    if (b['rooms'] != null && (b['rooms'] as List).isNotEmpty) {
+      final rooms = b['rooms'] as List;
+      // Group rooms by type
+      final Map<String, List<String>> grouped = {};
+      for (final r in rooms) {
+        final type = (r['type'] ?? 'Room').toString();
+        final number = (r['number'] ?? '').toString();
+        grouped.putIfAbsent(type, () => []);
+        grouped[type]!.add(number);
+      }
+      if (grouped.length == 1) {
+        final entry = grouped.entries.first;
+        final numbers = entry.value.join(", ");
+        return "${entry.value.length}x ${entry.key} ($numbers)";
+      }
+      return grouped.entries
+          .map((e) => "${e.value.length}x ${e.key} (${e.value.join(', ')})")
+          .join(", ");
+    }
+    return "${b['num_rooms'] ?? 1} x ${b['room_type_name'] ?? 'N/A'}";
+  }
+
+  /// Returns the appropriate label ('ROOM' or 'ROOMS') based on room count
+  String _getRoomLabel(dynamic b) {
+    if (b['rooms'] != null && (b['rooms'] as List).length > 1) return 'ROOMS';
+    if ((b['num_rooms'] ?? 1) > 1) return 'ROOMS';
+    return 'ROOM';
+  }
+
   Color _getStatusColor(String status) {
     status = status.toLowerCase();
     if (status.contains('checked-in') || status.contains('checkedin')) return Colors.indigoAccent;
@@ -689,12 +721,10 @@ class _ManagerBookingsScreenState extends State<ManagerBookingsScreen> with Sing
                           _buildModernInfoRow("CONTACT INFO", "${b['guest_email'] ?? 'N/A'}\n${b['guest_mobile'] ?? 'N/A'}", Icons.alternate_email),
                           const Divider(color: Colors.white10, height: 32),
                           _buildModernInfoRow(
-                            isPackage ? "PACKAGE" : "ROOM TYPE", 
+                            isPackage ? "PACKAGE" : _getRoomLabel(b), 
                             isPackage 
                               ? (b['package_name'] ?? 'N/A') 
-                              : (b['rooms'] != null && (b['rooms'] as List).isNotEmpty 
-                                  ? (b['rooms'] as List).map((r) => r['number']).join(", ")
-                                  : (b['room_type_name'] ?? 'N/A')), 
+                              : _formatRoomDisplay(b), 
                             Icons.hotel_outlined
                           ),
                           const Divider(color: Colors.white10, height: 32),
@@ -2193,9 +2223,26 @@ class _ManagerBookingsScreenState extends State<ManagerBookingsScreen> with Sing
     
     // Filter bookings for selected date
     final dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate);
-    final dailyBookings = [..._roomBookings, ..._packageBookings].where((b) => b['check_in'] == dateStr).toList();
-    final dailyCheckins = dailyBookings.where((b) => b['status'] == 'confirmed').length;
-    final dailyCheckouts = [..._roomBookings, ..._packageBookings].where((b) => b['check_out'] == dateStr && b['status'] == 'checked_in').length;
+    final arrivals = [..._roomBookings, ..._packageBookings].where((b) => b['check_in'] == dateStr).toList();
+    final dailyCheckins = arrivals.where((b) {
+      final status = (b['status'] ?? '').toString().toLowerCase();
+      return status.contains('checked-in') || status.contains('checkedin') || status.contains('checked-out') || status.contains('checkedout');
+    }).length;
+    final dailyCheckouts = [..._roomBookings, ..._packageBookings].where((b) {
+      return b['check_out'] == dateStr;
+    }).length;
+    
+    // Filter bookings scheduled/active on the selected date (staying or check-in or checkout)
+    final scheduledBookings = [..._roomBookings, ..._packageBookings].where((b) {
+      if (b['check_in'] == null || b['check_out'] == null) return false;
+      try {
+        final checkInStr = b['check_in'].toString();
+        final checkOutStr = b['check_out'].toString();
+        return checkInStr.compareTo(dateStr) <= 0 && dateStr.compareTo(checkOutStr) <= 0;
+      } catch (e) {
+        return false;
+      }
+    }).toList();
 
     return Column(
       children: [
@@ -2264,7 +2311,7 @@ class _ManagerBookingsScreenState extends State<ManagerBookingsScreen> with Sing
                     const SizedBox(height: 32),
                     Row(
                       children: [
-                        _buildDailyStat("ARRIVALS", "${dailyBookings.length}", Colors.blueAccent),
+                        _buildDailyStat("ARRIVALS", "${arrivals.length}", Colors.blueAccent),
                         _buildDailyStat("CHECK-INS", "$dailyCheckins", Colors.greenAccent),
                         _buildDailyStat("DEPARTURES", "$dailyCheckouts", Colors.orangeAccent),
                       ],
@@ -2277,7 +2324,7 @@ class _ManagerBookingsScreenState extends State<ManagerBookingsScreen> with Sing
               Text("SCHEDULED FOR ${DateFormat('MMM dd').format(_selectedDate).toUpperCase()}", style: const TextStyle(color: AppColors.accent, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
               const SizedBox(height: 16),
               
-              if (dailyBookings.isEmpty) 
+              if (scheduledBookings.isEmpty) 
                 Center(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 40),
@@ -2291,7 +2338,7 @@ class _ManagerBookingsScreenState extends State<ManagerBookingsScreen> with Sing
                   ),
                 )
               else
-                ...dailyBookings.map((b) => _buildCondensedBookingCard(b)),
+                ...scheduledBookings.map((b) => _buildCondensedBookingCard(b)),
             ],
           ),
         ),
@@ -2332,7 +2379,12 @@ class _ManagerBookingsScreenState extends State<ManagerBookingsScreen> with Sing
                 children: [
                   Text(b['guest_name']?.toString().toUpperCase() ?? 'GUEST', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 13)),
                   const SizedBox(height: 4),
-                  Text(isPackage ? b['package_name'].toString().toUpperCase() : "ROOM ${b['room_number'] ?? 'N/A'}", style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold)),
+                  Text(
+                    isPackage 
+                        ? b['package_name'].toString().toUpperCase() 
+                        : _formatRoomDisplay(b).toUpperCase(), 
+                    style: const TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold)
+                  ),
                 ],
               ),
             ),

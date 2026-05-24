@@ -83,6 +83,9 @@ const CheckoutDetailModal = React.memo(({ checkout, onClose, onUpdateSuccess }) 
   const [details, setDetails] = useState(null);
   const [loading, setLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [printRoom, setPrintRoom] = useState(true);
+  const [printFood, setPrintFood] = useState(true);
+  const [printServices, setPrintServices] = useState(true);
   const { isSuperadmin } = usePermissions();
 
   useEffect(() => {
@@ -120,6 +123,11 @@ const CheckoutDetailModal = React.memo(({ checkout, onClose, onUpdateSuccess }) 
 
   const handleDownloadPDF = () => {
     if (!details) return;
+
+    if (!printRoom && !printFood && !printServices) {
+      alert("Please select at least one charge type to print.");
+      return;
+    }
 
     const doc = new jsPDF();
 
@@ -188,63 +196,69 @@ const CheckoutDetailModal = React.memo(({ checkout, onClose, onUpdateSuccess }) 
     const chargesBody = [];
     let idx = 1;
 
-    if (details.room_total > 0) {
-      chargesBody.push([idx++, 'Room Charges', '-', formatPDFCurrency(details.room_total)]);
-    }
-    if (details.package_total > 0) {
-      chargesBody.push([idx++, 'Package Charges', '-', formatPDFCurrency(details.package_total)]);
+    if (printRoom) {
+      if (details.room_total > 0) {
+        chargesBody.push([idx++, 'Room Charges', '-', formatPDFCurrency(details.room_total)]);
+      }
+      if (details.package_total > 0) {
+        chargesBody.push([idx++, 'Package Charges', '-', formatPDFCurrency(details.package_total)]);
+      }
     }
     
     // Food orders
-    if (details.food_orders && details.food_orders.length > 0) {
-      details.food_orders.forEach(order => {
-        order.items?.forEach(item => {
-          chargesBody.push([idx++, `Food: ${item.item_name}`, `x${item.quantity}`, formatPDFCurrency(item.total)]);
+    if (printFood) {
+      if (details.food_orders && details.food_orders.length > 0) {
+        details.food_orders.forEach(order => {
+          order.items?.forEach(item => {
+            chargesBody.push([idx++, `Food: ${item.item_name}`, `x${item.quantity}`, formatPDFCurrency(item.total)]);
+          });
         });
-      });
+      }
     }
 
     // Services
-    if (details.services && details.services.length > 0) {
-      details.services.forEach(service => {
-        chargesBody.push([idx++, `Service: ${service.service_name}`, '-', formatPDFCurrency(service.charges)]);
-      });
-    }
+    if (printServices) {
+      if (details.services && details.services.length > 0) {
+        details.services.forEach(service => {
+          chargesBody.push([idx++, `Service: ${service.service_name}`, '-', formatPDFCurrency(service.charges)]);
+        });
+      }
 
-    // Consumables details
-    if (details.bill_details?.consumables_items && details.bill_details.consumables_items.length > 0) {
-      details.bill_details.consumables_items.forEach(item => {
-        chargesBody.push([
-          idx++,
-          `Consumable: ${item.item_name}`,
-          `x${item.quantity || item.actual_consumed || 1}`,
-          formatPDFCurrency(item.total_charge)
-        ]);
-      });
-    }
+      // Consumables details
+      if (details.bill_details?.consumables_items && details.bill_details.consumables_items.length > 0) {
+        details.bill_details.consumables_items.forEach(item => {
+          chargesBody.push([
+            idx++,
+            `Consumable: ${item.item_name}`,
+            `x${item.quantity || item.actual_consumed || 1}`,
+            formatPDFCurrency(item.total_charge)
+          ]);
+        });
+      }
 
-    // Rentals
-    if (details.bill_details?.inventory_usage && details.bill_details.inventory_usage.length > 0) {
-      details.bill_details.inventory_usage.forEach(item => {
-        chargesBody.push([
-          idx++,
-          `Rental: ${item.item_name}`,
-          `x${item.quantity} ${item.unit || ''}`,
-          formatPDFCurrency(item.rental_charge || 0)
-        ]);
-      });
-    }
+      // Rentals
+      if (details.bill_details?.inventory_usage && details.bill_details.inventory_usage.length > 0) {
+        details.bill_details.inventory_usage.forEach(item => {
+          chargesBody.push([
+            idx++,
+            `Rental: ${item.item_name}`,
+            `x${item.quantity} ${item.unit || ''}`,
+            formatPDFCurrency(item.rental_charge || 0)
+          ]);
+        });
+      }
 
-    // Damages
-    if (details.bill_details?.asset_damages && details.bill_details.asset_damages.length > 0) {
-      details.bill_details.asset_damages.forEach(item => {
-        chargesBody.push([
-          idx++,
-          `Damage: ${item.item_name} ${item.notes ? `(${item.notes})` : ''}`,
-          '-',
-          formatPDFCurrency(item.total_charge || item.replacement_cost)
-        ]);
-      });
+      // Damages
+      if (details.bill_details?.asset_damages && details.bill_details.asset_damages.length > 0) {
+        details.bill_details.asset_damages.forEach(item => {
+          chargesBody.push([
+            idx++,
+            `Damage: ${item.item_name} ${item.notes ? `(${item.notes})` : ''}`,
+            '-',
+            formatPDFCurrency(item.total_charge || item.replacement_cost)
+          ]);
+        });
+      }
     }
 
     autoTable(doc, {
@@ -265,7 +279,7 @@ const CheckoutDetailModal = React.memo(({ checkout, onClose, onUpdateSuccess }) 
     // 5. Financial Summary Y position
     const totalsY = doc.lastAutoTable.finalY + 8;
     
-    const subtotal = (
+    const originalSubtotal = (
       (details.room_total || 0) +
       (details.package_total || 0) +
       (details.food_orders?.reduce((acc, order) => acc + (order.items?.reduce((sum, item) => sum + (item.total || 0), 0) || 0), 0) || 0) +
@@ -274,10 +288,23 @@ const CheckoutDetailModal = React.memo(({ checkout, onClose, onUpdateSuccess }) 
       (details.bill_details?.inventory_usage?.reduce((acc, item) => acc + (item.rental_charge || 0), 0) || 0) +
       (details.bill_details?.asset_damages?.reduce((acc, item) => acc + (item.total_charge || item.replacement_cost || 0), 0) || 0)
     );
-    const tax = details.tax_amount || 0;
-    const discount = details.discount_amount || 0;
-    const advance = details.advance_deposit || 0;
-    const grand = details.grand_total || (subtotal + tax - discount);
+
+    const roomSubtotal = printRoom ? ((details.room_total || 0) + (details.package_total || 0)) : 0;
+    const foodSubtotal = printFood ? (details.food_orders?.reduce((acc, order) => acc + (order.items?.reduce((sum, item) => sum + (item.total || 0), 0) || 0), 0) || 0) : 0;
+    const servicesSubtotal = printServices ? (
+      (details.services?.reduce((acc, s) => acc + (s.charges || 0), 0) || 0) +
+      (details.bill_details?.consumables_items?.reduce((acc, item) => acc + (item.total_charge || 0), 0) || 0) +
+      (details.bill_details?.inventory_usage?.reduce((acc, item) => acc + (item.rental_charge || 0), 0) || 0) +
+      (details.bill_details?.asset_damages?.reduce((acc, item) => acc + (item.total_charge || item.replacement_cost || 0), 0) || 0)
+    ) : 0;
+
+    const subtotal = roomSubtotal + foodSubtotal + servicesSubtotal;
+    const scaleFactor = originalSubtotal > 0 ? (subtotal / originalSubtotal) : 1;
+
+    const tax = (details.tax_amount || 0) * scaleFactor;
+    const discount = (details.discount_amount || 0) * scaleFactor;
+    const advance = (details.advance_deposit || 0) * scaleFactor;
+    const grand = subtotal + tax - discount;
     const balanceDue = Math.max(0, grand - advance);
 
     const summaryRows = [
@@ -348,38 +375,67 @@ const CheckoutDetailModal = React.memo(({ checkout, onClose, onUpdateSuccess }) 
         </button>
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-2xl font-bold text-gray-800">Checkout Details (ID: {checkout.id})</h2>
-          <div className="flex gap-2">
-            {!details?.invoice_pdf_path && (
+          <div className="flex flex-col items-end gap-2">
+            <div className="flex gap-2">
               <button
                 onClick={handleDownloadPDF}
-                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors print:hidden"
+                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors print:hidden shadow-md font-semibold"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                 </svg>
                 Download PDF
               </button>
-            )}
-            {details?.invoice_pdf_path && (
-              <button
-                onClick={handleViewBill}
-                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors print:hidden"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                </svg>
-                View Bill PDF
-              </button>
-            )}
-            {isSuperadmin && (
-              <button
-                onClick={() => setIsEditing(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors print:hidden"
-              >
-                <Edit size={18} />
-                Edit Bill
-              </button>
-            )}
+              {details?.invoice_pdf_path && (
+                <button
+                  onClick={handleViewBill}
+                  className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors print:hidden shadow-md font-semibold"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                  </svg>
+                  View Full PDF
+                </button>
+              )}
+              {isSuperadmin && (
+                <button
+                  onClick={() => setIsEditing(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors print:hidden shadow-md font-semibold"
+                >
+                  <Edit size={18} />
+                  Edit Bill
+                </button>
+              )}
+            </div>
+            <div className="flex gap-4 mt-1 text-sm text-gray-600 font-semibold bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-100 print:hidden select-none">
+              <label className="flex items-center gap-1.5 cursor-pointer hover:text-green-600 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={printRoom}
+                  onChange={(e) => setPrintRoom(e.target.checked)}
+                  className="rounded text-green-600 focus:ring-green-500 cursor-pointer h-4 w-4"
+                />
+                Room Charges
+              </label>
+              <label className="flex items-center gap-1.5 cursor-pointer hover:text-green-600 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={printFood}
+                  onChange={(e) => setPrintFood(e.target.checked)}
+                  className="rounded text-green-600 focus:ring-green-500 cursor-pointer h-4 w-4"
+                />
+                Food Charges
+              </label>
+              <label className="flex items-center gap-1.5 cursor-pointer hover:text-green-600 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={printServices}
+                  onChange={(e) => setPrintServices(e.target.checked)}
+                  className="rounded text-green-600 focus:ring-green-500 cursor-pointer h-4 w-4"
+                />
+                Services
+              </label>
+            </div>
           </div>
         </div>
 

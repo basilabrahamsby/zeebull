@@ -39,6 +39,14 @@ class _ManagerCheckoutWorkflowState extends State<ManagerCheckoutWorkflow> {
   bool _isLoading = false;
   String _checkoutMode = "single";
   final format = NumberFormat.currency(symbol: "₹", decimalDigits: 0);
+  
+  // Print section toggles
+  bool _printRoomRent = true;
+  bool _printFoodOrders = true;
+  bool _printServices = true;
+  bool _printConsumables = true;
+  bool _printInventory = true;
+  bool _printAssetDamage = true;
 
   @override
   void initState() {
@@ -636,6 +644,25 @@ class _ManagerCheckoutWorkflowState extends State<ManagerCheckoutWorkflow> {
               ),
               const SizedBox(height: 32),
               
+              const Text("PRINT SECTIONS", style: TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1)),
+              const SizedBox(height: 8),
+              Text("Select which items to include in the printed invoice", style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 11)),
+              const SizedBox(height: 12),
+              OnyxGlassCard(
+                padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                child: Column(
+                  children: [
+                    if (roomCharges > 0) _buildPrintToggle("Room Rent", _printRoomRent, (v) => setState(() => _printRoomRent = v)),
+                    if (foodCharges > 0) _buildPrintToggle("Food Orders", _printFoodOrders, (v) => setState(() => _printFoodOrders = v)),
+                    if (serviceCharges > 0) _buildPrintToggle("Services", _printServices, (v) => setState(() => _printServices = v)),
+                    if (consumablesCharges > 0) _buildPrintToggle("Consumables", _printConsumables, (v) => setState(() => _printConsumables = v)),
+                    if (inventoryCharges > 0) _buildPrintToggle("Inventory / Rentals", _printInventory, (v) => setState(() => _printInventory = v)),
+                    if (assetDamageCharges > 0) _buildPrintToggle("Asset Damages", _printAssetDamage, (v) => setState(() => _printAssetDamage = v)),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 24),
               const Text("INVOICE ACTIONS", style: TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1)),
               const SizedBox(height: 12),
               Row(
@@ -672,8 +699,18 @@ class _ManagerCheckoutWorkflowState extends State<ManagerCheckoutWorkflow> {
     
     if (token == null) return;
     
+    // Build include_sections from checkboxes
+    final sections = <String>[];
+    if (_printRoomRent) sections.add('room');
+    if (_printFoodOrders) sections.add('food');
+    if (_printServices) sections.add('service');
+    if (_printConsumables) sections.add('consumables');
+    if (_printInventory) sections.add('inventory');
+    if (_printAssetDamage) sections.add('asset_damage');
+    final includeSections = sections.join(',');
+    
     // Construct the authenticated PDF URL
-    final url = "${ApiConstants.baseUrl}/bill/$roomNum/print?token=$token&branch_id=${_activeBranchId ?? ''}";
+    final url = "${ApiConstants.baseUrl}/bill/$roomNum/print?token=$token&branch_id=${_activeBranchId ?? ''}&include_sections=$includeSections";
     final uri = Uri.parse(url);
     
     if (await canLaunchUrl(uri)) {
@@ -782,6 +819,33 @@ class _ManagerCheckoutWorkflowState extends State<ManagerCheckoutWorkflow> {
             Icon(icon, color: Colors.white, size: 16),
             const SizedBox(width: 8),
             Text(text, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPrintToggle(String label, bool value, ValueChanged<bool> onChanged) {
+    return InkWell(
+      onTap: () => onChanged(!value),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 20, height: 20,
+              child: Checkbox(
+                value: value,
+                onChanged: (v) => onChanged(v ?? true),
+                activeColor: AppColors.accent,
+                checkColor: AppColors.onyx,
+                side: BorderSide(color: Colors.white.withOpacity(0.3), width: 1.5),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text(label, style: TextStyle(color: value ? Colors.white : Colors.white38, fontSize: 13, fontWeight: FontWeight.w600)),
           ],
         ),
       ),

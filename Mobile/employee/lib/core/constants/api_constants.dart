@@ -1,9 +1,13 @@
 import 'package:flutter/foundation.dart';
 
 class ApiConstants {
-  // Use production domain for build
-  static const String baseUrl = 'https://zeebull.com/api';
-  static const String imageBaseUrl = 'https://zeebull.com';
+  // Local Development URLs
+  static String get baseUrl => kIsWeb ? 'http://localhost:8011/api' : 'http://10.0.2.2:8011/api';
+  static String get imageBaseUrl => kIsWeb ? 'http://localhost:8011' : 'http://10.0.2.2:8011';
+
+  // Production URLs
+  // static const String baseUrl = 'https://zeebull.com/api';
+  // static const String imageBaseUrl = 'https://zeebull.com';
   static const String login = '/auth/login';
   static const String profile = '/auth/me';
   
