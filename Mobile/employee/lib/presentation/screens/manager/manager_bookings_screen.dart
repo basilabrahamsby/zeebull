@@ -1180,6 +1180,7 @@ class _ManagerBookingsScreenState extends State<ManagerBookingsScreen> with Sing
     int? selectedRoomTypeId;
     List<dynamic> availableRoomTypes = [];
     DateTime bookingTime = DateTime.now();
+    List<Map<String, dynamic>> selectedRoomTypes = [];
     
     // Fetch Room Types
     try {
@@ -1266,15 +1267,23 @@ class _ManagerBookingsScreenState extends State<ManagerBookingsScreen> with Sing
                       
                       _buildGlassInput(guestNameController, "GUEST NAME *", Icons.person_outline),
                       const SizedBox(height: 24),
-                      _buildGlassInput(tariffController, "ROOM TARIFF (BASE)", Icons.money, keyboard: TextInputType.number),
-                      const SizedBox(height: 24),
                       _buildGlassInput(emailController, "EMAIL ADDRESS", Icons.email_outlined, keyboard: TextInputType.emailAddress),
                       const SizedBox(height: 24),
                       _buildGlassInput(phoneController, "PHONE NUMBER", Icons.phone_outlined, keyboard: TextInputType.phone),
                       const SizedBox(height: 32),
 
+                      Row(
+                        children: [
+                          Expanded(child: _buildDatePickerBtn(ctx, "CHECK-IN", checkInDate, (d) => setState(() => checkInDate = d))),
+                          const SizedBox(width: 24),
+                          Expanded(child: _buildDatePickerBtn(ctx, "CHECK-OUT", checkOutDate, (d) => setState(() => checkOutDate = d), minDate: checkInDate)),
+                        ],
+                      ),
+                      const SizedBox(height: 32),
+
                       if (!isPackageBooking)
                         Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             _buildGlassDropdown<int>(
                               value: selectedRoomTypeId,
@@ -1283,43 +1292,134 @@ class _ManagerBookingsScreenState extends State<ManagerBookingsScreen> with Sing
                                 value: rt['id'] as int,
                                 child: Text("${rt['name'].toUpperCase()}", style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
                               )).toList(),
-                              onChanged: (v) => setState(() => selectedRoomTypeId = v),
+                              onChanged: (v) {
+                                final rt = availableRoomTypes.firstWhere((element) => element['id'] == v, orElse: () => null);
+                                if (rt != null && rt['base_price'] != null) {
+                                  tariffController.text = rt['base_price'].toString();
+                                }
+                                setState(() => selectedRoomTypeId = v);
+                              },
                             ),
                             const SizedBox(height: 24),
-                            _buildReadOnlyField("BOOKING TIME", DateFormat('HH:mm').format(bookingTime), Icons.access_time_rounded),
+                            _buildGlassInput(tariffController, "ROOM TARIFF (BASE)", Icons.money, keyboard: TextInputType.number),
+                            const SizedBox(height: 24),
+                            _buildGlassInput(numRoomsController, "NUMBER OF ROOMS", Icons.meeting_room_outlined, keyboard: TextInputType.number),
+                            const SizedBox(height: 24),
+                            Row(
+                              children: [
+                                Expanded(child: _buildGlassInput(adultsController, "ADULTS", Icons.group_outlined, keyboard: TextInputType.number)),
+                                const SizedBox(width: 24),
+                                Expanded(child: _buildGlassInput(childrenController, "CHILDREN", Icons.child_care_outlined, keyboard: TextInputType.number)),
+                              ],
+                            ),
+                            const SizedBox(height: 24),
+                            SizedBox(
+                              height: 50,
+                              width: double.infinity,
+                              child: OutlinedButton.icon(
+                                onPressed: () {
+                                  if (selectedRoomTypeId == null) {
+                                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("PLEASE SELECT A ROOM TYPE"), backgroundColor: Colors.redAccent));
+                                    return;
+                                  }
+                                  final rt = availableRoomTypes.firstWhere((element) => element['id'] == selectedRoomTypeId, orElse: () => null);
+                                  final String name = rt != null ? (rt['name'] ?? 'Unknown') : 'Unknown';
+                                  setState(() {
+                                    selectedRoomTypes.add({
+                                      'room_type_id': selectedRoomTypeId,
+                                      'room_type_name': name,
+                                      'room_rate': double.tryParse(tariffController.text) ?? 0.0,
+                                      'num_rooms': int.tryParse(numRoomsController.text) ?? 1,
+                                      'adults': int.tryParse(adultsController.text) ?? 1,
+                                      'children': int.tryParse(childrenController.text) ?? 0,
+                                    });
+                                    selectedRoomTypeId = null;
+                                    tariffController.clear();
+                                    numRoomsController.text = "1";
+                                    adultsController.text = "1";
+                                    childrenController.text = "0";
+                                  });
+                                },
+                                icon: const Icon(Icons.add, color: AppColors.accent),
+                                label: const Text("ADD ROOM TYPE", style: TextStyle(color: AppColors.accent, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                                style: OutlinedButton.styleFrom(
+                                  side: const BorderSide(color: AppColors.accent, width: 1.5),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                ),
+                              ),
+                            ),
+                            if (selectedRoomTypes.isNotEmpty) ...[
+                              const SizedBox(height: 32),
+                              const Text(
+                                "SELECTED CATEGORIES",
+                                style: TextStyle(color: AppColors.accent, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 2),
+                              ),
+                              const SizedBox(height: 12),
+                              ...selectedRoomTypes.map((item) => Container(
+                                margin: const EdgeInsets.only(bottom: 12),
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.05),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(color: Colors.white.withOpacity(0.1)),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            item['room_type_name'].toString().toUpperCase(),
+                                            style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            "${item['num_rooms']} Room(s) • ${item['adults']} Adult(s) • ${item['children']} Child(ren) • ₹${item['room_rate'].toStringAsFixed(0)}",
+                                            style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                                      onPressed: () {
+                                        setState(() {
+                                          selectedRoomTypes.remove(item);
+                                        });
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              )).toList(),
+                            ],
                           ],
                         )
                       else
-                        _buildGlassDropdown<int>(
-                          value: selectedPackageId,
-                          label: "SELECT PACKAGE",
-                          items: availablePackages.map((p) => DropdownMenuItem(
-                            value: p['id'] as int,
-                            child: Text("${p['title']} (₹${p['price']})", style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
-                          )).toList(),
-                          onChanged: (v) => setState(() => selectedPackageId = v),
+                        Column(
+                          children: [
+                            _buildGlassDropdown<int>(
+                              value: selectedPackageId,
+                              label: "SELECT PACKAGE",
+                              items: availablePackages.map((p) => DropdownMenuItem(
+                                value: p['id'] as int,
+                                child: Text("${p['title']} (₹${p['price']})", style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                              )).toList(),
+                              onChanged: (v) => setState(() => selectedPackageId = v),
+                            ),
+                            const SizedBox(height: 32),
+                            _buildGlassInput(numRoomsController, "NUMBER OF ROOMS", Icons.meeting_room_outlined, keyboard: TextInputType.number),
+                            const SizedBox(height: 32),
+                            Row(
+                              children: [
+                                Expanded(child: _buildGlassInput(adultsController, "ADULTS", Icons.group_outlined, keyboard: TextInputType.number)),
+                                const SizedBox(width: 24),
+                                Expanded(child: _buildGlassInput(childrenController, "CHILDREN", Icons.child_care_outlined, keyboard: TextInputType.number)),
+                              ],
+                            ),
+                          ],
                         ),
 
-                      const SizedBox(height: 32),
-                      _buildGlassInput(numRoomsController, "NUMBER OF ROOMS", Icons.meeting_room_outlined, keyboard: TextInputType.number),
-
-                      const SizedBox(height: 32),
-                      Row(
-                        children: [
-                          Expanded(child: _buildGlassInput(adultsController, "ADULTS", Icons.group_outlined, keyboard: TextInputType.number)),
-                          const SizedBox(width: 24),
-                          Expanded(child: _buildGlassInput(childrenController, "CHILDREN", Icons.child_care_outlined, keyboard: TextInputType.number)),
-                        ],
-                      ),
-                      const SizedBox(height: 32),
-                      
-                      Row(
-                        children: [
-                          Expanded(child: _buildDatePickerBtn(ctx, "CHECK-IN", checkInDate, (d) => setState(() => checkInDate = d))),
-                          const SizedBox(width: 24),
-                          Expanded(child: _buildDatePickerBtn(ctx, "CHECK-OUT", checkOutDate, (d) => setState(() => checkOutDate = d), minDate: checkInDate)),
-                        ],
-                      ),
                       const SizedBox(height: 64),
                       
                       SizedBox(
@@ -1337,18 +1437,43 @@ class _ManagerBookingsScreenState extends State<ManagerBookingsScreen> with Sing
                                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("GUEST NAME IS REQUIRED"), backgroundColor: Colors.redAccent));
                                return;
                             }
-                            if (!isPackageBooking && selectedRoomTypeId == null) {
-                               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("PLEASE SELECT A ROOM TYPE"), backgroundColor: Colors.redAccent));
-                               return;
-                            }
-                            if (isPackageBooking && selectedPackageId == null) {
-                               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("PLEASE SELECT A PACKAGE"), backgroundColor: Colors.redAccent));
-                               return;
-                            }
                             if (checkInDate == null || checkOutDate == null) {
                                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("DATES ARE REQUIRED"), backgroundColor: Colors.redAccent));
                                return;
                             }
+                            
+                            if (!isPackageBooking) {
+                              // Auto-add current selection if active to support traditional single selection flow
+                              if (selectedRoomTypeId != null) {
+                                final rt = availableRoomTypes.firstWhere((element) => element['id'] == selectedRoomTypeId, orElse: () => null);
+                                final String name = rt != null ? (rt['name'] ?? 'Unknown') : 'Unknown';
+                                selectedRoomTypes.add({
+                                  'room_type_id': selectedRoomTypeId,
+                                  'room_type_name': name,
+                                  'room_rate': double.tryParse(tariffController.text) ?? 0.0,
+                                  'num_rooms': int.tryParse(numRoomsController.text) ?? 1,
+                                  'adults': int.tryParse(adultsController.text) ?? 1,
+                                  'children': int.tryParse(childrenController.text) ?? 0,
+                                });
+                              }
+                              
+                              if (selectedRoomTypes.isEmpty) {
+                                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("PLEASE CONFIGURE AT LEAST ONE ROOM TYPE"), backgroundColor: Colors.redAccent));
+                                 return;
+                              }
+                            } else {
+                              if (selectedPackageId == null) {
+                                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("PLEASE SELECT A PACKAGE"), backgroundColor: Colors.redAccent));
+                                 return;
+                              }
+                            }
+
+                            // Show progress loader
+                            showDialog(
+                              context: context,
+                              barrierDismissible: false,
+                              builder: (ctx) => const Center(child: CircularProgressIndicator(color: AppColors.accent)),
+                            );
 
                             try {
                               if (isPackageBooking) {
@@ -1364,24 +1489,33 @@ class _ManagerBookingsScreenState extends State<ManagerBookingsScreen> with Sing
                                   'status': 'confirmed',
                                 });
                               } else {
-                                  await api.createBooking({
-                                    'guest_name': guestNameController.text.toUpperCase(),
-                                    'guest_email': emailController.text,
-                                    'guest_mobile': phoneController.text,
-                                    'room_type_id': selectedRoomTypeId,
-                                    'check_in': checkInDate?.toIso8601String().split('T')[0],
-                                    'check_out': checkOutDate?.toIso8601String().split('T')[0],
-                                    'adults': int.tryParse(adultsController.text) ?? 1,
-                                    'children': int.tryParse(childrenController.text) ?? 0,
-                                    'num_rooms': int.tryParse(numRoomsController.text) ?? 1,
-                                    'room_rate': double.tryParse(tariffController.text) ?? 0.0,
-                                    'status': 'confirmed',
-                                  });
+                                  for (final item in selectedRoomTypes) {
+                                    await api.createBooking({
+                                      'guest_name': guestNameController.text.toUpperCase(),
+                                      'guest_email': emailController.text,
+                                      'guest_mobile': phoneController.text,
+                                      'room_type_id': item['room_type_id'],
+                                      'check_in': checkInDate?.toIso8601String().split('T')[0],
+                                      'check_out': checkOutDate?.toIso8601String().split('T')[0],
+                                      'adults': item['adults'],
+                                      'children': item['children'],
+                                      'num_rooms': item['num_rooms'],
+                                      'room_rate': item['room_rate'],
+                                      'status': 'confirmed',
+                                    });
+                                  }
                               }
-                              Navigator.pop(ctx);
-                              _loadBookings();
+                              
+                              if (mounted) {
+                                Navigator.pop(context); // dismiss loader
+                                Navigator.pop(ctx); // dismiss modal sheet
+                                _loadBookings();
+                              }
                             } catch (e) {
-                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("EXECUTION ERROR: $e"), backgroundColor: Colors.redAccent));
+                              if (mounted) {
+                                Navigator.pop(context); // dismiss loader
+                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("EXECUTION ERROR: $e"), backgroundColor: Colors.redAccent));
+                              }
                             }
                           },
                           child: const Text("FINALIZE RESERVATION", style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 2)),

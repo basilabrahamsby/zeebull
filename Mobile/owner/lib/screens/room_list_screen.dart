@@ -130,22 +130,56 @@ class _RoomListScreenState extends State<RoomListScreen> with SingleTickerProvid
     double turnoverProgress = (clean + dirty) > 0 ? clean / (clean + dirty) : 1.0;
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text('Room Operations'),
-        bottom: TabBar(
-            // ... (keep tabs)
-          controller: _tabController,
-          isScrollable: true,
-          onTap: (index) => setState(() {}),
-          tabs: const [
-            Tab(text: 'All'),
-            Tab(text: 'Vacant'),
-            Tab(text: 'Occupied'),
-            Tab(text: 'Clean'),
-            Tab(text: 'Dirty'),
-            Tab(text: 'Maint.'),
-            Tab(text: 'Packages'),
-          ],
+        backgroundColor: const Color(0xFFF8FAFC),
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        title: const Text(
+          'Room Operations',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
+            color: Color(0xFF064E3B),
+            letterSpacing: -0.5,
+          ),
+        ),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(48),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: TabBar(
+                controller: _tabController,
+                isScrollable: true,
+                indicator: BoxDecoration(
+                  color: const Color(0xFF064E3B).withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: const Color(0xFF064E3B).withOpacity(0.2),
+                    width: 1,
+                  ),
+                ),
+                indicatorSize: TabBarIndicatorSize.tab,
+                labelColor: const Color(0xFF064E3B),
+                unselectedLabelColor: const Color(0xFF64748B),
+                labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                dividerColor: Colors.transparent,
+                onTap: (index) => setState(() {}),
+                tabs: const [
+                  Tab(text: 'All'),
+                  Tab(text: 'Vacant'),
+                  Tab(text: 'Occupied'),
+                  Tab(text: 'Clean'),
+                  Tab(text: 'Dirty'),
+                  Tab(text: 'Maint.'),
+                  Tab(text: 'Packages'),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
       body: Column(
@@ -161,32 +195,59 @@ class _RoomListScreenState extends State<RoomListScreen> with SingleTickerProvid
                 _buildKpiCard('Total', total.toString(), Colors.blue),
                 _buildKpiCard('Available', available.toString(), Colors.green),
                 _buildKpiCard('Occupied', occupied.toString(), Colors.red),
-                // _buildKpiCard('Dirty', dirty.toString(), Colors.orange), // Covered by Turnover
                 _buildKpiCard('Maint.', maintenance.toString(), Colors.grey),
               ],
             ),
           ),
           
           Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: TextField(
-              controller: _searchController,
-              decoration: const InputDecoration(
-                hintText: 'Search Room Number...',
-                prefixIcon: Icon(Icons.search),
-                border: OutlineInputBorder(),
-                contentPadding: EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.01),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  )
+                ],
               ),
-              onChanged: (val) => setState(() {}),
+              child: TextField(
+                controller: _searchController,
+                style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)),
+                decoration: InputDecoration(
+                  hintText: 'Search Room Number...',
+                  hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+                  prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFF64748B), size: 18),
+                  filled: true,
+                  fillColor: Colors.white,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: const BorderSide(color: Color(0xFFE2E8F0), width: 1.2),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: const BorderSide(color: Color(0xFFE2E8F0), width: 1.2),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: const BorderSide(color: Color(0xFF064E3B), width: 1.5),
+                  ),
+                ),
+                onChanged: (val) => setState(() {}),
+              ),
             ),
           ),
           
           Expanded(
             child: GridView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 2,
-                childAspectRatio: 0.7, // Taller cards for images
+                childAspectRatio: 0.65, // Adjusted to prevent layout overflow with badges
                 crossAxisSpacing: 16,
                 mainAxisSpacing: 16,
               ),
@@ -216,22 +277,55 @@ class _RoomListScreenState extends State<RoomListScreen> with SingleTickerProvid
      return Container(
        margin: const EdgeInsets.only(right: 12),
        padding: const EdgeInsets.all(12),
-       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade300)),
-       width: 140,
+       decoration: BoxDecoration(
+         color: Colors.white,
+         borderRadius: BorderRadius.circular(16), 
+         border: Border.all(color: const Color(0xFFE2E8F0), width: 1.2),
+         boxShadow: [
+           BoxShadow(
+             color: Colors.black.withOpacity(0.01),
+             blurRadius: 4,
+             offset: const Offset(0, 2),
+           )
+         ],
+       ),
+       width: 145,
        child: Column(
          crossAxisAlignment: CrossAxisAlignment.start,
          children: [
-            Text("Turnover", style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
-            const SizedBox(height: 4),
+            const Text(
+              "TURNOVER", 
+              style: TextStyle(
+                color: Color(0xFF64748B), 
+                fontSize: 8.5, 
+                fontWeight: FontWeight.bold, 
+                letterSpacing: 0.5,
+              ),
+            ),
+            const SizedBox(height: 6),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                 Text("$clean/$total Clean", style: const TextStyle(fontWeight: FontWeight.bold)),
-                 Text("${(progress * 100).toInt()}%", style: const TextStyle(fontSize: 10, color: Colors.green)),
+                 Text(
+                   "$clean/$total Clean", 
+                   style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12, color: Color(0xFF0F172A)),
+                 ),
+                 Text(
+                   "${(progress * 100).toInt()}%", 
+                   style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF10B981)),
+                 ),
               ],
             ),
-            const SizedBox(height: 6),
-            LinearProgressIndicator(value: progress, backgroundColor: Colors.orange.shade100, color: Colors.green, minHeight: 6, borderRadius: BorderRadius.circular(4)),
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(3),
+              child: LinearProgressIndicator(
+                value: progress, 
+                backgroundColor: const Color(0xFFF1F5F9), 
+                color: const Color(0xFF064E3B), 
+                minHeight: 5,
+              ),
+            ),
          ],
        ),
      );
@@ -242,24 +336,110 @@ class _RoomListScreenState extends State<RoomListScreen> with SingleTickerProvid
       margin: const EdgeInsets.only(right: 12),
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3)),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0), width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.01),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          )
+        ],
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: color)),
-          Text(title, style: TextStyle(fontSize: 12, color: color.withOpacity(0.8))),
+          Text(
+            title.toUpperCase(), 
+            style: const TextStyle(
+              fontSize: 8.5, 
+              fontWeight: FontWeight.bold, 
+              color: Color(0xFF64748B),
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            value, 
+            style: TextStyle(
+              fontSize: 18, 
+              fontWeight: FontWeight.w800, 
+              color: color == Colors.purple ? const Color(0xFF064E3B) : color,
+            ),
+          ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildRoomImage(String? imageUrl) {
+    final hasImage = imageUrl != null && imageUrl.isNotEmpty && !imageUrl.contains('placehold.co');
+    if (!hasImage) {
+      return Container(
+        height: 100,
+        width: double.infinity,
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFF064E3B), Color(0xFF042F2E)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Opacity(
+              opacity: 0.15,
+              child: Image.network(
+                'https://images.unsplash.com/photo-1540518614846-7eded433c457?q=80&w=2070&auto=format&fit=crop',
+                fit: BoxFit.cover,
+                width: double.infinity,
+                height: 100,
+              ),
+            ),
+            const Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.local_florist_rounded, 
+                  color: Color(0xFFC5A880), 
+                  size: 24,
+                ),
+                SizedBox(height: 4),
+                Text(
+                  'ZEEBULL',
+                  style: TextStyle(
+                    fontSize: 8,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFFC5A880),
+                    letterSpacing: 1.5,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      height: 100,
+      width: double.infinity,
+      color: Colors.grey[100],
+      child: Image.network(
+        _getImageUrl(imageUrl),
+        fit: BoxFit.cover,
+        errorBuilder: (c, o, s) => _buildRoomImage(null),
       ),
     );
   }
 
   Widget _buildRoomCard(Room room, Booking? booking) {
     Color statusColor = Colors.grey;
-    if (room.status.toLowerCase() == 'available') statusColor = Colors.green;
-    if (room.status.toLowerCase() == 'occupied' || room.status.toLowerCase() == 'booked' || room.status.toLowerCase() == 'checked-in') statusColor = Colors.red; // Match Web Admin Occupied Red
-    if (room.status.toLowerCase() == 'maintenance') statusColor = Colors.yellow[800]!; // Darker yellow for text
+    if (room.status.toLowerCase() == 'available') statusColor = const Color(0xFF064E3B);
+    if (room.status.toLowerCase() == 'occupied' || room.status.toLowerCase() == 'booked' || room.status.toLowerCase() == 'checked-in') statusColor = const Color(0xFFDC2626);
+    if (room.status.toLowerCase() == 'maintenance') statusColor = const Color(0xFFC5A880);
     
     bool isDirty = room.housekeepingStatus.toLowerCase() == 'dirty';
     
@@ -275,11 +455,15 @@ class _RoomListScreenState extends State<RoomListScreen> with SingleTickerProvid
     
     return Card(
       clipBehavior: Clip.antiAlias,
-      elevation: 4,
+      elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: isDirty ? const BorderSide(color: Colors.orange, width: 2) : BorderSide.none,
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(
+          color: isDirty ? const Color(0xFFEF4444) : const Color(0xFFE2E8F0), 
+          width: isDirty ? 1.5 : 1.2,
+        ),
       ),
+      color: Colors.white,
       child: InkWell(
         onTap: () {
            Navigator.push(context, MaterialPageRoute(builder: (_) => RoomHistoryScreen(room: room)));
@@ -290,16 +474,7 @@ class _RoomListScreenState extends State<RoomListScreen> with SingleTickerProvid
             // Image Section
             Stack(
               children: [
-                Container(
-                  height: 100,
-                  width: double.infinity,
-                  color: Colors.grey[200],
-                  child: Image.network(
-                    _getImageUrl(room.imageUrl),
-                    fit: BoxFit.cover,
-                    errorBuilder: (c, o, s) => const Icon(Icons.image_not_supported, size: 40, color: Colors.grey),
-                  ),
-                ),
+                _buildRoomImage(room.imageUrl),
                 Positioned(
                   top: 8,
                   right: 8,
@@ -307,11 +482,16 @@ class _RoomListScreenState extends State<RoomListScreen> with SingleTickerProvid
                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                      decoration: BoxDecoration(
                        color: statusColor,
-                       borderRadius: BorderRadius.circular(12),
+                       borderRadius: BorderRadius.circular(10),
                      ),
                      child: Text(
-                       room.status,
-                       style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                       room.status.toUpperCase(),
+                       style: const TextStyle(
+                         color: Colors.white, 
+                         fontSize: 8.5, 
+                         fontWeight: FontWeight.bold,
+                         letterSpacing: 0.3,
+                       ),
                      ),
                   ),
                 )
@@ -320,7 +500,7 @@ class _RoomListScreenState extends State<RoomListScreen> with SingleTickerProvid
             
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.all(10),
+                padding: const EdgeInsets.all(12),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -329,67 +509,103 @@ class _RoomListScreenState extends State<RoomListScreen> with SingleTickerProvid
                       children: [
                         Text(
                           room.roomNumber,
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Color(0xFF0F172A)),
                         ),
                         Text(
                           '₹${room.price.toStringAsFixed(0)}',
-                           style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.blueGrey),
+                           style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: Color(0xFF064E3B)),
                         ),
                       ],
                     ),
-                    Text(room.type, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                    const SizedBox(height: 2),
+                    Text(
+                      room.type, 
+                      style: const TextStyle(fontSize: 11, color: Color(0xFF64748B), fontWeight: FontWeight.w500),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     const SizedBox(height: 6),
                     
                     // Capacity
                     Row(
                       children: [
-                        const Icon(Icons.people_outline, size: 14, color: Colors.grey),
+                        const Icon(Icons.people_outline_rounded, size: 13, color: Color(0xFF64748B)),
                         const SizedBox(width: 4),
-                        Text('${room.adults}A, ${room.children}C', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                        Text(
+                          '${room.adults}A, ${room.children}C Limit', 
+                          style: const TextStyle(fontSize: 11, color: Color(0xFF64748B), fontWeight: FontWeight.w500),
+                        ),
                       ],
                     ),
                     
                     const Spacer(),
                     
                     // Features
-                     Wrap(
-                       spacing: 4,
-                       runSpacing: 4,
-                       children: [
-                         if (room.wifi) _buildFeatureIcon(Icons.wifi),
-                         if (room.airConditioning) _buildFeatureIcon(Icons.ac_unit),
-                         if (room.tv) _buildFeatureIcon(Icons.tv),
-                       ],
-                     ),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: [
+                        if (room.wifi) _buildFeatureIcon(Icons.wifi_rounded),
+                        if (room.airConditioning) _buildFeatureIcon(Icons.ac_unit_rounded),
+                        if (room.tv) _buildFeatureIcon(Icons.tv_rounded),
+                      ],
+                    ),
                      
-                     const SizedBox(height: 8),
+                    const SizedBox(height: 8),
 
-                     // Dirty Status or Guest Name
-                     if (booking != null) 
-                        Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(color: Colors.blue[50], borderRadius: BorderRadius.circular(4)),
-                          child: Row(
-                            children: [
-                               const Icon(Icons.person, size: 12, color: Colors.blue),
-                               const SizedBox(width: 4),
-                               Expanded(child: Text(booking.guestName, style: const TextStyle(fontSize: 10, color: Colors.blue), overflow: TextOverflow.ellipsis)),
-                            ],
-                          )
-                        )
-                     else if (statusInfo != null)
-                       Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(color: isDirty ? Colors.orange[50] : Colors.grey[200], borderRadius: BorderRadius.circular(4)),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                               Icon(isDirty ? Icons.timer : Icons.build_circle, size: 12, color: isDirty ? Colors.orange : Colors.grey),
-                               const SizedBox(width: 4),
-                               Text(statusInfo!, style: TextStyle(fontSize: 10, color: isDirty ? Colors.orange : Colors.grey[700])),
-                            ],
-                          )
-                        )
+                    // Dirty Status or Guest Name
+                    if (booking != null) 
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF064E3B).withOpacity(0.06), 
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: const Color(0xFF064E3B).withOpacity(0.12), width: 1),
+                        ),
+                        child: Row(
+                          children: [
+                             const Icon(Icons.person_outline_rounded, size: 11, color: Color(0xFF064E3B)),
+                             const SizedBox(width: 4),
+                             Expanded(
+                               child: Text(
+                                 booking.guestName, 
+                                 style: const TextStyle(fontSize: 9.5, color: Color(0xFF064E3B), fontWeight: FontWeight.bold), 
+                                 overflow: TextOverflow.ellipsis,
+                               ),
+                             ),
+                          ],
+                        ),
+                      )
+                    else if (statusInfo != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: isDirty ? const Color(0xFFEF4444).withOpacity(0.06) : const Color(0xFF64748B).withOpacity(0.06), 
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: isDirty ? const Color(0xFFEF4444).withOpacity(0.12) : const Color(0xFF64748B).withOpacity(0.12), width: 1),
+                        ),
+                        child: Row(
+                          children: [
+                             Icon(
+                               isDirty ? Icons.timer_outlined : Icons.build_circle_outlined, 
+                               size: 11, 
+                               color: isDirty ? const Color(0xFFEF4444) : const Color(0xFF64748B),
+                             ),
+                             const SizedBox(width: 4),
+                             Expanded(
+                               child: Text(
+                                 statusInfo!, 
+                                 style: TextStyle(
+                                   fontSize: 9.5, 
+                                   color: isDirty ? const Color(0xFFEF4444) : const Color(0xFF64748B),
+                                   fontWeight: FontWeight.bold,
+                                 ),
+                                 overflow: TextOverflow.ellipsis,
+                               ),
+                             ),
+                          ],
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -401,17 +617,20 @@ class _RoomListScreenState extends State<RoomListScreen> with SingleTickerProvid
   }
   
   Widget _buildFeatureIcon(IconData icon) {
-     return Icon(icon, size: 14, color: Colors.grey[600]);
+     return Icon(icon, size: 13, color: const Color(0xFF64748B));
   }
 
   Widget _buildPackageCard(Package package) {
     return Card(
       clipBehavior: Clip.antiAlias,
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: const BorderSide(color: Color(0xFFE2E8F0), width: 1.2),
+      ),
+      color: Colors.white,
       child: InkWell(
         onTap: () {
-           // Details Screen
            Navigator.push(context, MaterialPageRoute(builder: (_) => PackageDetailScreen(package: package)));
         },
         child: Column(
@@ -420,26 +639,49 @@ class _RoomListScreenState extends State<RoomListScreen> with SingleTickerProvid
             Container(
               height: 100,
               width: double.infinity,
-              color: Colors.purple.shade50,
+              color: const Color(0xFF064E3B).withOpacity(0.05),
               child: package.imageUrls.isNotEmpty 
                   ? Image.network(_getImageUrl(package.imageUrls[0]), fit: BoxFit.cover, errorBuilder: (_,__,___) => const Icon(Icons.broken_image))
-                  : const Icon(Icons.redeem, size: 40, color: Colors.purple),
+                  : const Icon(Icons.redeem_rounded, size: 36, color: Color(0xFF064E3B)),
             ),
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.all(10),
+                padding: const EdgeInsets.all(12),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(package.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    Text(
+                      package.title, 
+                      style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: Color(0xFF0F172A)), 
+                      maxLines: 1, 
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     const SizedBox(height: 4),
-                    Text(package.description ?? '', style: TextStyle(fontSize: 12, color: Colors.grey[600]), maxLines: 2, overflow: TextOverflow.ellipsis),
+                    Text(
+                      package.description ?? '', 
+                      style: const TextStyle(fontSize: 11, color: Color(0xFF64748B), fontWeight: FontWeight.w500), 
+                      maxLines: 2, 
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     const Spacer(),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                         Chip(label: Text("${package.maxStayDays} Days"), labelStyle: const TextStyle(fontSize: 10), padding: EdgeInsets.zero, visualDensity: VisualDensity.compact),
-                         Text('₹${package.price.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
+                         Container(
+                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                           decoration: BoxDecoration(
+                             color: const Color(0xFFC5A880).withOpacity(0.12),
+                             borderRadius: BorderRadius.circular(8),
+                           ),
+                           child: Text(
+                             "${package.maxStayDays} Days", 
+                             style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Color(0xFFC5A880)),
+                           ),
+                         ),
+                         Text(
+                           '₹${package.price.toStringAsFixed(0)}', 
+                           style: const TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF064E3B), fontSize: 14),
+                         ),
                       ],
                     )
                   ],

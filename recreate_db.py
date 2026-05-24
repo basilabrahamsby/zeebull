@@ -2,7 +2,7 @@ import psycopg2
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 import os
 
-db_url = "postgresql://postgres:qwerty123@localhost:5432/postgres"
+db_url = "postgresql://postgres:qwerty@localhost:5432/postgres"
 conn = psycopg2.connect(db_url)
 conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
 cursor = conn.cursor()

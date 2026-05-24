@@ -249,9 +249,9 @@ class PerformanceMiddleware(BaseHTTPMiddleware):
                  print(f"[DEBUG-PERF] Disabled Cache for: {path}")
             # Cache static/semi-static endpoints longer
             elif any(p in path for p in ["/rooms", "/packages", "/services", "/food-items", "/inventory/items"]):
-                response.headers["Cache-Control"] = "public, max-age=300"  # 5 minutes
+                response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
             else:
-                response.headers["Cache-Control"] = "public, max-age=999"  # Changed to 999 to verify deployment
+                response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
         
         # Log slow requests (> 1 second)
         if process_time > 1.0:

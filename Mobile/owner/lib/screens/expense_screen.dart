@@ -49,65 +49,119 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     return DefaultTabController(
       length: 4, // Changed to 4 tabs - Overview, Pending, History, Accounting
       child: Scaffold(
+        backgroundColor: const Color(0xFFF8FAFC),
         appBar: AppBar(
-          title: const Text('Finance & Expenses'),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.calendar_month),
-              onPressed: () async {
-                final provider = Provider.of<DashboardProvider>(context, listen: false);
-                final range = await showDateRangePicker(
-                  context: context,
-                  firstDate: DateTime(2020),
-                  lastDate: DateTime.now().add(const Duration(days: 365)),
-                );
-                if (range != null) {
-                  provider.updateDateRange(range.start, range.end);
-                }
-              },
+          backgroundColor: const Color(0xFFF8FAFC),
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          title: const Text(
+            'Finance & Expenses',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF064E3B),
+              letterSpacing: -0.5,
             ),
-            PopupMenuButton<String>(
-              icon: const Icon(Icons.more_vert),
-              onSelected: (value) {
-                if (value == 'export_csv') {
-                  _exportToCSV(context, expenseProvider);
-                } else if (value == 'refresh') {
-                  expenseProvider.fetchExpenses();
-                  expenseProvider.fetchBudgetAnalysis();
-                  dashboardProvider.fetchKPIData();
-                }
-              },
-              itemBuilder: (context) => [
-                const PopupMenuItem(
-                  value: 'export_csv',
-                  child: Row(
-                    children: [
-                      Icon(Icons.download, size: 20),
-                      SizedBox(width: 8),
-                      Text('Export to CSV'),
-                    ],
+          ),
+          actions: [
+            Container(
+              margin: const EdgeInsets.only(right: 8),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFE2E8F0), width: 1.2),
+              ),
+              child: IconButton(
+                icon: const Icon(Icons.calendar_month_rounded, color: Color(0xFF064E3B), size: 20),
+                onPressed: () async {
+                  final provider = Provider.of<DashboardProvider>(context, listen: false);
+                  final range = await showDateRangePicker(
+                    context: context,
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime.now().add(const Duration(days: 365)),
+                  );
+                  if (range != null) {
+                    provider.updateDateRange(range.start, range.end);
+                  }
+                },
+              ),
+            ),
+            Container(
+              margin: const EdgeInsets.only(right: 16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFE2E8F0), width: 1.2),
+              ),
+              child: PopupMenuButton<String>(
+                icon: const Icon(Icons.more_vert_rounded, color: Color(0xFF64748B), size: 20),
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                onSelected: (value) {
+                  if (value == 'export_csv') {
+                    _exportToCSV(context, expenseProvider);
+                  } else if (value == 'refresh') {
+                    expenseProvider.fetchExpenses();
+                    expenseProvider.fetchBudgetAnalysis();
+                    dashboardProvider.fetchKPIData();
+                  }
+                },
+                itemBuilder: (context) => [
+                  const PopupMenuItem(
+                    value: 'export_csv',
+                    child: Row(
+                      children: [
+                        Icon(Icons.download_rounded, size: 18, color: Color(0xFF064E3B)),
+                        SizedBox(width: 8),
+                        Text('Export to CSV', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                      ],
+                    ),
                   ),
-                ),
-                const PopupMenuItem(
-                  value: 'refresh',
-                  child: Row(
-                    children: [
-                      Icon(Icons.refresh, size: 20),
-                      SizedBox(width: 8),
-                      Text('Refresh Data'),
-                    ],
+                  const PopupMenuItem(
+                    value: 'refresh',
+                    child: Row(
+                      children: [
+                        Icon(Icons.refresh_rounded, size: 18, color: Color(0xFF064E3B)),
+                        SizedBox(width: 8),
+                        Text('Refresh Data', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ],
-          bottom: const TabBar(
-            tabs: [
-              Tab(text: 'Overview'), // New Analytics Tab
-              Tab(text: 'Pending'),
-              Tab(text: 'History'),
-              Tab(text: 'Accounting'), // Chart of Accounts, Journal Entries, Trial Balance
-            ],
+          bottom: PreferredSize(
+            preferredSize: const Size.fromHeight(48),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: TabBar(
+                  isScrollable: true,
+                  indicator: BoxDecoration(
+                    color: const Color(0xFF064E3B).withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: const Color(0xFF064E3B).withOpacity(0.2),
+                      width: 1,
+                    ),
+                  ),
+                  indicatorSize: TabBarIndicatorSize.tab,
+                  labelColor: const Color(0xFF064E3B),
+                  unselectedLabelColor: const Color(0xFF64748B),
+                  labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                  dividerColor: Colors.transparent,
+                  tabs: const [
+                    Tab(text: 'Overview'),
+                    Tab(text: 'Pending'),
+                    Tab(text: 'History'),
+                    Tab(text: 'Accounting'),
+                  ],
+                ),
+              ),
+            ),
           ),
         ),
         body: TabBarView(
@@ -210,7 +264,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     return RefreshIndicator(
       onRefresh: () => provider.fetchKPIData(),
       child: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
         children: [
           // 1. KPI Grid (Rich Overview)
           const Text("Financial Snapshot", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
@@ -382,8 +436,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       ),
     );
   }
-  
-  Widget _buildExpenseChart(KpiSummary kpi) {
+    Widget _buildExpenseChart(KpiSummary kpi) {
     if (kpi.departmentKpis.isEmpty) return const SizedBox.shrink();
 
     final data = kpi.departmentKpis.entries
@@ -397,17 +450,42 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     data.sort((a, b) => b.value.compareTo(a.value));
     
     final total = data.fold(0.0, (sum, e) => sum + e.value);
-    final colors = [Colors.blue, Colors.red, Colors.orange, Colors.green, Colors.purple, Colors.teal, Colors.indigo];
+    final colors = [
+      const Color(0xFF064E3B), // Deep Emerald
+      const Color(0xFFC5A880), // Champagne Gold
+      const Color(0xFF0D9488), // Teal
+      const Color(0xFFF59E0B), // Amber
+      const Color(0xFF6366F1), // Indigo
+      const Color(0xFFEC4899), // Pink
+    ];
 
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFF1F5F9), width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          )
+        ],
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            const Text("Expense Distribution", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            const SizedBox(height: 16),
+            const Text(
+              "Expense Distribution",
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+                color: Color(0xFF064E3B),
+                letterSpacing: -0.2,
+              ),
+            ),
+            const SizedBox(height: 20),
             SizedBox(
               height: 180,
               child: PieChart(
@@ -431,7 +509,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             Wrap(
               spacing: 12,
               runSpacing: 8,
@@ -442,8 +520,11 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                    mainAxisSize: MainAxisSize.min,
                    children: [
                      Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
-                     const SizedBox(width: 4),
-                     Text(e.value.key, style: const TextStyle(fontSize: 12)),
+                     const SizedBox(width: 6),
+                     Text(
+                       e.value.key, 
+                       style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF64748B)),
+                     ),
                    ],
                  );
               }).toList(),
@@ -475,14 +556,32 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     if (maxY == 0) maxY = 100;
     maxY = maxY * 1.2; // buffer
 
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFF1F5F9), width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          )
+        ],
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            const Text("Income vs Expenses (Top 5)", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+            const Text(
+              "Income vs Expenses (Top 5)",
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+                color: Color(0xFF064E3B),
+                letterSpacing: -0.2,
+              ),
+            ),
             const SizedBox(height: 24),
             SizedBox(
               height: 200,
@@ -516,7 +615,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                           String label = name.length > 3 ? name.substring(0, 3).toUpperCase() : name;
                           return Padding(
                             padding: const EdgeInsets.only(top: 8),
-                            child: Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                            child: Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF64748B))),
                           );
                         },
                       ),
@@ -536,21 +635,21 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                     return BarChartGroupData(
                       x: index,
                       barRods: [
-                        BarChartRodData(toY: income, color: Colors.green, width: 12, borderRadius: BorderRadius.circular(2)),
-                        BarChartRodData(toY: expense, color: Colors.red, width: 12, borderRadius: BorderRadius.circular(2)),
+                        BarChartRodData(toY: income, color: const Color(0xFF064E3B), width: 10, borderRadius: BorderRadius.circular(4)),
+                        BarChartRodData(toY: expense, color: const Color(0xFFEA580C), width: 10, borderRadius: BorderRadius.circular(4)),
                       ],
                     );
                   }).toList(),
                 ),
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                _buildLegendItem("Income", Colors.green),
+                _buildLegendItem("Income", const Color(0xFF064E3B)),
                 const SizedBox(width: 16),
-                _buildLegendItem("Expense", Colors.red),
+                _buildLegendItem("Expense", const Color(0xFFEA580C)),
               ],
             )
           ],
@@ -558,13 +657,13 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       ),
     );
   }
-  
+
   Widget _buildLegendItem(String label, Color color) {
     return Row(
       children: [
-        Container(width: 12, height: 12, color: color),
-        const SizedBox(width: 4),
-        Text(label, style: const TextStyle(fontSize: 12)), 
+        Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+        const SizedBox(width: 6),
+        Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF64748B))), 
       ],
     );
   }
@@ -607,14 +706,24 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   }
   
   Widget _buildKpiCard(String title, String value, IconData icon, Color color, {bool isLarge = false, VoidCallback? onTap}) {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFE2E8F0), width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.01),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          )
+        ],
+      ),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(20),
         child: Padding(
-          padding: EdgeInsets.all(isLarge ? 20.0 : 12.0),
+          padding: EdgeInsets.all(isLarge ? 20.0 : 14.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -623,16 +732,25 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                 children: [
                   Expanded(
                     child: Text(
-                      title, 
+                      title.toUpperCase(), 
                       style: TextStyle(
-                        color: Colors.grey[600], 
-                        fontSize: isLarge ? 14 : 12,
+                        color: const Color(0xFF64748B), 
+                        fontSize: isLarge ? 11 : 9.5,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
                       ),
-                      maxLines: 2,
+                      maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  Icon(icon, color: color, size: isLarge ? 28 : 20),
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: color.withOpacity(0.08),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(icon, color: color, size: isLarge ? 22 : 16),
+                  ),
                 ],
               ),
               SizedBox(height: isLarge ? 12 : 6),
@@ -641,23 +759,29 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                 child: Text(
                   value, 
                   style: TextStyle(
-                    fontSize: isLarge ? 28 : 18, 
-                    fontWeight: FontWeight.bold, 
-                    color: Colors.black87,
+                    fontSize: isLarge ? 26 : 17, 
+                    fontWeight: FontWeight.w800, 
+                    color: const Color(0xFF0F172A),
+                    letterSpacing: -0.5,
                   ),
                 ),
               ),
-              if (onTap != null) ...[
-                const SizedBox(height: 4),
-                Text(
-                  'Tap for details',
-                  style: TextStyle(
-                    fontSize: 9,
-                    color: Colors.grey[500],
-                    fontStyle: FontStyle.italic,
-                  ),
+              const Spacer(),
+              if (onTap != null)
+                Row(
+                  children: [
+                    Text(
+                      'Tap for details',
+                      style: TextStyle(
+                        fontSize: 8.5,
+                        color: const Color(0xFFC5A880),
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(Icons.arrow_forward_ios_rounded, size: 8, color: const Color(0xFFC5A880)),
+                  ],
                 ),
-              ],
             ],
           ),
         ),
@@ -680,8 +804,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     
     if (pendingCount > 0) {
       insights.add({
-        'icon': Icons.pending_actions,
-        'color': Colors.orange,
+        'icon': Icons.pending_actions_rounded,
+        'color': const Color(0xFFF59E0B),
         'title': '$pendingCount Pending',
         'subtitle': 'Approvals needed',
       });
@@ -689,17 +813,17 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     
     if (overBudgetCount > 0) {
       insights.add({
-        'icon': Icons.warning,
-        'color': Colors.red,
+        'icon': Icons.warning_amber_rounded,
+        'color': const Color(0xFFEF4444),
         'title': '$overBudgetCount Over Budget',
-        'subtitle': 'Categories exceeded',
+        'subtitle': 'Exceeded limits',
       });
     }
     
     if (kpi.netProfit < 0) {
       insights.add({
-        'icon': Icons.trending_down,
-        'color': Colors.red,
+        'icon': Icons.trending_down_rounded,
+        'color': const Color(0xFFEF4444),
         'title': 'Negative Profit',
         'subtitle': 'Review expenses',
       });
@@ -707,8 +831,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       final margin = (kpi.netProfit / kpi.totalRevenue * 100);
       if (margin > 20) {
         insights.add({
-          'icon': Icons.trending_up,
-          'color': Colors.green,
+          'icon': Icons.trending_up_rounded,
+          'color': const Color(0xFF10B981),
           'title': '${margin.toStringAsFixed(0)}% Margin',
           'subtitle': 'Healthy profit',
         });
@@ -720,34 +844,41 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     }
 
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [Colors.blue.shade50, Colors.purple.shade50],
+          colors: [const Color(0xFF064E3B).withOpacity(0.04), const Color(0xFFC5A880).withOpacity(0.04)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.blue.shade200),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFC5A880).withOpacity(0.3), width: 1.2),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
-              Icon(Icons.lightbulb_outline, size: 18, color: Colors.blue),
-              SizedBox(width: 6),
-              Text(
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF064E3B).withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.lightbulb_outline_rounded, size: 16, color: Color(0xFF064E3B)),
+              ),
+              const SizedBox(width: 8),
+              const Text(
                 'Quick Insights',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 14,
-                  color: Colors.blue,
+                  color: Color(0xFF064E3B),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           Wrap(
             spacing: 12,
             runSpacing: 8,
@@ -756,10 +887,11 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
+                      color: Colors.black.withOpacity(0.02),
                       blurRadius: 4,
                       offset: const Offset(0, 2),
                     ),
@@ -770,7 +902,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                   children: [
                     Icon(
                       insight['icon'] as IconData,
-                      size: 20,
+                      size: 18,
                       color: insight['color'] as Color,
                     ),
                     const SizedBox(width: 8),
@@ -781,15 +913,16 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                           insight['title'] as String,
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
-                            fontSize: 13,
+                            fontSize: 12,
                             color: insight['color'] as Color,
                           ),
                         ),
                         Text(
                           insight['subtitle'] as String,
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: Colors.grey[600],
+                          style: const TextStyle(
+                            fontSize: 9.5,
+                            color: Color(0xFF64748B),
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
                       ],
@@ -834,7 +967,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.receipt_long, size: 60, color: Colors.grey.shade300),
+            Icon(Icons.receipt_long_rounded, size: 60, color: Colors.grey.shade300),
             const SizedBox(height: 16),
             Text(
               isPending ? "No pending approvals" : "No expense history",
@@ -846,93 +979,139 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     }
 
     return ListView.builder(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
       itemCount: list.length,
       itemBuilder: (context, index) {
         final expense = list[index];
-        return Card(
-          elevation: 2,
+        final avatarColor = isPending ? const Color(0xFFF59E0B) : const Color(0xFF064E3B);
+        return Container(
           margin: const EdgeInsets.only(bottom: 12),
-          child: ExpansionTile(
-            leading: CircleAvatar(
-              backgroundColor: isPending ? Colors.orange.shade100 : Colors.blueGrey.shade100,
-              child: Icon(
-                Icons.attach_money,
-                color: isPending ? Colors.orange.shade900 : Colors.blueGrey,
-              ),
-            ),
-            title: Text(expense.category, style: const TextStyle(fontWeight: FontWeight.bold)),
-            subtitle: Text("${expense.requestedBy} • ${expense.date}"),
-            trailing: Text(
-              format.format(expense.amount),
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-            ),
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text("Description: ${expense.description}", style: const TextStyle(fontSize: 16)),
-                    const SizedBox(height: 16),
-                    if (expense.image != null && expense.image!.isNotEmpty)
-                        Align(
-                            alignment: Alignment.centerLeft,
-                            child: Padding(
-                              padding: const EdgeInsets.only(bottom: 16.0),
-                              child: OutlinedButton.icon(
-                                  onPressed: () => _showReceipt(context, expense.image!),
-                                  icon: const Icon(Icons.receipt),
-                                  label: const Text("View Receipt"),
-                              ),
-                            ),
-                        ),
-                    if (isPending)
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: () {
-                                Provider.of<ExpenseProvider>(context, listen: false)
-                                    .updateExpenseStatus(expense.id, 'Rejected');
-                              },
-                              icon: const Icon(Icons.close),
-                              label: const Text("Reject"),
-                              style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed: () {
-                                Provider.of<ExpenseProvider>(context, listen: false)
-                                    .updateExpenseStatus(expense.id, 'Approved');
-                              },
-                              icon: const Icon(Icons.check),
-                              label: const Text("Approve"),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.green,
-                                foregroundColor: Colors.white,
-                              ),
-                            ),
-                          ),
-                        ],
-                      )
-                    else
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: Chip(
-                          label: Text(expense.status),
-                          backgroundColor: expense.status == 'Approved' ? Colors.green.shade100 : Colors.red.shade100,
-                          labelStyle: TextStyle(
-                            color: expense.status == 'Approved' ? Colors.green.shade900 : Colors.red.shade900,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: const Color(0xFFE2E8F0), width: 1.2),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.01),
+                blurRadius: 8,
+                offset: const Offset(0, 3),
               ),
             ],
+          ),
+          child: Theme(
+            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              collapsedShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              backgroundColor: Colors.white,
+              collapsedBackgroundColor: Colors.white,
+              collapsedIconColor: const Color(0xFF64748B),
+              iconColor: const Color(0xFF064E3B),
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: avatarColor.withOpacity(0.08),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.receipt_long_rounded,
+                  color: avatarColor,
+                  size: 20,
+                ),
+              ),
+              title: Text(
+                expense.category, 
+                style: const TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF0F172A), fontSize: 14),
+              ),
+              subtitle: Text(
+                "${expense.requestedBy} • ${expense.date}",
+                style: const TextStyle(fontSize: 11, color: Color(0xFF64748B), fontWeight: FontWeight.w500),
+              ),
+              trailing: Text(
+                format.format(expense.amount),
+                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: Color(0xFF0F172A)),
+              ),
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text("Description: ${expense.description}", style: const TextStyle(fontSize: 14, color: Color(0xFF334155))),
+                      const SizedBox(height: 16),
+                      if (expense.image != null && expense.image!.isNotEmpty)
+                          Align(
+                              alignment: Alignment.centerLeft,
+                              child: Padding(
+                                padding: const EdgeInsets.only(bottom: 16.0),
+                                child: OutlinedButton.icon(
+                                    onPressed: () => _showReceipt(context, expense.image!),
+                                    icon: const Icon(Icons.receipt),
+                                    label: const Text("View Receipt"),
+                                ),
+                              ),
+                          ),
+                      if (isPending)
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () {
+                                  Provider.of<ExpenseProvider>(context, listen: false)
+                                      .updateExpenseStatus(expense.id, 'Rejected');
+                                },
+                                icon: const Icon(Icons.close),
+                                label: const Text("Reject"),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: Colors.red,
+                                  side: const BorderSide(color: Colors.red),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: () {
+                                  Provider.of<ExpenseProvider>(context, listen: false)
+                                      .updateExpenseStatus(expense.id, 'Approved');
+                                },
+                                icon: const Icon(Icons.check),
+                                label: const Text("Approve"),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF064E3B),
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                ),
+                              ),
+                            ),
+                          ],
+                        )
+                      else
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: expense.status == 'Approved' ? const Color(0xFF10B981).withOpacity(0.08) : Colors.red.withOpacity(0.08),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: expense.status == 'Approved' ? const Color(0xFF10B981).withOpacity(0.2) : Colors.red.withOpacity(0.2)),
+                            ),
+                            child: Text(
+                              expense.status.toUpperCase(),
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: expense.status == 'Approved' ? const Color(0xFF10B981) : Colors.red,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         );
       },
@@ -943,6 +1122,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     if (provider.financialTrends.isEmpty) return const SizedBox.shrink();
     
     final trends = provider.financialTrends; // List of Maps
+
     // Prepare spots
     // We expect 6 months.
     List<FlSpot> revSpots = [];
@@ -965,15 +1145,33 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     maxY = maxY * 1.2;
     if (maxY == 0) maxY = 100;
 
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFF1F5F9), width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          )
+        ],
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Column(
            crossAxisAlignment: CrossAxisAlignment.start,
            children: [
-             const Text("6-Month Trend Analysis", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+             const Text(
+               "6-Month Trend Analysis", 
+               style: TextStyle(
+                 fontWeight: FontWeight.bold, 
+                 fontSize: 16,
+                 color: Color(0xFF064E3B),
+                 letterSpacing: -0.2,
+               ),
+             ),
              const SizedBox(height: 20),
              SizedBox(
                height: 200,
@@ -985,16 +1183,24 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                       touchTooltipData: LineTouchTooltipData(
                         getTooltipItems: (touchedSpots) {
                              return touchedSpots.map((spot) {
-                                String label = "";
-                                if (spot.barIndex == 0) label = "Rev";
-                                if (spot.barIndex == 1) label = "Exp"; 
-                                // Actually line properties.
-                                return LineTooltipItem(spot.y.toStringAsFixed(0), const TextStyle(color: Colors.white));
+                                 String label = spot.barIndex == 0 ? "Rev" : "Exp"; 
+                                 return LineTooltipItem(
+                                   '$label: ${spot.y.toStringAsFixed(0)}', 
+                                   const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                                 );
                              }).toList();
                         }
                       )
                    ),
-                   gridData: const FlGridData(show: false),
+                   gridData: FlGridData(
+                     show: true,
+                     drawVerticalLine: false,
+                     getDrawingHorizontalLine: (value) => FlLine(
+                       color: const Color(0xFFF1F5F9),
+                       strokeWidth: 1,
+                       dashArray: [4, 4],
+                     ),
+                   ),
                    titlesData: FlTitlesData(
                      bottomTitles: AxisTitles(
                        sideTitles: SideTitles(
@@ -1003,7 +1209,13 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                             int idx = value.toInt();
                             if (idx >= 0 && idx < trends.length) {
                                String m = trends[idx]['month'] ?? '';
-                               return Padding(padding: const EdgeInsets.only(top: 8), child: Text(m.split(' ')[0], style: const TextStyle(fontSize: 10)));
+                               return Padding(
+                                 padding: const EdgeInsets.only(top: 8), 
+                                 child: Text(
+                                   m.split(' ')[0], 
+                                   style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF64748B)),
+                                 ),
+                               );
                             }
                             return const SizedBox();
                          },
@@ -1015,34 +1227,46 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                      topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                      rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                    ),
-                   borderData: FlBorderData(show: true, border: Border.all(color: Colors.grey.shade200)),
+                   borderData: FlBorderData(
+                     show: true, 
+                     border: const Border(
+                       bottom: BorderSide(color: Color(0xFFE2E8F0), width: 1),
+                     ),
+                   ),
                    lineBarsData: [
                      LineChartBarData(
                        spots: revSpots,
                        isCurved: true,
-                       color: Colors.green,
+                       color: const Color(0xFF064E3B),
                        barWidth: 3,
                        dotData: const FlDotData(show: false),
-                       belowBarData: BarAreaData(show: true, color: Colors.green.withOpacity(0.1))
+                       belowBarData: BarAreaData(
+                         show: true, 
+                         color: const Color(0xFF064E3B).withOpacity(0.08),
+                       ),
                      ),
                       LineChartBarData(
                        spots: expSpots,
                        isCurved: true,
-                       color: Colors.red,
+                       color: const Color(0xFFEA580C),
                        barWidth: 3,
                        dotData: const FlDotData(show: false),
+                       belowBarData: BarAreaData(
+                         show: true, 
+                         color: const Color(0xFFEA580C).withOpacity(0.02),
+                       ),
                      ),
                    ]
                  )
                )
              ),
-             const SizedBox(height: 10),
+             const SizedBox(height: 16),
              Row(
                mainAxisAlignment: MainAxisAlignment.center,
                children: [
-                 _buildLegendItem("Revenue", Colors.green),
+                 _buildLegendItem("Revenue", const Color(0xFF064E3B)),
                  const SizedBox(width: 16),
-                 _buildLegendItem("Expense", Colors.red),
+                 _buildLegendItem("Expense", const Color(0xFFEA580C)),
                ],
              )
            ],
@@ -1050,6 +1274,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       ),
     );
   }
+
 
   Widget _buildBudgetComparison(ExpenseProvider expenseProvider) {
     final budgetData = expenseProvider.budgetAnalysis;
@@ -1061,53 +1286,81 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     final format = NumberFormat.currency(locale: 'en_IN', symbol: '₹');
     final month = budgetData['month'] ?? 'Current Month';
 
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFF1F5F9), width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          )
+        ],
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text("Budget Tracker", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
+                const Text(
+                  "Budget Tracker", 
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold, 
+                    fontSize: 16,
+                    color: Color(0xFF064E3B),
+                    letterSpacing: -0.2,
                   ),
-                  child: Text(month, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.blue)),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF064E3B).withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFF064E3B).withOpacity(0.15)),
+                  ),
+                  child: Text(
+                    month, 
+                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF064E3B)),
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             
             // Summary Cards
             Row(
               children: [
                 Expanded(
                   child: _buildBudgetSummaryCard(
-                    "Total Budget",
-                    format.format(budgetData['total_budget'] ?? 0),
-                    Icons.account_balance_wallet,
-                    Colors.blue,
+                    title: "Total Budget",
+                    value: format.format(budgetData['total_budget'] ?? 0),
+                    icon: Icons.account_balance_wallet_rounded,
+                    iconColor: const Color(0xFF064E3B),
+                    bgColor: const Color(0xFF064E3B).withOpacity(0.05),
+                    borderColor: const Color(0xFF064E3B).withOpacity(0.12),
+                    textColor: const Color(0xFF064E3B),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: _buildBudgetSummaryCard(
-                    "Total Spent",
-                    format.format(budgetData['total_actual'] ?? 0),
-                    Icons.money_off,
-                    Colors.orange,
+                    title: "Total Spent",
+                    value: format.format(budgetData['total_actual'] ?? 0),
+                    icon: Icons.payment_rounded,
+                    iconColor: const Color(0xFFC5A880),
+                    bgColor: const Color(0xFFC5A880).withOpacity(0.08),
+                    borderColor: const Color(0xFFC5A880).withOpacity(0.2),
+                    textColor: const Color(0xFF92400E),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             
             // Category-wise breakdown
             ...categories.take(6).map((cat) {
@@ -1117,26 +1370,26 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
               final percentageUsed = (cat['percentage_used'] ?? 0).toDouble();
               final status = cat['status'] ?? 'within_budget';
               
-              Color statusColor = Colors.green;
+              Color statusColor = const Color(0xFF059669);
               if (status == 'over_budget') {
-                statusColor = Colors.red;
+                statusColor = const Color(0xFFDC2626);
               } else if (percentageUsed > 80) {
-                statusColor = Colors.orange;
+                statusColor = const Color(0xFFD97706);
               }
 
               return Padding(
-                padding: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.only(bottom: 14),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(category, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                        Text(category, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF1E293B))),
                         Text(
                           "${percentageUsed.toStringAsFixed(0)}%",
                           style: TextStyle(
-                            fontWeight: FontWeight.bold,
+                            fontWeight: FontWeight.w800,
                             fontSize: 12,
                             color: statusColor,
                           ),
@@ -1149,21 +1402,21 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                       children: [
                         Text(
                           "Spent: ${format.format(actual)}",
-                          style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                          style: const TextStyle(fontSize: 11, color: Color(0xFF64748B), fontWeight: FontWeight.w500),
                         ),
                         Text(
                           "Budget: ${format.format(budget)}",
-                          style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                          style: const TextStyle(fontSize: 11, color: Color(0xFF64748B), fontWeight: FontWeight.w500),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 8),
                     LinearProgressIndicator(
                       value: budget > 0 ? (actual / budget).clamp(0.0, 1.0) : 0,
-                      backgroundColor: Colors.grey[200],
+                      backgroundColor: const Color(0xFFF1F5F9),
                       color: statusColor,
                       minHeight: 6,
-                      borderRadius: BorderRadius.circular(3),
+                      borderRadius: BorderRadius.circular(4),
                     ),
                   ],
                 ),
@@ -1175,34 +1428,49 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     );
   }
 
-  Widget _buildBudgetSummaryCard(String title, String value, IconData icon, Color color) {
+  Widget _buildBudgetSummaryCard({
+    required String title,
+    required String value,
+    required IconData icon,
+    required Color iconColor,
+    required Color bgColor,
+    required Color borderColor,
+    required Color textColor,
+  }) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.3)),
+        color: bgColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderColor, width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(icon, size: 16, color: color),
-              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: iconColor.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, size: 14, color: iconColor),
+              ),
+              const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   title,
-                  style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600),
+                  style: TextStyle(fontSize: 11, color: textColor.withOpacity(0.8), fontWeight: FontWeight.bold, letterSpacing: 0.2),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 10),
           Text(
             value,
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color),
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: textColor, letterSpacing: -0.5),
           ),
         ],
       ),
@@ -1251,6 +1519,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      backgroundColor: Colors.transparent,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -1259,62 +1528,75 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         maxChildSize: 0.95,
         minChildSize: 0.5,
         expand: false,
-        builder: (_, controller) => Padding(
-          padding: const EdgeInsets.all(20),
-          child: ListView(
-            controller: controller,
+        builder: (_, controller) => Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text(
                     'Revenue Breakdown',
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Color(0xFF0F172A)),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close),
+                    icon: const Icon(Icons.close_rounded, color: Color(0xFF64748B)),
                     onPressed: () => Navigator.pop(ctx),
                   ),
                 ],
               ),
-              const Divider(),
+              const SizedBox(height: 8),
+              const Divider(height: 1, color: Color(0xFFE2E8F0)),
               const SizedBox(height: 16),
-              _buildDetailCard('Total Revenue', format.format(kpi.totalRevenue), Colors.green, Icons.trending_up),
-              const SizedBox(height: 16),
-              const Text('Revenue by Payment Mode', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 12),
-              ...kpi.revenueByMode.entries.map((entry) => Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              Expanded(
+                child: ListView(
+                  controller: controller,
+                  padding: const EdgeInsets.only(bottom: 24),
                   children: [
-                    Text(entry.key, style: const TextStyle(fontSize: 16)),
-                    Text(
-                      format.format(entry.value),
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
+                    _buildDetailCard('Total Revenue', format.format(kpi.totalRevenue), Colors.green, Icons.trending_up),
+                    const SizedBox(height: 16),
+                    const Text('Revenue by Payment Mode', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
+                    const SizedBox(height: 12),
+                    ...kpi.revenueByMode.entries.map((entry) => Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(entry.key, style: const TextStyle(fontSize: 14, color: Color(0xFF334155), fontWeight: FontWeight.w500)),
+                          Text(
+                            format.format(entry.value),
+                            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                          ),
+                        ],
+                      ),
+                    )).toList(),
+                    const SizedBox(height: 16),
+                    const Text('Revenue by Department', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
+                    const SizedBox(height: 12),
+                    ...kpi.departmentKpis.entries.map((entry) {
+                      final income = (entry.value['income'] ?? 0).toDouble();
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(entry.key, style: const TextStyle(fontSize: 14, color: Color(0xFF334155), fontWeight: FontWeight.w500)),
+                            Text(
+                              format.format(income),
+                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.green),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
                   ],
                 ),
-              )).toList(),
-              const SizedBox(height: 16),
-              const Text('Revenue by Department', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 12),
-              ...kpi.departmentKpis.entries.map((entry) {
-                final income = (entry.value['income'] ?? 0).toDouble();
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(entry.key, style: const TextStyle(fontSize: 16)),
-                      Text(
-                        format.format(income),
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green),
-                      ),
-                    ],
-                  ),
-                );
-              }).toList(),
+              ),
             ],
           ),
         ),
@@ -1326,6 +1608,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      backgroundColor: Colors.transparent,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -1334,61 +1617,74 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         maxChildSize: 0.95,
         minChildSize: 0.5,
         expand: false,
-        builder: (_, controller) => Padding(
-          padding: const EdgeInsets.all(20),
-          child: ListView(
-            controller: controller,
+        builder: (_, controller) => Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text(
                     'Expense Breakdown',
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Color(0xFF0F172A)),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close),
+                    icon: const Icon(Icons.close_rounded, color: Color(0xFF64748B)),
                     onPressed: () => Navigator.pop(ctx),
                   ),
                 ],
               ),
-              const Divider(),
+              const SizedBox(height: 8),
+              const Divider(height: 1, color: Color(0xFFE2E8F0)),
               const SizedBox(height: 16),
-              _buildDetailCard('Total Expenses', format.format(kpi.totalExpenses), Colors.red, Icons.trending_down),
-              const SizedBox(height: 16),
-              const Text('Expenses by Department', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 12),
-              ...kpi.departmentExpenses.map((dept) => Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.red.withOpacity(0.05),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.red.withOpacity(0.2)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(dept.department, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                          Text(
-                            format.format(dept.amount),
-                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.red),
-                          ),
-                        ],
+              Expanded(
+                child: ListView(
+                  controller: controller,
+                  padding: const EdgeInsets.only(bottom: 24),
+                  children: [
+                    _buildDetailCard('Total Expenses', format.format(kpi.totalExpenses), Colors.red, Icons.trending_down),
+                    const SizedBox(height: 16),
+                    const Text('Expenses by Department', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
+                    const SizedBox(height: 12),
+                    ...kpi.departmentExpenses.map((dept) => Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withOpacity(0.05),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.red.withOpacity(0.15)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(dept.department, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
+                                Text(
+                                  format.format(dept.amount),
+                                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.red),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '${dept.percentage.toStringAsFixed(1)}% of total expenses',
+                              style: const TextStyle(fontSize: 11, color: Color(0xFF64748B), fontWeight: FontWeight.w500),
+                            ),
+                          ],
+                        ),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '${dept.percentage.toStringAsFixed(1)}% of total expenses',
-                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                      ),
-                    ],
-                  ),
+                    )).toList(),
+                  ],
                 ),
-              )).toList(),
+              ),
             ],
           ),
         ),
@@ -1401,6 +1697,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      backgroundColor: Colors.transparent,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -1409,72 +1706,86 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         maxChildSize: 0.9,
         minChildSize: 0.4,
         expand: false,
-        builder: (_, controller) => Padding(
-          padding: const EdgeInsets.all(20),
-          child: ListView(
-            controller: controller,
+        builder: (_, controller) => Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text(
                     'Profit Analysis',
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Color(0xFF0F172A)),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close),
+                    icon: const Icon(Icons.close_rounded, color: Color(0xFF64748B)),
                     onPressed: () => Navigator.pop(ctx),
                   ),
                 ],
               ),
-              const Divider(),
+              const SizedBox(height: 8),
+              const Divider(height: 1, color: Color(0xFFE2E8F0)),
               const SizedBox(height: 16),
-              _buildDetailCard(
-                'Net Profit', 
-                format.format(kpi.netProfit), 
-                kpi.netProfit >= 0 ? Colors.green : Colors.red, 
-                kpi.netProfit >= 0 ? Icons.trending_up : Icons.trending_down,
-              ),
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Colors.blue.shade50, Colors.purple.shade50],
-                  ),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Column(
+              Expanded(
+                child: ListView(
+                  controller: controller,
+                  padding: const EdgeInsets.only(bottom: 24),
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('Revenue', style: TextStyle(fontSize: 16)),
-                        Text(format.format(kpi.totalRevenue), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                      ],
+                    _buildDetailCard(
+                      'Net Profit', 
+                      format.format(kpi.netProfit), 
+                      kpi.netProfit >= 0 ? Colors.green : Colors.red, 
+                      kpi.netProfit >= 0 ? Icons.trending_up : Icons.trending_down,
                     ),
-                    const Divider(),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('Expenses', style: TextStyle(fontSize: 16)),
-                        Text(format.format(kpi.totalExpenses), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                      ],
-                    ),
-                    const Divider(),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('Profit Margin', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                        Text(
-                          '${profitMargin.toStringAsFixed(1)}%',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: profitMargin >= 20 ? Colors.green : profitMargin >= 10 ? Colors.orange : Colors.red,
-                          ),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [const Color(0xFF064E3B).withOpacity(0.04), const Color(0xFFC5A880).withOpacity(0.04)],
                         ),
-                      ],
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: const Color(0xFFE2E8F0), width: 1.2),
+                      ),
+                      child: Column(
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('Revenue', style: TextStyle(fontSize: 14, color: Color(0xFF475569), fontWeight: FontWeight.w500)),
+                              Text(format.format(kpi.totalRevenue), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
+                            ],
+                          ),
+                          const Divider(height: 16, color: Color(0xFFE2E8F0)),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('Expenses', style: TextStyle(fontSize: 14, color: Color(0xFF475569), fontWeight: FontWeight.w500)),
+                              Text(format.format(kpi.totalExpenses), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
+                            ],
+                          ),
+                          const Divider(height: 16, color: Color(0xFFE2E8F0)),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('Profit Margin', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
+                              Text(
+                                '${profitMargin.toStringAsFixed(1)}%',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: profitMargin >= 20 ? Colors.green : profitMargin >= 10 ? Colors.orange : Colors.red,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
@@ -1490,6 +1801,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      backgroundColor: Colors.transparent,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -1498,33 +1810,46 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         maxChildSize: 0.8,
         minChildSize: 0.3,
         expand: false,
-        builder: (_, controller) => Padding(
-          padding: const EdgeInsets.all(20),
-          child: ListView(
-            controller: controller,
+        builder: (_, controller) => Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text(
                     'Booking Details',
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Color(0xFF0F172A)),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close),
+                    icon: const Icon(Icons.close_rounded, color: Color(0xFF64748B)),
                     onPressed: () => Navigator.pop(ctx),
                   ),
                 ],
               ),
-              const Divider(),
+              const SizedBox(height: 8),
+              const Divider(height: 1, color: Color(0xFFE2E8F0)),
               const SizedBox(height: 16),
-              _buildDetailCard('Total Room Bookings', '${kpi.roomBookings}', Colors.blue, Icons.hotel),
-              const SizedBox(height: 16),
-              const Text('Booking Insights', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 12),
-              _buildInfoRow('Total Bookings', '${kpi.totalBookings}'),
-              _buildInfoRow('Room Bookings', '${kpi.roomBookings}'),
-              _buildInfoRow('Average per Day', '${(kpi.roomBookings / 30).toStringAsFixed(1)}'),
+              Expanded(
+                child: ListView(
+                  controller: controller,
+                  padding: const EdgeInsets.only(bottom: 24),
+                  children: [
+                    _buildDetailCard('Total Room Bookings', '${kpi.roomBookings}', Colors.blue, Icons.hotel),
+                    const SizedBox(height: 16),
+                    const Text('Booking Insights', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
+                    const SizedBox(height: 12),
+                    _buildInfoRow('Total Bookings', '${kpi.totalBookings}'),
+                    _buildInfoRow('Room Bookings', '${kpi.roomBookings}'),
+                    _buildInfoRow('Average per Day', '${(kpi.roomBookings / 30).toStringAsFixed(1)}'),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
@@ -1536,6 +1861,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      backgroundColor: Colors.transparent,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -1544,32 +1870,45 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         maxChildSize: 0.8,
         minChildSize: 0.3,
         expand: false,
-        builder: (_, controller) => Padding(
-          padding: const EdgeInsets.all(20),
-          child: ListView(
-            controller: controller,
+        builder: (_, controller) => Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text(
                     'Food Order Details',
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Color(0xFF0F172A)),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close),
+                    icon: const Icon(Icons.close_rounded, color: Color(0xFF64748B)),
                     onPressed: () => Navigator.pop(ctx),
                   ),
                 ],
               ),
-              const Divider(),
+              const SizedBox(height: 8),
+              const Divider(height: 1, color: Color(0xFFE2E8F0)),
               const SizedBox(height: 16),
-              _buildDetailCard('Total Food Orders', '${kpi.foodOrders}', Colors.orange, Icons.restaurant),
-              const SizedBox(height: 16),
-              const Text('Order Insights', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 12),
-              _buildInfoRow('Total Orders', '${kpi.foodOrders}'),
-              _buildInfoRow('Average per Day', '${(kpi.foodOrders / 30).toStringAsFixed(1)}'),
+              Expanded(
+                child: ListView(
+                  controller: controller,
+                  padding: const EdgeInsets.only(bottom: 24),
+                  children: [
+                    _buildDetailCard('Total Food Orders', '${kpi.foodOrders}', Colors.orange, Icons.restaurant),
+                    const SizedBox(height: 16),
+                    const Text('Order Insights', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
+                    const SizedBox(height: 12),
+                    _buildInfoRow('Total Orders', '${kpi.foodOrders}'),
+                    _buildInfoRow('Average per Day', '${(kpi.foodOrders / 30).toStringAsFixed(1)}'),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
@@ -1582,6 +1921,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      backgroundColor: Colors.transparent,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -1590,86 +1930,102 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         maxChildSize: 0.9,
         minChildSize: 0.4,
         expand: false,
-        builder: (_, controller) => Padding(
-          padding: const EdgeInsets.all(20),
-          child: ListView(
-            controller: controller,
+        builder: (_, controller) => Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text(
                     'Tax Summary',
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Color(0xFF0F172A)),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close),
+                    icon: const Icon(Icons.close_rounded, color: Color(0xFF64748B)),
                     onPressed: () => Navigator.pop(ctx),
                   ),
                 ],
               ),
-              const Divider(),
+              const SizedBox(height: 8),
+              const Divider(height: 1, color: Color(0xFFE2E8F0)),
               const SizedBox(height: 16),
-              _buildDetailCard('Net Tax Liability', format.format(netTax), Colors.purple, Icons.receipt_long),
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.purple.withOpacity(0.05),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.purple.withOpacity(0.2)),
-                ),
-                child: Column(
+              Expanded(
+                child: ListView(
+                  controller: controller,
+                  padding: const EdgeInsets.only(bottom: 24),
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('Output Tax (Collected)', style: TextStyle(fontSize: 16)),
-                        Text(
-                          format.format(kpi.totalOutputTax),
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green),
-                        ),
-                      ],
-                    ),
-                    const Divider(),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('Input Tax (Paid)', style: TextStyle(fontSize: 16)),
-                        Text(
-                          format.format(kpi.totalInputTax),
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.red),
-                        ),
-                      ],
-                    ),
-                    const Divider(),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('Net Tax Payable', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                        Text(
-                          format.format(netTax),
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: netTax > 0 ? Colors.orange : Colors.green,
+                    _buildDetailCard('Net Tax Liability', format.format(netTax), Colors.purple, Icons.receipt_long),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.purple.withOpacity(0.04),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.purple.withOpacity(0.15)),
+                      ),
+                      child: Column(
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('Output Tax (Collected)', style: TextStyle(fontSize: 14, color: Color(0xFF475569), fontWeight: FontWeight.w500)),
+                              Text(
+                                format.format(kpi.totalOutputTax),
+                                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.green),
+                              ),
+                            ],
                           ),
-                        ),
-                      ],
+                          const Divider(height: 16, color: Color(0xFFE2E8F0)),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('Input Tax (Paid)', style: TextStyle(fontSize: 14, color: Color(0xFF475569), fontWeight: FontWeight.w500)),
+                              Text(
+                                format.format(kpi.totalInputTax),
+                                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.red),
+                              ),
+                            ],
+                          ),
+                          const Divider(height: 16, color: Color(0xFFE2E8F0)),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('Net Tax Payable', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
+                              Text(
+                                format.format(netTax),
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: netTax > 0 ? Colors.orange : Colors.green,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => GstReportScreen(kpi: kpi)));
+                      },
+                      icon: const Icon(Icons.arrow_forward_rounded),
+                      label: const Text('View Full GST Report'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF064E3B),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
                     ),
                   ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => GstReportScreen(kpi: kpi)));
-                },
-                icon: const Icon(Icons.arrow_forward),
-                label: const Text('View Full GST Report'),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
                 ),
               ),
             ],
@@ -1891,7 +2247,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     ];
 
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
       children: [
         // GST quick stats card
         if (kpi != null) ...[

@@ -259,7 +259,7 @@ class PerformanceMiddleware(BaseHTTPMiddleware):
                  print(f"[DEBUG-PERF] Disabled Cache for: {path}")
             # Cache static/semi-static endpoints longer
             elif any(p in path for p in ["/rooms", "/packages", "/services", "/food-items", "/inventory/items"]):
-                response.headers["Cache-Control"] = "public, max-age=300"  # 5 minutes
+                response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
             else:
                 response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
         
@@ -520,4 +520,4 @@ if __name__ == "__main__":
 
     # Get port from environment or default to 8012 for Orchid (Avoiding 8011 conflict)
     port = int(os.getenv("PORT", 8011))
-    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True, reload_dirs=["app"])

@@ -106,7 +106,7 @@ void _showGstInfoSheet(BuildContext context, _GstReportInfo info) {
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
-                  colors: [Color(0xFF4F46E5), Color(0xFF7C3AED)],
+                  colors: [Color(0xFF064E3B), Color(0xFF022C22)],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
@@ -120,7 +120,7 @@ void _showGstInfoSheet(BuildContext context, _GstReportInfo info) {
                       color: Colors.white.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(Icons.info_outline, color: Colors.white, size: 20),
+                    child: const Icon(Icons.info_outline_rounded, color: Colors.white, size: 20),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -152,7 +152,7 @@ void _showGstInfoSheet(BuildContext context, _GstReportInfo info) {
                   // What it includes
                   _infoSection(
                     label: '📋 What This Report Includes',
-                    color: const Color(0xFF4F46E5),
+                    color: const Color(0xFF064E3B),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: info.includes
@@ -166,7 +166,7 @@ void _showGstInfoSheet(BuildContext context, _GstReportInfo info) {
                                       width: 6,
                                       height: 6,
                                       decoration: const BoxDecoration(
-                                        color: Color(0xFF4F46E5),
+                                        color: Color(0xFF064E3B),
                                         shape: BoxShape.circle,
                                       ),
                                     ),
@@ -187,8 +187,8 @@ void _showGstInfoSheet(BuildContext context, _GstReportInfo info) {
                   // How it calculates
                   _infoSection(
                     label: '🧮 How It\'s Calculated',
-                    color: const Color(0xFFD97706),
-                    bgColor: const Color(0xFFFFFBEB),
+                    color: const Color(0xFFC5A880),
+                    bgColor: const Color(0xFFC5A880).withOpacity(0.08),
                     child: Text(
                       info.calculation,
                       style: const TextStyle(fontSize: 13, color: Color(0xFF92400E), height: 1.5),
@@ -302,11 +302,27 @@ class GstReportScreen extends StatelessWidget {
     final netLiability = kpi.totalOutputTax - kpi.totalInputTax;
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text("GST Liability Report"),
+        backgroundColor: const Color(0xFFF8FAFC),
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF064E3B), size: 20),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: const Text(
+          "GST Liability Report",
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
+            color: Color(0xFF064E3B),
+            letterSpacing: -0.5,
+          ),
+        ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.info_outline),
+            icon: const Icon(Icons.info_outline_rounded, color: Color(0xFF064E3B)),
             tooltip: 'About this report',
             onPressed: () => _showGstInfoSheet(context, _gstLiabilityInfo),
           ),
@@ -324,18 +340,18 @@ class GstReportScreen extends StatelessWidget {
                 margin: const EdgeInsets.only(bottom: 20),
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFEEF2FF),
+                  color: const Color(0xFF064E3B).withOpacity(0.05),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFF4F46E5).withOpacity(0.3)),
+                  border: Border.all(color: const Color(0xFF064E3B).withOpacity(0.12)),
                 ),
                 child: Row(
                   children: const [
-                    Icon(Icons.info_outline, color: Color(0xFF4F46E5), size: 18),
+                    Icon(Icons.info_outline_rounded, color: Color(0xFF064E3B), size: 18),
                     SizedBox(width: 10),
                     Expanded(
                       child: Text(
                         'Tap ⓘ to learn what this report includes, how taxes are calculated, and how to use it for GST filing.',
-                        style: TextStyle(fontSize: 12, color: Color(0xFF3730A3), height: 1.4),
+                        style: TextStyle(fontSize: 12, color: Color(0xFF064E3B), fontWeight: FontWeight.bold, height: 1.4),
                       ),
                     ),
                   ],
@@ -348,7 +364,7 @@ class GstReportScreen extends StatelessWidget {
               context,
               "Output GST (Collected from Guests)",
               kpi.totalOutputTax,
-              Colors.red,
+              const Color(0xFFDC2626),
               format,
               "Liability",
               infoKey: 'output',
@@ -360,7 +376,7 @@ class GstReportScreen extends StatelessWidget {
               context,
               "Input GST / ITC (Paid on Purchases)",
               kpi.totalInputTax,
-              Colors.green,
+              const Color(0xFF059669),
               format,
               "Asset",
               infoKey: 'input',
@@ -374,35 +390,49 @@ class GstReportScreen extends StatelessWidget {
             // ── Tax rates reference card ───────────────────────────────────
             GestureDetector(
               onTap: () => _showGstInfoSheet(context, _gstDetailedBreakdown),
-              child: Card(
-                elevation: 2,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: const Color(0xFFF1F5F9), width: 1.2),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.015),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    )
+                  ],
+                ),
                 child: Padding(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(18),
                   child: Row(
                     children: [
                       Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF5F3FF),
-                          borderRadius: BorderRadius.circular(10),
+                          color: const Color(0xFF064E3B).withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                        child: const Icon(Icons.calculate_outlined, color: Color(0xFF7C3AED), size: 22),
+                        child: const Icon(Icons.calculate_outlined, color: Color(0xFF064E3B), size: 22),
                       ),
                       const SizedBox(width: 14),
                       const Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('GST Rates & CGST/SGST/IGST Explained',
-                                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-                            SizedBox(height: 3),
-                            Text('Tap to learn about tax slabs, splitting rules & interstate transactions',
-                                style: TextStyle(color: Colors.grey, fontSize: 12)),
+                            Text(
+                              'GST Rates & CGST/SGST/IGST Explained',
+                              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: Color(0xFF0F172A)),
+                            ),
+                            SizedBox(height: 4),
+                            Text(
+                              'Tap to learn about tax slabs, splitting rules & interstate transactions',
+                              style: TextStyle(color: Color(0xFF64748B), fontSize: 12, fontWeight: FontWeight.w500),
+                            ),
                           ],
                         ),
                       ),
-                      const Icon(Icons.chevron_right, color: Colors.grey),
+                      const Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8)),
                     ],
                   ),
                 ),
@@ -430,18 +460,29 @@ class GstReportScreen extends StatelessWidget {
     String type, {
     String? infoKey,
   }) {
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFF1F5F9), width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.015),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          )
+        ],
+      ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
         child: Row(
           children: [
             CircleAvatar(
-              backgroundColor: color.withOpacity(0.1),
+              backgroundColor: color.withOpacity(0.08),
               child: Icon(
-                type == "Liability" ? Icons.arrow_upward : Icons.arrow_downward,
+                type == "Liability" ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
                 color: color,
+                size: 20,
               ),
             ),
             const SizedBox(width: 14),
@@ -449,19 +490,30 @@ class GstReportScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                  const SizedBox(height: 4),
+                  Text(
+                    title, 
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold, 
+                      fontSize: 13,
+                      color: Color(0xFF64748B),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
                   Text(
                     fmt.format(amount),
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color),
+                    style: TextStyle(
+                      fontSize: 18, 
+                      fontWeight: FontWeight.w800, 
+                      color: color,
+                      letterSpacing: -0.5,
+                    ),
                   ),
                 ],
               ),
             ),
-            // ⓘ info button
             IconButton(
-              icon: const Icon(Icons.info_outline, size: 20),
-              color: Colors.grey[400],
+              icon: const Icon(Icons.info_outline_rounded, size: 20),
+              color: const Color(0xFF94A3B8),
               tooltip: 'Learn more',
               onPressed: () => _showGstInfoSheet(context, _gstLiabilityInfo),
             ),
@@ -473,10 +525,24 @@ class GstReportScreen extends StatelessWidget {
 
   Widget _buildNetLiabilityCard(BuildContext context, double amount, NumberFormat fmt) {
     final isPayable = amount > 0;
-    return Card(
-      color: isPayable ? Colors.orange[50] : Colors.green[50],
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    final bgColor = isPayable ? const Color(0xFFFDF8F2) : const Color(0xFFF0FDF4);
+    final borderColor = isPayable ? const Color(0xFFC5A880).withOpacity(0.3) : const Color(0xFF86EFAC);
+    final textColor = isPayable ? const Color(0xFFDC2626) : const Color(0xFF059669);
+    final labelColor = isPayable ? const Color(0xFF92400E) : const Color(0xFF065F46);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: borderColor, width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.015),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          )
+        ],
+      ),
       child: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Column(
@@ -484,36 +550,41 @@ class GstReportScreen extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Text("Net GST Payable", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                const Text(
+                  "Net GST Payable", 
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Color(0xFF0F172A)),
+                ),
                 const SizedBox(width: 8),
                 GestureDetector(
                   onTap: () => _showGstInfoSheet(context, _gstLiabilityInfo),
-                  child: Icon(Icons.info_outline, size: 18, color: Colors.grey[500]),
+                  child: const Icon(Icons.info_outline_rounded, size: 16, color: Color(0xFF64748B)),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             Text(
               fmt.format(amount.abs()),
               style: TextStyle(
                 fontSize: 32,
-                fontWeight: FontWeight.bold,
-                color: isPayable ? Colors.red : Colors.green,
+                fontWeight: FontWeight.w900,
+                color: textColor,
+                letterSpacing: -1,
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             Text(
               isPayable ? "You need to pay this to GST portal" : "You have excess ITC credit",
               style: TextStyle(
                 fontWeight: FontWeight.bold,
-                color: isPayable ? Colors.red[800] : Colors.green[800],
+                fontSize: 14,
+                color: labelColor,
               ),
             ),
             if (isPayable) ...[
               const SizedBox(height: 6),
               Text(
                 'Due by 20th of next month (GSTR-3B)',
-                style: TextStyle(fontSize: 11, color: Colors.orange[700]),
+                style: TextStyle(fontSize: 11, color: const Color(0xFFC5A880), fontWeight: FontWeight.bold),
               ),
             ],
           ],

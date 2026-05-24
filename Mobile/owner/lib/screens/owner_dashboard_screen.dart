@@ -91,23 +91,49 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
         backgroundColor: const Color(0xFFF8FAFC),
         elevation: 0,
         scrolledUnderElevation: 0,
+        toolbarHeight: 65,
         title: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
-                color: const Color(0xFF15803D).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(10),
+                color: const Color(0xFF064E3B).withOpacity(0.08),
+                shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.dashboard_rounded, color: Color(0xFF15803D), size: 20),
+              child: const Icon(
+                Icons.local_florist_rounded,
+                color: Color(0xFFC5A880),
+                size: 20,
+              ),
             ),
-            const SizedBox(width: 12),
-            const Text(
-              'Dashboard',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF1E293B),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text(
+                    'Zeebull',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF064E3B),
+                      letterSpacing: -0.5,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 1),
+                  Text(
+                    'EXECUTIVE DASHBOARD',
+                    style: TextStyle(
+                      fontSize: 8.5,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFFC5A880),
+                      letterSpacing: 1.5,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
               ),
             ),
           ],
@@ -117,23 +143,26 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
             Padding(
               padding: const EdgeInsets.only(right: 16),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                height: 36,
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(16),
                   border: Border.all(color: const Color(0xFFE2E8F0)),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.02),
+                      color: Colors.black.withOpacity(0.01),
                       blurRadius: 4,
-                      offset: const Offset(0, 1),
+                      offset: const Offset(0, 2),
                     )
                   ]
                 ),
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
                     value: branchProvider.activeBranchId,
-                    icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF64748B)),
+                    icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFFC5A880), size: 18),
+                    dropdownColor: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
                     onChanged: (String? newValue) {
                       if (newValue != null) {
                          branchProvider.switchBranch(newValue).then((_) => _refreshAllData());
@@ -144,9 +173,9 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                         value: 'all',
                         child: Row(
                           children: [
-                            Icon(Icons.business_rounded, color: Color(0xFF15803D), size: 16),
-                            SizedBox(width: 8),
-                            Text('Enterprise', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF15803D))),
+                            Icon(Icons.business_rounded, color: Color(0xFF064E3B), size: 14),
+                            SizedBox(width: 6),
+                            Text('Enterprise', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF064E3B))),
                           ],
                         ),
                       ),
@@ -155,9 +184,9 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                           value: branch.id.toString(),
                           child: Row(
                             children: [
-                              const Icon(Icons.storefront_rounded, color: Color(0xFF64748B), size: 16),
-                              const SizedBox(width: 8),
-                              Text(branch.name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF334155))),
+                              const Icon(Icons.storefront_rounded, color: Color(0xFF64748B), size: 14),
+                              const SizedBox(width: 6),
+                              Text(branch.name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF334155))),
                             ],
                           ),
                         );
@@ -174,7 +203,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
           _refreshAllData();
         },
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 110),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -182,114 +211,172 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
               _buildSectionTitle("Live Operations"),
               Container(
                 margin: const EdgeInsets.only(bottom: 16),
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 22),
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
-                    colors: [Color(0xFF064E3B), Color(0xFF0F766E)],
+                    colors: [Color(0xFF064E3B), Color(0xFF022C22)],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(
+                    color: const Color(0xFFC5A880).withOpacity(0.25),
+                    width: 1.5,
+                  ),
                   boxShadow: [
                     BoxShadow(
                       color: const Color(0xFF064E3B).withOpacity(0.25),
-                      blurRadius: 16,
-                      offset: const Offset(0, 8),
+                      blurRadius: 20,
+                      offset: const Offset(0, 10),
                     )
                   ]
                 ),
-                child: Row(
+                child: Column(
                   children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: const Color(0xFFC5A880).withOpacity(0.2),
+                              width: 1,
+                            ),
+                          ),
+                          child: const Icon(Icons.analytics_rounded, color: Color(0xFFC5A880), size: 12),
+                        ),
+                        const SizedBox(width: 8),
+                        const Text(
+                          "LIVE ROOM OCCUPANCY",
+                          style: TextStyle(
+                            color: Color(0xFFC5A880),
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        // Left Column: Occupied Stats
+                        Expanded(
+                          child: Column(
                             children: [
-                              Container(
-                                padding: const EdgeInsets.all(6),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.15),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: const Icon(Icons.trending_up_rounded, color: Colors.white, size: 16),
-                              ),
-                              const SizedBox(width: 8),
                               Text(
-                                "Live Room Occupancy",
+                                "${roomStats['occupied'] ?? 0}",
+                                style: const TextStyle(
+                                  color: Color(0xFFC5A880),
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                "OCCUPIED",
                                 style: TextStyle(
-                                  color: Colors.white.withOpacity(0.9),
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
+                                  color: Colors.white.withOpacity(0.6),
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 0.5,
                                 ),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 16),
-                          Text(
-                            "${occupancyRate.toStringAsFixed(1)}%",
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 34,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: -0.5,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            "Available: ${daily['available_rooms'] ?? roomStats['available'] ?? 0}  •  Occupied: ${roomStats['occupied'] ?? 0}",
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.85),
-                              fontSize: 12,
-                              fontWeight: FontWeight.w400,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        SizedBox(
-                          width: 80,
-                          height: 80,
-                          child: PieChart(
-                            PieChartData(
-                              sectionsSpace: 0,
-                              centerSpaceRadius: 26,
-                              startDegreeOffset: -90,
-                              sections: totalRooms > 0 
-                                ? [
-                                    PieChartSectionData(
-                                      color: Colors.white,
-                                      value: occupiedRooms.toDouble(),
-                                      radius: 7,
-                                      showTitle: false,
-                                    ),
-                                    PieChartSectionData(
-                                      color: Colors.white.withOpacity(0.2),
-                                      value: (totalRooms - occupiedRooms).toDouble(),
-                                      radius: 7,
-                                      showTitle: false,
-                                    ),
-                                  ]
-                                : [
-                                    PieChartSectionData(
-                                      color: Colors.white.withOpacity(0.2),
-                                      value: 1,
-                                      radius: 7,
-                                      showTitle: false,
-                                    ),
-                                  ],
-                            ),
-                          ),
                         ),
-                        Text(
-                          "${occupancyRate.toStringAsFixed(0)}%",
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
+                        
+                        // Center Column: Donut Chart
+                        Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            SizedBox(
+                              width: 110,
+                              height: 110,
+                              child: PieChart(
+                                PieChartData(
+                                  sectionsSpace: 0,
+                                  centerSpaceRadius: 38,
+                                  startDegreeOffset: -90,
+                                  sections: totalRooms > 0 
+                                    ? [
+                                        PieChartSectionData(
+                                          color: const Color(0xFFC5A880),
+                                          value: occupiedRooms.toDouble(),
+                                          radius: 10,
+                                          showTitle: false,
+                                        ),
+                                        PieChartSectionData(
+                                          color: Colors.white.withOpacity(0.1),
+                                          value: (totalRooms - occupiedRooms).toDouble(),
+                                          radius: 10,
+                                          showTitle: false,
+                                        ),
+                                      ]
+                                    : [
+                                        PieChartSectionData(
+                                          color: Colors.white.withOpacity(0.1),
+                                          value: 1,
+                                          radius: 10,
+                                          showTitle: false,
+                                        ),
+                                      ],
+                                ),
+                              ),
+                            ),
+                            Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  "${occupancyRate.toStringAsFixed(1)}%",
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: -0.5,
+                                  ),
+                                ),
+                                Text(
+                                  "OCCUPANCY",
+                                  style: TextStyle(
+                                    color: const Color(0xFFC5A880),
+                                    fontSize: 7.5,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        
+                        // Right Column: Available Stats
+                        Expanded(
+                          child: Column(
+                            children: [
+                              Text(
+                                "${daily['available_rooms'] ?? roomStats['available'] ?? 0}",
+                                style: const TextStyle(
+                                  color: Color(0xFF10B981),
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                "AVAILABLE",
+                                style: TextStyle(
+                                  color: Colors.white.withOpacity(0.6),
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
@@ -343,36 +430,28 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                     final item = recentActivity[index];
                     final checkInStr = item['check_in'] ?? 'N/A';
                     return Container(
-                      margin: const EdgeInsets.only(bottom: 8),
+                      margin: const EdgeInsets.only(bottom: 10),
                       decoration: BoxDecoration(
                         color: Colors.white,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: const Color(0xFFF1F5F9), width: 1.2),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: const Color(0xFFE2E8F0), width: 1.2),
                         boxShadow: [
                           BoxShadow(
                             color: Colors.black.withOpacity(0.01),
-                            blurRadius: 6,
-                            offset: const Offset(0, 2),
+                            blurRadius: 8,
+                            offset: const Offset(0, 3),
                           )
                         ]
                       ),
                       child: ListTile(
                         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                        leading: Container(
-                          width: 38,
-                          height: 38,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF15803D).withOpacity(0.08),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(Icons.person_rounded, size: 18, color: Color(0xFF15803D)),
-                        ),
+                        leading: _buildActivityIcon(item['status']),
                         title: Text(
                           item['guest_name'] ?? "Unknown Guest",
                           style: const TextStyle(
-                            fontWeight: FontWeight.bold,
+                            fontWeight: FontWeight.w700,
                             fontSize: 14,
-                            color: Color(0xFF1E293B),
+                            color: Color(0xFF0F172A),
                           ),
                         ),
                         subtitle: Padding(
@@ -381,17 +460,17 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                             "Check-in: $checkInStr",
                             style: const TextStyle(
                               fontSize: 11,
+                              fontWeight: FontWeight.w500,
                               color: Color(0xFF64748B),
                             ),
                           ),
                         ),
-                        trailing: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.end,
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
                             _buildStatusChip(item['status']),
-                            const SizedBox(height: 4),
-                            const Icon(Icons.chevron_right_rounded, size: 16, color: Color(0xFF94A3B8)),
+                            const SizedBox(width: 8),
+                            const Icon(Icons.chevron_right_rounded, size: 18, color: Color(0xFF94A3B8)),
                           ],
                         ),
                         onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BookingsScreen())),
@@ -469,10 +548,10 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                           Container(
                             padding: const EdgeInsets.all(4),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF15803D).withOpacity(0.08),
+                              color: const Color(0xFF064E3B).withOpacity(0.08),
                               shape: BoxShape.circle,
                             ),
-                            child: const Icon(Icons.chevron_right_rounded, size: 16, color: Color(0xFF15803D)),
+                            child: const Icon(Icons.chevron_right_rounded, size: 16, color: Color(0xFF064E3B)),
                           ),
                         ],
                       ),
@@ -611,9 +690,9 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
-                        _buildLegendItem("Revenue", const Color(0xFF15803D)),
+                        _buildLegendItem("Revenue", const Color(0xFF064E3B)),
                         const SizedBox(width: 12),
-                        _buildLegendItem("Expense", const Color(0xFFEF4444)),
+                        _buildLegendItem("Expense", const Color(0xFF991B1B)),
                       ],
                     ),
                     const SizedBox(height: 12),
@@ -660,10 +739,10 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                                  Container(
                                    padding: const EdgeInsets.all(6),
                                    decoration: BoxDecoration(
-                                     color: const Color(0xFF15803D).withOpacity(0.08),
+                                     color: const Color(0xFF064E3B).withOpacity(0.08),
                                      borderRadius: BorderRadius.circular(8),
                                    ),
-                                   child: const Icon(Icons.business_center_rounded, color: Color(0xFF15803D), size: 16),
+                                   child: const Icon(Icons.business_center_rounded, color: Color(0xFF064E3B), size: 16),
                                  ),
                                  const SizedBox(width: 10),
                                  Text(
@@ -683,8 +762,8 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                              Row(
                                mainAxisAlignment: MainAxisAlignment.spaceAround,
                                children: [
-                                 _departmentStat("Income", data['income'], const Color(0xFF15803D), currencyFormat),
-                                 _departmentStat("Expense", data['expenses'], const Color(0xFFEF4444), currencyFormat),
+                                 _departmentStat("Income", data['income'], const Color(0xFF064E3B), currencyFormat),
+                                 _departmentStat("Expense", data['expenses'], const Color(0xFF991B1B), currencyFormat),
                                  _departmentStat("Assets", data['assets'], const Color(0xFF3B82F6), currencyFormat),
                                ],
                              )
@@ -702,7 +781,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showQuickActionsMenu(context),
-        backgroundColor: const Color(0xFF15803D),
+        backgroundColor: const Color(0xFF064E3B),
         elevation: 4,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: const Icon(Icons.add_rounded, color: Colors.white, size: 28),
@@ -719,20 +798,20 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     String displayLabel = status;
     
     if (s.contains('check in') || s.contains('checked in') || s.contains('active')) {
-      bgColor = const Color(0xFFDCFCE7);
-      textColor = const Color(0xFF15803D);
+      bgColor = const Color(0xFFE6F4EA);
+      textColor = const Color(0xFF064E3B);
       displayLabel = 'Checked In';
     } else if (s.contains('checkout') || s.contains('checked out') || s.contains('completed')) {
       bgColor = const Color(0xFFF1F5F9);
       textColor = const Color(0xFF475569);
       displayLabel = 'Checked Out';
     } else if (s.contains('book') || s.contains('confirmed') || s.contains('pending')) {
-      bgColor = const Color(0xFFEFF6FF);
-      textColor = const Color(0xFF1D4ED8);
+      bgColor = const Color(0xFFFEF3C7);
+      textColor = const Color(0xFFB45309);
       displayLabel = 'Booked';
     } else if (s.contains('cancel')) {
       bgColor = const Color(0xFFFEE2E2);
-      textColor = const Color(0xFFB91C1C);
+      textColor = const Color(0xFF991B1B);
       displayLabel = 'Cancelled';
     } else {
       bgColor = const Color(0xFFFEF9C3);
@@ -744,16 +823,49 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: bgColor,
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: textColor.withOpacity(0.25), width: 1),
       ),
       child: Text(
         displayLabel,
         style: TextStyle(
           color: textColor,
-          fontSize: 10,
-          fontWeight: FontWeight.bold,
+          fontSize: 9,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.2,
         ),
       ),
+    );
+  }
+
+  Widget _buildActivityIcon(String? status) {
+    final s = (status ?? '').toLowerCase();
+    IconData iconData = Icons.room_service_rounded;
+    Color color = const Color(0xFFC5A880); // Default gold
+    
+    if (s.contains('check in') || s.contains('checked in') || s.contains('active')) {
+      iconData = Icons.login_rounded;
+      color = const Color(0xFF064E3B); // Emerald
+    } else if (s.contains('checkout') || s.contains('checked out') || s.contains('completed')) {
+      iconData = Icons.logout_rounded;
+      color = const Color(0xFF64748B); // Slate
+    } else if (s.contains('book') || s.contains('confirmed') || s.contains('pending')) {
+      iconData = Icons.bookmark_added_rounded;
+      color = const Color(0xFFC5A880); // Gold/Champagne
+    } else if (s.contains('cancel')) {
+      iconData = Icons.cancel_presentation_rounded;
+      color = const Color(0xFF991B1B); // Luxe Burgundy
+    }
+    
+    return Container(
+      width: 38,
+      height: 38,
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.08),
+        shape: BoxShape.circle,
+        border: Border.all(color: color.withOpacity(0.18), width: 1.2),
+      ),
+      child: Icon(iconData, size: 16, color: color),
     );
   }
 
@@ -920,20 +1032,20 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
   Widget _buildAlertCard(String title, String count, IconData icon, Color color, VoidCallback onTap) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(18),
+      borderRadius: BorderRadius.circular(20),
       child: Container(
-        padding: const EdgeInsets.all(16),
-        width: 150,
+        padding: const EdgeInsets.all(18),
+        width: 155,
         height: 125,
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: color.withOpacity(0.15), width: 1.2),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: color.withOpacity(0.18), width: 1.2),
           boxShadow: [
             BoxShadow(
               color: color.withOpacity(0.04),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
             )
           ]
         ),
@@ -946,31 +1058,33 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(10),
+                    color: color.withOpacity(0.08),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: color.withOpacity(0.12), width: 1),
                   ),
-                  child: Icon(icon, size: 18, color: color),
+                  child: Icon(icon, size: 16, color: color),
                 ),
-                Icon(Icons.arrow_forward_rounded, size: 14, color: color.withOpacity(0.6)),
+                Icon(Icons.arrow_outward_rounded, size: 12, color: color.withOpacity(0.6)),
               ],
             ),
             const Spacer(),
             Text(
               count,
               style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
+                fontSize: 26,
+                fontWeight: FontWeight.w800,
                 color: color,
                 letterSpacing: -0.5,
               ),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 2),
             Text(
-              title,
+              title.toUpperCase(),
               style: const TextStyle(
-                fontSize: 12,
+                fontSize: 9,
                 color: Color(0xFF64748B),
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.5,
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -983,25 +1097,34 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
 
   Widget _buildSectionTitle(String title) {
     return Padding(
-      padding: const EdgeInsets.only(top: 8, bottom: 12),
+      padding: const EdgeInsets.only(top: 14, bottom: 12),
       child: Row(
         children: [
           Container(
-            width: 4,
-            height: 16,
+            width: 3.5,
+            height: 15,
             decoration: BoxDecoration(
-              color: const Color(0xFF15803D),
+              color: const Color(0xFF064E3B),
               borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 3),
+          Container(
+            width: 3.5,
+            height: 9,
+            decoration: BoxDecoration(
+              color: const Color(0xFFC5A880),
+              borderRadius: BorderRadius.circular(1.5),
             ),
           ),
           const SizedBox(width: 8),
           Text(
             title,
             style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF1E293B),
-              letterSpacing: 0.3,
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF0F172A),
+              letterSpacing: 0.1,
             ),
           ),
         ],
@@ -1034,18 +1157,26 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
   }
 
   Widget _kpi(String title, String value, IconData icon, Color color, {String? subtitle, VoidCallback? onTap}) {
+    // Elegant colors mapped to champagne/emerald palette where applicable
+    Color resolvedColor = color;
+    if (color == Colors.green) {
+      resolvedColor = const Color(0xFF064E3B);
+    } else if (color == Colors.orange || color == Colors.amber) {
+      resolvedColor = const Color(0xFFD97706);
+    }
+    
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(18),
+      borderRadius: BorderRadius.circular(20),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         decoration: BoxDecoration(
           color: Colors.white, 
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: const Color(0xFFF1F5F9), width: 1.2),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: const Color(0xFFE2E8F0).withOpacity(0.8), width: 1.2),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.02),
+              color: Colors.black.withOpacity(0.015),
               blurRadius: 10,
               offset: const Offset(0, 4),
             )
@@ -1061,22 +1192,30 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: color.withOpacity(0.08),
-                    borderRadius: BorderRadius.circular(10),
+                    gradient: LinearGradient(
+                      colors: [
+                        resolvedColor.withOpacity(0.12),
+                        resolvedColor.withOpacity(0.04),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: resolvedColor.withOpacity(0.15), width: 1),
                   ),
-                  child: Icon(icon, color: color, size: 18),
+                  child: Icon(icon, color: resolvedColor, size: 16),
                 ),
-                const Icon(Icons.chevron_right_rounded, size: 16, color: Color(0xFF94A3B8)),
+                const Icon(Icons.arrow_outward_rounded, size: 12, color: Color(0xFF94A3B8)),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             FittedBox(
               fit: BoxFit.scaleDown,
               child: Text(
                 value,
                 style: const TextStyle(
                   fontSize: 18,
-                  fontWeight: FontWeight.bold,
+                  fontWeight: FontWeight.w800,
                   color: Color(0xFF0F172A),
                   letterSpacing: -0.3,
                 ),
@@ -1084,16 +1223,17 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
             ),
             const SizedBox(height: 4),
             Text(
-              title,
+              title.toUpperCase(),
               style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
+                fontSize: 9,
+                fontWeight: FontWeight.w800,
                 color: Color(0xFF64748B),
+                letterSpacing: 0.5,
               ),
               overflow: TextOverflow.ellipsis,
             ),
             if (subtitle != null) ...[
-              const SizedBox(height: 2),
+              const SizedBox(height: 3),
               Text(
                 subtitle,
                 style: const TextStyle(
@@ -1162,7 +1302,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
           LineChartBarData(
             spots: spots,
             isCurved: true,
-            color: const Color(0xFF15803D),
+            color: const Color(0xFF064E3B),
             barWidth: 3.5,
             isStrokeCapRound: true,
             dotData: FlDotData(
@@ -1171,15 +1311,15 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                 radius: 4,
                 color: Colors.white,
                 strokeWidth: 2,
-                strokeColor: const Color(0xFF15803D),
+                strokeColor: const Color(0xFF064E3B),
               ),
             ),
             belowBarData: BarAreaData(
               show: true,
               gradient: LinearGradient(
                 colors: [
-                  const Color(0xFF15803D).withOpacity(0.2),
-                  const Color(0xFF15803D).withOpacity(0.0),
+                  const Color(0xFF064E3B).withOpacity(0.2),
+                  const Color(0xFF064E3B).withOpacity(0.0),
                 ],
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
@@ -1192,11 +1332,46 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
   }
 
   Widget _departmentStat(String label, dynamic value, Color color, NumberFormat fmt) {
-    return Column(
-      children: [
-        Text(fmt.format(value ?? 0), style: TextStyle(fontWeight: FontWeight.bold, color: color, fontSize: 14)),
-        Text(label, style: const TextStyle(color: Color(0xFF64748B), fontSize: 12, fontWeight: FontWeight.w500)),
-      ],
+    Color resolvedColor = color;
+    if (color == const Color(0xFF15803D)) resolvedColor = const Color(0xFF064E3B);
+    if (color == const Color(0xFFEF4444)) resolvedColor = const Color(0xFF991B1B);
+    if (color == const Color(0xFF3B82F6)) resolvedColor = const Color(0xFF2563EB);
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+        margin: const EdgeInsets.symmetric(horizontal: 4),
+        decoration: BoxDecoration(
+          color: resolvedColor.withOpacity(0.04),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: resolvedColor.withOpacity(0.08), width: 1),
+        ),
+        child: Column(
+          children: [
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                fmt.format(value ?? 0),
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  color: resolvedColor,
+                  fontSize: 13,
+                  letterSpacing: -0.3,
+                ),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label.toUpperCase(),
+              style: const TextStyle(
+                color: Color(0xFF64748B),
+                fontSize: 8.5,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -1205,10 +1380,10 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     
     List<PieChartSectionData> sections = [];
     final colors = [
-      const Color(0xFF0F766E),
-      const Color(0xFF15803D),
-      const Color(0xFFF59E0B),
-      const Color(0xFF6366F1),
+      const Color(0xFF064E3B), // Emerald
+      const Color(0xFFC5A880), // Champagne Gold
+      const Color(0xFF0F766E), // Teal
+      const Color(0xFF64748B), // Slate
     ];
     
     for (int i = 0; i < data.length; i++) {
@@ -1218,16 +1393,16 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
              color: colors[i % colors.length],
              value: val,
              title: '${(val/1000).toStringAsFixed(1)}k',
-             radius: 26,
-             titleStyle: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold)
+             radius: 28,
+             titleStyle: const TextStyle(fontSize: 9, color: Colors.white, fontWeight: FontWeight.w800, letterSpacing: -0.2)
            ));
         }
      }
      
      return PieChart(PieChartData(
         sections: sections,
-        centerSpaceRadius: 24,
-        sectionsSpace: 2,
+        centerSpaceRadius: 26,
+        sectionsSpace: 2.5,
      ));
   }
 
@@ -1284,7 +1459,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
         lineBarsData: [
           LineChartBarData(
             spots: revSpots,
-            color: const Color(0xFF15803D),
+            color: const Color(0xFF064E3B), // Luxe Emerald
             isCurved: true,
             barWidth: 3,
             dotData: FlDotData(
@@ -1293,15 +1468,15 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                 radius: 3,
                 color: Colors.white,
                 strokeWidth: 1.5,
-                strokeColor: const Color(0xFF15803D),
+                strokeColor: const Color(0xFF064E3B),
               ),
             ),
             belowBarData: BarAreaData(
               show: true,
               gradient: LinearGradient(
                 colors: [
-                  const Color(0xFF15803D).withOpacity(0.12),
-                  const Color(0xFF15803D).withOpacity(0.0),
+                  const Color(0xFF064E3B).withOpacity(0.12),
+                  const Color(0xFF064E3B).withOpacity(0.0),
                 ],
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
@@ -1310,7 +1485,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
           ),
           LineChartBarData(
             spots: expSpots,
-            color: const Color(0xFFEF4444),
+            color: const Color(0xFF991B1B), // Luxe Burgundy
             isCurved: true,
             barWidth: 3,
             dotData: FlDotData(
@@ -1319,15 +1494,15 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                 radius: 3,
                 color: Colors.white,
                 strokeWidth: 1.5,
-                strokeColor: const Color(0xFFEF4444),
+                strokeColor: const Color(0xFF991B1B),
               ),
             ),
             belowBarData: BarAreaData(
               show: true,
               gradient: LinearGradient(
                 colors: [
-                  const Color(0xFFEF4444).withOpacity(0.08),
-                  const Color(0xFFEF4444).withOpacity(0.0),
+                  const Color(0xFF991B1B).withOpacity(0.08),
+                  const Color(0xFF991B1B).withOpacity(0.0),
                 ],
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
