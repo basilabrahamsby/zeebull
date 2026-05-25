@@ -6,10 +6,15 @@ echo ========================================
 echo.
 
 REM Define Portable Paths
-set "FLUTTER_HOME=D:\flutter_portable\flutter"
-set "ANDROID_HOME=D:\flutter_portable\android_sdk"
-set "JAVA_HOME=D:\flutter_portable\jdk"
-set "PATH=%FLUTTER_HOME%\bin;%JAVA_HOME%\bin;%PATH%"
+if exist "D:\flutter_portable\flutter" (
+    set "FLUTTER_HOME=D:\flutter_portable\flutter"
+    set "ANDROID_HOME=D:\flutter_portable\android_sdk"
+    set "JAVA_HOME=D:\flutter_portable\jdk"
+    set "PATH=%FLUTTER_HOME%\bin;%JAVA_HOME%\bin;%PATH%"
+    echo Using portable Flutter environment.
+) else (
+    echo Portable Flutter not found. Using system Flutter and Java installations.
+)
 
 set "START_FLAGS="
 set "CMD_ACTION=/k"

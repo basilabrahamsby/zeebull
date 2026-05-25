@@ -7,6 +7,7 @@ import { SiGooglemaps, SiGhost } from "react-icons/si";
 import { formatCurrency } from './utils/currency';
 // API base URL utility
 import { getApiBaseUrl, getMediaBaseUrl } from './utils/env';
+import GuestRoomPortal from "./GuestRoomPortal";
 
 // Custom hook to detect if an element is in the viewport
 const useOnScreen = (ref, rootMargin = "0px") => {
@@ -1208,6 +1209,15 @@ export default function App() {
     const [allGallery, setAllGallery] = useState([]); // Store all gallery images for filtering
     const [allBanners, setAllBanners] = useState([]); // Store all banners for filtering
     const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+    const [currentPath, setCurrentPath] = useState(window.location.hash);
+
+    useEffect(() => {
+        const handleHashChange = () => {
+            setCurrentPath(window.location.hash);
+        };
+        window.addEventListener('hashchange', handleHashChange);
+        return () => window.removeEventListener('hashchange', handleHashChange);
+    }, []);
 
     useEffect(() => {
         const handleResize = () => setWindowWidth(window.innerWidth);
@@ -2791,6 +2801,11 @@ export default function App() {
     const textSecondary = theme.textSecondary;
     const priceStyle = `font-bold text-xl ${theme.textAccent} tracking-wider`;
     const buttonStyle = `mt-4 inline-flex items-center text-sm font-semibold ${theme.textAccent} hover:text-white transition duration-300`;
+
+    if (currentPath.startsWith('#/room/')) {
+        const roomId = currentPath.replace('#/room/', '');
+        return <GuestRoomPortal roomId={roomId} />;
+    }
 
     if (loading) {
         return (

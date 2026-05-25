@@ -1012,8 +1012,11 @@ def create_booking(
         current_source = (booking.source or "").lower().replace(" ", "")
         is_online = any(s in current_source for s in online_sources)
         
-        if is_online and room_type.total_inventory and room_type.total_inventory > 0:
-            capacity = room_type.total_inventory
+        if is_online:
+            if room_type.online_inventory is not None:
+                capacity = room_type.online_inventory
+            else:
+                capacity = room_type.total_inventory or total_rooms
         else:
             # Dashboard/Direct bookings use the total physical room capacity
             capacity = max(total_rooms, room_type.total_inventory or 0)

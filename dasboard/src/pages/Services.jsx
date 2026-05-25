@@ -1808,27 +1808,34 @@ const Services = () => {
   };
 
 
-  const handleAssignEmployeeToRequest = async (requestId, employeeId, pickupLocationId = null) => {
+  const handleAssignEmployeeToRequest = async (requestId, employeeId, pickupLocationId = null, currentStatus = null) => {
     try {
       const idNum = parseInt(requestId);
+      const parsedEmpId = employeeId ? parseInt(employeeId) : null;
       // Determine request type based on ID ranges
       if (idNum >= 2000000) {
         // Assigned Service
         const asvcId = idNum - 2000000;
-        await api.put(`/services/assigned/${asvcId}`, { employee_id: employeeId });
+        await api.put(`/services/assigned/${asvcId}`, { employee_id: parsedEmpId });
       } else if (idNum >= 1000000) {
         // Checkout Request
         const checkoutRequestId = idNum - 1000000;
-        await api.put(`/bill/checkout-request/${checkoutRequestId}/assign?employee_id=${employeeId}`);
+        await api.put(`/bill/checkout-request/${checkoutRequestId}/assign?employee_id=${employeeId || ""}`);
       } else {
         // Regular Service Request
-        const payload = { employee_id: employeeId };
+        const payload = { employee_id: parsedEmpId };
         if (pickupLocationId) {
           payload.pickup_location_id = parseInt(pickupLocationId);
         }
+        if (parsedEmpId && currentStatus === "pending") {
+          payload.status = "in_progress";
+        }
         await api.put(`/service-requests/${requestId}`, payload);
       }
-      fetchServiceRequests();
+      await fetchServiceRequests();
+      if (typeof fetchAll === 'function') {
+        await fetchAll(false);
+      }
     } catch (error) {
       console.error("Failed to assign employee:", error);
       const msg = error.response?.data?.detail || error.message || "Unknown error";
@@ -3951,9 +3958,35 @@ const Services = () => {
                                 </div>
                               </td>
                               <td className="py-5 px-6">
-                                <div className={`text-[11px] font-black uppercase tracking-widest ${!request.employee_id ? 'text-amber-500' : 'text-slate-700'}`}>
-                                  {request.employee_name ? request.employee_name.toUpperCase() : 'AWAIT ASSIGNMENT'}
-                                </div>
+                                <select
+                                  value={request.employee_id || ""}
+                                  onChange={(e) => handleAssignEmployeeToRequest(request.id, e.target.value, null, request.status)}
+                                  className="border border-slate-200 rounded-lg px-2 py-1 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white max-w-[180px] truncate"
+                                >
+                                  <option value="">AWAIT ASSIGNMENT</option>
+                                  {Array.isArray(employees) && [...employees]
+                                    .sort((a, b) => {
+                                      const aOnline = a.status === 'on_duty' || a.is_clocked_in;
+                                      const bOnline = b.status === 'on_duty' || b.is_clocked_in;
+                                      if (aOnline && !bOnline) return -1;
+                                      if (!aOnline && bOnline) return 1;
+                                      return 0;
+                                    })
+                                    .map((emp) => {
+                                      const isOnline = emp.status === 'on_duty' || emp.is_clocked_in;
+                                      return (
+                                        <option key={emp.id} value={emp.id}>
+                                          {emp.name} {isOnline ? "• ONLINE" : `• ${emp.status || 'OFFLINE'}`}
+                                        </option>
+                                      );
+                                    })
+                                  }
+                                  {request.employee_id && !employees.some(emp => emp.id === request.employee_id) && (
+                                    <option value={request.employee_id}>
+                                      {request.employee_name || `Employee #${request.employee_id}`}
+                                    </option>
+                                  )}
+                                </select>
                               </td>
                               <td className="py-5 px-6 text-center">
                                 <div className="flex justify-center">

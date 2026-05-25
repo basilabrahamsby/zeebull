@@ -1334,6 +1334,38 @@ export default function FoodOrders() {
     }
   };
 
+  const handleAssignDeliveryPerson = async (orderId, employeeId) => {
+    try {
+      await api.put(`/food-orders/${orderId}`, {
+        assigned_employee_id: employeeId ? parseInt(employeeId) : null
+      });
+      toast.success("Delivery agent assigned successfully!");
+      fetchOrders();
+      if (activeTab === "dashboard") {
+        fetchAllOrdersForDashboard();
+      }
+    } catch (err) {
+      console.error("Failed to assign delivery agent:", err);
+      toast.error("Failed to assign delivery agent.");
+    }
+  };
+
+  const handleAssignChef = async (orderId, chefId) => {
+    try {
+      await api.put(`/food-orders/${orderId}`, {
+        prepared_by_id: chefId ? parseInt(chefId) : null
+      });
+      toast.success("Chef assigned successfully!");
+      fetchOrders();
+      if (activeTab === "dashboard") {
+        fetchAllOrdersForDashboard();
+      }
+    } catch (err) {
+      console.error("Failed to assign chef:", err);
+      toast.error("Failed to assign chef.");
+    }
+  };
+
   const handleStatusChange = async (id, newStatus) => {
     // If completing, show modal for paid/unpaid selection
     if (newStatus === "completed") {
@@ -2689,21 +2721,66 @@ export default function FoodOrders() {
 
                         {/* Order Details */}
                         <div className="space-y-2 mb-3 text-sm">
-                          <div className="flex justify-between">
+                          <div className="flex justify-between items-center">
                             <span className="text-gray-500">Guest:</span>
                             <span className="font-medium text-gray-800">{order.guest_name || "N/A"}</span>
                           </div>
-                          <div className="flex justify-between">
+                          <div className="flex justify-between items-center gap-2">
                             <span className="text-gray-500">Delivery:</span>
-                            <span className="font-medium text-gray-800">
-                              {order.employee_name || employees.find((e) => e.id === order.assigned_employee_id)?.name || "Not Assigned"}
-                            </span>
+                            <select
+                              value={order.assigned_employee_id || ""}
+                              onChange={(e) => handleAssignDeliveryPerson(order.id, e.target.value)}
+                              className="border border-gray-200 rounded px-2 py-0.5 text-xs font-medium text-gray-700 focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white max-w-[150px] truncate"
+                            >
+                              <option value="">Not Assigned</option>
+                              {Array.isArray(employees) && employees
+                                .filter(emp => {
+                                  if (!emp || !emp.id) return false;
+                                  if (emp.id === order.assigned_employee_id) return true;
+                                  const r = (emp.role || '').toLowerCase();
+                                  return r.includes('waiter') || r.includes('house') || r.includes('service') || r.includes('delivery') || r.includes('staff') || r.includes('operational');
+                                })
+                                .map((emp) => (
+                                  <option key={emp.id} value={emp.id}>
+                                    {emp.name}
+                                  </option>
+                                ))
+                              }
+                              {order.assigned_employee_id && !employees.some(emp => emp.id === order.assigned_employee_id) && (
+                                <option value={order.assigned_employee_id}>
+                                  {order.employee_name || `Employee #${order.assigned_employee_id}`}
+                                </option>
+                              )}
+                            </select>
                           </div>
-                          <div className="flex justify-between">
+                          <div className="flex justify-between items-center gap-2">
                             <span className="text-gray-500">Chef:</span>
-                            <span className="font-medium text-gray-800">
-                              {order.chef_name || employees.find((e) => e.id === order.prepared_by_id)?.name || "Not Assigned"}
-                            </span>
+                            <select
+                              value={order.prepared_by_id || ""}
+                              onChange={(e) => handleAssignChef(order.id, e.target.value)}
+                              className="border border-gray-200 rounded px-2 py-0.5 text-xs font-medium text-gray-700 focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white max-w-[150px] truncate"
+                            >
+                              <option value="">Not Assigned</option>
+                              {Array.isArray(employees) && employees
+                                .filter(emp => {
+                                  if (!emp || !emp.id) return false;
+                                  if (emp.id === order.prepared_by_id) return true;
+                                  const r = (emp.role || '').toLowerCase();
+                                  const n = (emp.name || '').toLowerCase();
+                                  return r.includes('kitchen') || r.includes('chef') || r.includes('cook') || r.includes('kitch') || n.includes('chef') || r.includes('f&b');
+                                })
+                                .map((emp) => (
+                                  <option key={emp.id} value={emp.id}>
+                                    {emp.name}
+                                  </option>
+                                ))
+                              }
+                              {order.prepared_by_id && !employees.some(emp => emp.id === order.prepared_by_id) && (
+                                <option value={order.prepared_by_id}>
+                                  {order.chef_name || `Chef #${order.prepared_by_id}`}
+                                </option>
+                              )}
+                            </select>
                           </div>
                         </div>
                         {/* Delivery Request */}

@@ -14,6 +14,8 @@ from app.models.branch import Branch
 from app.models.service import Service
 from app.schemas.packages import PackageOut
 from app.schemas.room import RoomOut
+from app.schemas.foodorder import FoodOrderCreate, FoodOrderOut
+from app.schemas.service_request import ServiceRequestCreate, ServiceRequestOut
 from typing import List
 from pydantic import BaseModel
 from datetime import date
@@ -188,3 +190,55 @@ def get_public_package_bookings(db: Session = Depends(get_db), branch_id: int = 
     except Exception as e:
         print(f"Error fetching public package bookings: {e}")
         return []
+
+
+# Public anonymous food ordering endpoint
+@router.post("/food-orders", response_model=FoodOrderOut)
+def create_public_food_order(order_data: FoodOrderCreate, db: Session = Depends(get_db)):
+    """Create a food order anonymously from a guest room or restaurant table"""
+    try:
+        from app.curd import foodorder as food_order_crud
+        from app.models.room import Room
+        from app.models.restaurant_table import RestaurantTable
+        
+        # Resolve branch_id from room or table
+        branch_id = 1 # Fallback
+        if order_data.room_id:
+            room = db.query(Room).filter(Room.id == order_data.room_id).first()
+            if room:
+                branch_id = room.branch_id
+        elif order_data.table_id:
+            table = db.query(RestaurantTable).filter(RestaurantTable.id == order_data.table_id).first()
+            if table:
+                branch_id = table.branch_id
+                
+        new_order = food_order_crud.create_food_order(db, order_data, branch_id=branch_id)
+        return new_order
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to place food order: {str(e)}")
+
+
+# Public anonymous service request endpoint
+@router.post("/service-requests", response_model=ServiceRequestOut)
+def create_public_service_request(request_data: ServiceRequestCreate, db: Session = Depends(get_db)):
+    """Create a service request anonymously from a guest room"""
+    try:
+        from app.curd import service_request as service_request_crud
+        from app.models.room import Room
+        
+        # Resolve branch_id from room
+        branch_id = 1 # Fallback
+        if request_data.room_id:
+            room = db.query(Room).filter(Room.id == request_data.room_id).first()
+            if room:
+                branch_id = room.branch_id
+                
+        new_request = service_request_crud.create_service_request(db, request_data, branch_id=branch_id)
+        return new_request
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to submit service request: {str(e)}")
+

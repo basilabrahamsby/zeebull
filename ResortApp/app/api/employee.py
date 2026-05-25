@@ -525,11 +525,35 @@ def delete_employee(employee_id: int, db: Session = Depends(get_db), current_use
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")
         
+    # Pre-serialize employee data before it is deleted to avoid lazy-loading/serialization errors
+    employee_dict = {
+        "id": employee.id,
+        "name": employee.name,
+        "role": employee.role,
+        "salary": employee.salary,
+        "join_date": str(employee.join_date) if employee.join_date else None,
+        "image_url": employee.image_url,
+        "user_id": employee.user_id,
+        "daily_tasks": employee.daily_tasks,
+        "paid_leave_balance": employee.paid_leave_balance,
+        "sick_leave_balance": employee.sick_leave_balance,
+        "long_leave_balance": employee.long_leave_balance,
+        "wellness_leave_balance": employee.wellness_leave_balance,
+        "branch_id": employee.branch_id,
+        "user": {
+            "id": employee.user.id,
+            "email": employee.user.email,
+            "name": employee.user.name,
+            "phone": employee.user.phone,
+            "is_active": employee.user.is_active,
+        } if employee.user else None
+    }
+    
     deleted_employee = crud_employee.delete_employee(db, employee_id)
 
     if not deleted_employee:
         raise HTTPException(status_code=404, detail="Employee not found")
-    return {"message": "Employee deleted successfully", "employee": deleted_employee}
+    return {"message": "Employee deleted successfully", "employee": employee_dict}
 
 
 

@@ -436,11 +436,16 @@ def get_room_type_availability(
             Booking.check_out > check_in
         ).count()
         
+        # Calculate availability based on online_inventory if configured, capping at physical total_inventory
+        effective_total = rt.total_inventory
+        if rt.online_inventory is not None:
+            effective_total = rt.online_inventory
+            
         results.append(RoomTypeAvailability(
             room_type_id=rt.id,
             name=rt.name,
-            available_count=max(0, rt.total_inventory - overlapping_count),
-            total_inventory=rt.total_inventory,
+            available_count=max(0, min(effective_total - overlapping_count, rt.total_inventory - overlapping_count)),
+            total_inventory=effective_total,
             base_price=rt.base_price
         ))
     return results

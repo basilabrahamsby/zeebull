@@ -11,13 +11,135 @@ import { getImageUrl } from "../utils/imageUtils";
 import { useBranch } from "../contexts/BranchContext";
 import { jwtDecode } from "jwt-decode";
 import { usePermissions } from "../hooks/usePermissions";
+import { QRCodeSVG } from "qrcode.react";
 import { 
   Wifi, Snowflake, Bath, Tv, Shield, SprayCan, ConciergeBell, Shirt, 
   Armchair, Sun, DoorOpen, Users, Utensils, Wine, 
   Mountain, Waves, Leaf, Flame, Car, 
   Waves as Pool, Thermometer, UserPlus, Dumbbell, Flower2, 
-  PawPrint, Accessibility, Coffee, PlusCircle, History, ChevronDown, CheckCircle2, XCircle, AlertCircle, Trash2
+  PawPrint, Accessibility, Coffee, PlusCircle, History, ChevronDown, CheckCircle2, XCircle, AlertCircle, Trash2, QrCode
 } from "lucide-react";
+
+// ─── Room QR Code Modal ───────────────────────────────────────────────────────
+const RoomQRModal = ({ room, branch, onClose }) => {
+  const guestUrl = `${window.location.protocol}//${window.location.hostname}:3002/#/room/${room.id}`;
+  const branchName = branch?.name || 'The Resort';
+  const branchPhone = branch?.phone || 'Contact Front Desk';
+  const branchAddress = branch?.address || '';
+
+  const handlePrint = () => window.print();
+
+  return (
+    <>
+      {/* Print styles injected inline */}
+      <style>{`
+        @media print {
+          body > * { display: none !important; }
+          .qr-print-overlay { display: flex !important; position: static !important; background: white !important; }
+          .qr-print-card { box-shadow: none !important; border: 2px solid #e5e7eb !important; }
+          .qr-no-print { display: none !important; }
+          .qr-print-only { display: block !important; }
+          @page { margin: 10mm; size: A5 portrait; }
+        }
+        .qr-print-overlay { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+      `}</style>
+
+      <div className="qr-print-overlay fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4">
+        <div className="qr-print-card bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden">
+          
+          {/* Header gradient */}
+          <div style={{background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)'}} className="p-6 text-center">
+            <div className="text-amber-400 text-xs font-bold tracking-[0.3em] uppercase mb-1">Scan to Access</div>
+            <h2 className="text-white text-2xl font-black tracking-tight">Room {room.number}</h2>
+            <p className="text-blue-200 text-xs mt-1 font-medium uppercase tracking-widest">{room.type || 'Standard Room'}</p>
+          </div>
+
+          {/* QR Code */}
+          <div className="flex flex-col items-center py-6 px-6 bg-gradient-to-b from-slate-50 to-white">
+            <div className="bg-white p-4 rounded-2xl shadow-lg border-2 border-slate-100">
+              <QRCodeSVG
+                value={guestUrl}
+                size={180}
+                bgColor="#ffffff"
+                fgColor="#0f172a"
+                level="H"
+                includeMargin={false}
+              />
+            </div>
+            <p className="mt-3 text-[10px] text-slate-400 font-medium text-center leading-relaxed">
+              Point your phone camera at this code
+            </p>
+          </div>
+
+          {/* Services row */}
+          <div className="px-5 pb-4">
+            <div className="grid grid-cols-4 gap-2 mb-4">
+              {[
+                { icon: '🍽️', label: 'Food Order' },
+                { icon: '🛎️', label: 'Service' },
+                { icon: '📞', label: 'Reception' },
+                { icon: '💬', label: 'Help' },
+              ].map(s => (
+                <div key={s.label} className="flex flex-col items-center gap-1 bg-slate-50 rounded-xl py-2.5 px-1">
+                  <span className="text-xl">{s.icon}</span>
+                  <span className="text-[9px] font-black text-slate-600 uppercase tracking-tight">{s.label}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Emergency contacts */}
+            <div className="bg-red-50 rounded-2xl p-3 mb-3 border border-red-100">
+              <p className="text-[9px] font-black text-red-400 uppercase tracking-widest mb-2">Emergency Numbers</p>
+              <div className="grid grid-cols-3 gap-1.5">
+                <div className="text-center">
+                  <div className="text-base">🚒</div>
+                  <div className="text-[10px] font-black text-red-700">Fire</div>
+                  <div className="text-[11px] font-black text-red-900">101</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-base">👮</div>
+                  <div className="text-[10px] font-black text-blue-700">Police</div>
+                  <div className="text-[11px] font-black text-blue-900">100</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-base">🚑</div>
+                  <div className="text-[10px] font-black text-green-700">Ambulance</div>
+                  <div className="text-[11px] font-black text-green-900">108</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Front office */}
+            <div className="bg-indigo-50 rounded-2xl p-3 border border-indigo-100">
+              <p className="text-[9px] font-black text-indigo-400 uppercase tracking-widest mb-1">Front Office</p>
+              <p className="text-sm font-black text-indigo-900">{branchPhone}</p>
+              <p className="text-[10px] text-indigo-500 font-medium">{branchName}</p>
+              {branchAddress && <p className="text-[9px] text-indigo-400 mt-0.5 line-clamp-1">{branchAddress}</p>}
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="qr-no-print flex gap-3 px-5 pb-5">
+            <button
+              onClick={handlePrint}
+              className="flex-1 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white font-black text-xs uppercase tracking-widest py-3 rounded-xl hover:from-indigo-500 hover:to-indigo-600 transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-200"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
+              Print Card
+            </button>
+            <button
+              onClick={onClose}
+              className="px-4 py-3 bg-slate-100 text-slate-600 font-black text-xs uppercase tracking-widest rounded-xl hover:bg-slate-200 transition-all"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+};
+// ──────────────────────────────────────────────────────────────────────────────
 
 export const COMPREHENSIVE_AMENITIES = [
   // Essentials
@@ -931,9 +1053,10 @@ const Rooms = ({ noLayout = false }) => {
   const [showAddRoomModal, setShowAddRoomModal] = useState(false); // Control add room modal visibility
   const [selectedBranchForRoom, setSelectedBranchForRoom] = useState(""); // Branch for room when in enterprise view
   const [isSubmitting, setIsSubmitting] = useState(false); // Prevent duplicate submissions
+  const [qrCodeRoom, setQrCodeRoom] = useState(null); // Room whose QR code to show
 
   // Branch context
-  const { branches, activeBranchId } = useBranch();
+  const { branches, activeBranchId, activeBranch } = useBranch();
   const token = localStorage.getItem("token");
   const { hasPermission, isSuperadmin } = usePermissions();
   const isEnterpriseView = isSuperadmin && activeBranchId === 'all';
@@ -1566,6 +1689,14 @@ const Rooms = ({ noLayout = false }) => {
                             Modify
                           </button>
                         )}
+                        <button 
+                          onClick={() => setQrCodeRoom(room)} 
+                          title="Generate QR Code"
+                          className="bg-violet-50 text-violet-600 text-[10px] font-black uppercase tracking-widest px-3 py-2.5 rounded-xl hover:bg-violet-600 hover:text-white transition-all transform active:scale-95 flex items-center gap-1"
+                        >
+                          <QrCode className="w-3.5 h-3.5" />
+                          <span>QR</span>
+                        </button>
                         {hasPermission("bookings:view") && (
                           <button 
                             onClick={() => fetchBookings(room.number)} 
@@ -2124,6 +2255,15 @@ const Rooms = ({ noLayout = false }) => {
           isEnterpriseView={isEnterpriseView}
           branchId={selectedBranchForType}
           setBranchId={setSelectedBranchForType}
+        />
+      )}
+
+      {/* --- QR CODE MODAL --- */}
+      {qrCodeRoom && (
+        <RoomQRModal
+          room={qrCodeRoom}
+          branch={activeBranch}
+          onClose={() => setQrCodeRoom(null)}
         />
       )}
     </>
