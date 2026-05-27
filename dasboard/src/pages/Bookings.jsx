@@ -366,7 +366,12 @@ const BookingDetailsModal = ({
               <div className="md:col-span-2 bg-slate-50/80 rounded-2xl p-4 border border-slate-100">
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Booking Channel</p>
                 <div className="flex items-center gap-3 flex-wrap">
-                  {booking.source && booking.source !== 'Admin' && booking.source !== 'Direct' && booking.source !== 'direct' && booking.source !== 'admin' ? (
+                  {(booking.source === 'Guest' || booking.source === 'guest') ? (
+                    <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-sky-50 border border-sky-200">
+                      <span className="w-2 h-2 rounded-full bg-sky-500 animate-pulse"></span>
+                      <span className="text-xs font-bold text-sky-700">Guest (Website)</span>
+                    </span>
+                  ) : booking.source && booking.source !== 'Admin' && booking.source !== 'Direct' && booking.source !== 'direct' && booking.source !== 'admin' ? (
                     <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-violet-50 border border-violet-200">
                       <span className="w-2 h-2 rounded-full bg-violet-500 animate-pulse"></span>
                       <span className="text-xs font-bold text-violet-700">{booking.source}</span>
@@ -374,7 +379,7 @@ const BookingDetailsModal = ({
                   ) : (
                     <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200">
                       <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                      <span className="text-xs font-bold text-emerald-700">{booking.source || 'Direct'}</span>
+                      <span className="text-xs font-bold text-emerald-700">Admin (Dashboard)</span>
                     </span>
                   )}
                   {booking.external_id && (
@@ -6585,11 +6590,16 @@ const Bookings = () => {
                               </div>
                             )}
                             {booking.source && (
-                              <div className={`mt-1 inline-flex items-center px-1.5 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider ${(booking.source !== 'Direct' && booking.source !== 'Admin' && booking.source !== 'direct' && booking.source !== 'admin')
+                              <div className={`mt-1 inline-flex items-center px-1.5 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider ${
+                                (booking.source === 'Guest' || booking.source === 'guest')
+                                  ? "bg-sky-50 text-sky-600 border border-sky-100"
+                                  : (booking.source !== 'Direct' && booking.source !== 'Admin' && booking.source !== 'direct' && booking.source !== 'admin')
                                   ? "bg-violet-50 text-violet-600 border border-violet-100"
-                                  : "bg-gray-50 text-gray-400 border border-gray-100"
-                                }`}>
-                                {booking.source}
+                                  : "bg-emerald-50 text-emerald-600 border border-emerald-100"
+                              }`}>
+                                {(booking.source === 'Guest' || booking.source === 'guest') ? 'Guest' :
+                                 (booking.source === 'Admin' || booking.source === 'admin') ? 'Admin' :
+                                 booking.source}
                               </div>
                             )}
                           </td>

@@ -2356,7 +2356,7 @@ export default function App() {
                 }
             }
 
-            const payloadData = { ...bookingData, branch_id: finalBranchId };
+            const payloadData = { ...bookingData, branch_id: finalBranchId, source: "Guest" };
             
             // Critical Fix: For userend guest bookings, we want to SOFT-ALLOCATE. 
             // So we send the room_type_id instead of hardcoding specific physical room_ids.

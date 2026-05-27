@@ -1008,7 +1008,7 @@ def create_booking(
         # Determine capacity based on source
         # Online bookings (User End, OTA) strictly respect Online Inventory limit if set.
         # Dashboard/Admin bookings can use all physical rooms.
-        online_sources = ["userend", "website", "ota", "booking.com", "expedia", "agoda"]
+        online_sources = ["guest", "userend", "website", "ota", "booking.com", "expedia", "agoda"]
         current_source = (booking.source or "").lower().replace(" ", "")
         is_online = any(s in current_source for s in online_sources)
         
@@ -1188,6 +1188,7 @@ def create_guest_booking(booking: BookingCreate, background_tasks: BackgroundTas
     try:
         # Similar to create_booking but for public access
         booking.branch_id = booking.branch_id if booking.branch_id is not None else branch_id_query
+        booking.source = "Guest"
         return create_booking(booking, background_tasks=background_tasks, db=db, current_user=None, branch_id=booking.branch_id)
     except HTTPException:
         # Re-raise HTTP exceptions (like validation errors) as-is
