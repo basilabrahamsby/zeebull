@@ -44,14 +44,18 @@ async def aiosell_webhook(
     Inbound webhook for Aiosell Reservation Push
     Receives NEW, MODIFIED, CANCELLED reservations.
     """
+    # *** ALWAYS log the incoming call first, before any guard checks ***
+    print(f"[AIOSELL WEBHOOK] Received call. Action: {payload.get('action')} | BookingID: {payload.get('bookingID') or payload.get('bookingId')} | Channel: {payload.get('channel')}")
+    print(f"[AIOSELL WEBHOOK] FULL PAYLOAD: {payload}")
+    logger.info(f"[AIOSELL WEBHOOK] Received payload: {payload}")
+
     from app.utils.aiosell_config import is_aiosell_active
     if not is_aiosell_active(db):
+        print("[AIOSELL WEBHOOK] BLOCKED: Aiosell is disabled (aiosell_active != true in DB/env). Set AIOSELL_ACTIVE=true in .env to enable.")
         return {"success": True, "message": "Aiosell is disabled in this environment."}
         
     verify_webhook_auth(request)
     
-    print(f"[AIOSELL WEBHOOK] FULL PAYLOAD: {payload}")
-    logger.info(f"[AIOSELL WEBHOOK] Received payload: {payload}")
     
     reservation_id = payload.get("bookingID") or payload.get("bookingId")
     action = str(payload.get("action", "")).lower()
@@ -62,17 +66,22 @@ async def aiosell_webhook(
         return Response(status_code=400, content="Missing bookingID or bookingId")
         
     # BRANCH logic -> Defaulting to standard branch 1 for sandbox integration
-    branch_id = 1 
-        
-    if action == "book":
+    branch_id = 1
+
+    # Normalize action keywords — different OTAs use different verbs
+    NEW_ACTIONS = {"book", "new", "create", "reservation", "insert", "newreservation"}
+    MODIFY_ACTIONS = {"modify", "update", "change", "amend", "modified", "modifyreservation"}
+    CANCEL_ACTIONS = {"cancel", "cancelled", "canceled", "delete", "cancelreservation"}
+
+    if action in NEW_ACTIONS:
         return _handle_new_booking(payload, db, branch_id)
-    elif action == "modify":
-        return _handle_modify_booking(payload, db)
-    elif action == "cancel":
+    elif action in MODIFY_ACTIONS:
+        return _handle_modify_booking(payload, db, branch_id)
+    elif action in CANCEL_ACTIONS:
         return _handle_cancel_booking(payload, db)
     else:
-        logger.warning(f"[AIOSELL WEBHOOK] Unknown action: {action}")
-        return {"success": True, "message": f"Ignored action {action}"}
+        logger.warning(f"[AIOSELL WEBHOOK] Unknown action: '{action}'. Payload keys: {list(payload.keys())}")
+        return {"success": True, "message": f"Ignored unknown action '{action}'"}
         
 @router.post("/sync")
 async def aiosell_full_sync(
@@ -135,6 +144,58 @@ def _map_room_type(db: Session, room_code: str, branch_id: int = None):
         logger.info(f"[AIOSELL WEBHOOK] Mapped roomCode '{room_code}' to RoomType ID {room_type.id} in Branch {room_type.branch_id}")
         
     return room_type
+
+def _extract_dates(payload: dict):
+    """Helper to extract check-in/check-out dates from various Aiosell/OTA payload formats.
+    Handles different key casings and date format variants.
+    Returns (check_in_date, check_out_date) or raises ValueError.
+    """
+    # Try multiple key variants for check-in
+    checkin_str = (
+        payload.get("checkin") or
+        payload.get("checkIn") or
+        payload.get("check_in") or
+        payload.get("arrival") or
+        payload.get("arrivalDate") or
+        payload.get("arrival_date")
+    )
+    # Try multiple key variants for check-out
+    checkout_str = (
+        payload.get("checkout") or
+        payload.get("checkOut") or
+        payload.get("check_out") or
+        payload.get("departure") or
+        payload.get("departureDate") or
+        payload.get("departure_date")
+    )
+
+    if not checkin_str or not checkout_str:
+        raise ValueError(f"Missing date fields. Keys in payload: {list(payload.keys())}")
+
+    # Try common date formats
+    date_formats = ["%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%Y/%m/%d", "%m/%d/%Y"]
+    check_in = None
+    check_out = None
+
+    for fmt in date_formats:
+        try:
+            if check_in is None:
+                check_in = datetime.strptime(str(checkin_str)[:10], fmt).date()
+        except ValueError:
+            pass
+        try:
+            if check_out is None:
+                check_out = datetime.strptime(str(checkout_str)[:10], fmt).date()
+        except ValueError:
+            pass
+
+    if not check_in:
+        raise ValueError(f"Could not parse check-in date: '{checkin_str}'")
+    if not check_out:
+        raise ValueError(f"Could not parse check-out date: '{checkout_str}'")
+
+    return check_in, check_out
+
 
 def _extract_amount(payload: dict) -> float:
     """Helper to extract total amount from various Aiosell/OTA payload formats"""
@@ -293,13 +354,12 @@ def _handle_new_booking(payload: dict, db: Session, branch_id: int):
             
     special_requests = payload.get("specialRequests") or payload.get("notes")
              
-    # Parse dates
+    # Parse dates — supports multiple key casings and date formats
     try:
-        check_in = datetime.strptime(payload.get("checkin"), "%Y-%m-%d").date()
-        check_out = datetime.strptime(payload.get("checkout"), "%Y-%m-%d").date()
+        check_in, check_out = _extract_dates(payload)
     except Exception as e:
         logger.error(f"[AIOSELL] Date parsing error: {e}")
-        return Response(status_code=400, content="Invalid date format")
+        return Response(status_code=400, content=f"Invalid or missing date fields: {e}")
 
     # 2. Get Guest User
     user_id = None
@@ -353,9 +413,14 @@ def _handle_new_booking(payload: dict, db: Session, branch_id: int):
     logger.info(f"[AIOSELL WEBHOOK] Created Booking {db_booking.display_id} from {res_id}")
     return {"success": True, "booking_id": db_booking.id, "display_id": db_booking.display_id}
 
-def _handle_modify_booking(payload: dict, db: Session):
+def _handle_modify_booking(payload: dict, db: Session, branch_id: int = 1):
     res_id = payload.get("bookingID") or payload.get("bookingId")
     booking = db.query(Booking).filter(Booking.external_id == res_id).first()
+
+    # If booking not found, treat as a new booking to avoid data loss
+    if not booking:
+        logger.warning(f"[AIOSELL WEBHOOK] Modify received for unknown external_id '{res_id}'. Creating as new booking.")
+        return _handle_new_booking(payload, db, branch_id)
     
     # Best-effort update Guest Info
     guest_objs = [
@@ -410,8 +475,10 @@ def _handle_modify_booking(payload: dict, db: Session):
     if rooms:
         primary = rooms[0]
         try:
-            booking.check_in = datetime.strptime(payload.get("checkin"), "%Y-%m-%d").date()
-            booking.check_out = datetime.strptime(payload.get("checkout"), "%Y-%m-%d").date()
+            # Use robust date extraction supporting multiple key casings
+            check_in, check_out = _extract_dates(payload)
+            booking.check_in = check_in
+            booking.check_out = check_out
             booking.num_rooms = len(rooms)
             booking.adults = sum([int(r.get("occupancy", {}).get("adults", 1)) for r in rooms])
             booking.children = sum([int(r.get("occupancy", {}).get("children", 0)) for r in rooms])

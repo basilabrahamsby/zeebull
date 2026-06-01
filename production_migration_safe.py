@@ -78,6 +78,13 @@ def run_safe_migration():
             print("Adding column location to branches...")
             cur.execute("ALTER TABLE branches ADD COLUMN location VARCHAR;")
 
+        # Check for online_inventory column in room_types
+        print("Checking for room_types.online_inventory...")
+        cur.execute("SELECT COLUMN_NAME FROM information_schema.columns WHERE table_name='room_types' AND column_name='online_inventory';")
+        if not cur.fetchone():
+            print("Adding column online_inventory to room_types...")
+            cur.execute("ALTER TABLE room_types ADD COLUMN online_inventory INTEGER;")
+
         conn.commit()
         print("\nSUCCESS: Production database is now up to date.")
         cur.close()

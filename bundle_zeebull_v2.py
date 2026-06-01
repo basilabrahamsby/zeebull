@@ -9,13 +9,17 @@ def zip_dir(path, zip_handle, exclude_dirs=None, exclude_files=None):
     
     for root, dirs, files in os.walk(path):
         # Exclude directories
-        to_keep = [d for d in dirs if d not in exclude_dirs and not d.startswith('.') and not d.startswith('uploads_backup') and not d.startswith('backup')]
+        to_keep = [d for d in dirs if d not in exclude_dirs and not d.startswith('.') and not d.startswith('uploads_backup') and not d.startswith('backup') and d != 'uploads_old']
         dirs.clear()
         dirs.extend(to_keep)
         
         for file in files:
             is_excluded = False
             if file.startswith('.'):
+                is_excluded = True
+            # Exclude large archive and database files
+            lower_file = file.lower()
+            if lower_file.endswith('.zip') or lower_file.endswith('.dump') or lower_file.endswith('.backup') or lower_file.endswith('.bak') or lower_file.endswith('.sql'):
                 is_excluded = True
             for ex in exclude_files:
                 if file == ex:
@@ -35,7 +39,7 @@ def create_bundles():
     # 1. Backend Bundle (ResortApp)
     backend_zip = 'zeebull_backend.zip'
     with zipfile.ZipFile(backend_zip, 'w', zipfile.ZIP_DEFLATED) as zipf:
-        zip_dir('ResortApp', zipf, exclude_dirs=['venv', '__pycache__', 'uploads', 'static', 'tests'], exclude_files=['.env', 'orchid.db'])
+        zip_dir('ResortApp', zipf, exclude_dirs=['venv', '__pycache__', 'uploads', 'static', 'tests', 'uploads_old'], exclude_files=['.env', 'orchid.db'])
     print(f"Created {backend_zip}")
 
     # 2. Admin Dashboard Bundle (dasboard/build)
