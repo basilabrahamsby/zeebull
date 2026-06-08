@@ -3235,19 +3235,15 @@ const BookingFormModal = ({
     const selectedType = roomTypeObjects.find(rt => rt.id === Number(formData.room_type_id));
     if (!selectedType) return null;
 
-    const customRate = formData.custom_room_rate !== "" ? parseFloat(formData.custom_room_rate) : (selectedType.base_price || 0.0);
-    const numRooms = parseInt(formData.num_rooms) || 1;
-
     return {
       room_type_id: selectedType.id,
       room_type_name: selectedType.name,
-      custom_room_rate: customRate,
-      num_rooms: numRooms,
+      num_rooms: parseInt(formData.num_rooms) || 1,
       adults: parseInt(formData.adults) || 1,
       children: parseInt(formData.children) || 0,
       isUnsavedPreview: true
     };
-  }, [formData.room_type_id, formData.custom_room_rate, formData.num_rooms, formData.adults, formData.children, roomTypeObjects]);
+  }, [formData.room_type_id, formData.num_rooms, formData.adults, formData.children, roomTypeObjects]);
 
   const allBookingItems = React.useMemo(() => {
     const list = [...selectedItems];
@@ -3257,16 +3253,37 @@ const BookingFormModal = ({
     return list;
   }, [selectedItems, currentUnsavedItem]);
 
-  const grandTotal = React.useMemo(() => {
-    return allBookingItems.reduce((sum, item) => {
-      const rate = item.custom_room_rate || 0;
-      return sum + Number(rate);
-    }, 0);
-  }, [allBookingItems]);
+  // Calculate total rooms for the entire reservation (cart + current preview)
+  const totalRoomsForCalc = React.useMemo(() => {
+    const cartRooms = (formData.selectedRoomTypes || []).reduce((sum, item) => sum + (parseInt(item.num_rooms) || 1), 0);
+    const previewRooms = formData.room_type_id ? (parseInt(formData.num_rooms) || 1) : 0;
+    return Math.max(1, cartRooms + previewRooms);
+  }, [formData.selectedRoomTypes, formData.room_type_id, formData.num_rooms]);
 
-  const totalRoomsCount = React.useMemo(() => {
-    return allBookingItems.reduce((sum, item) => sum + (item.num_rooms || 1), 0);
-  }, [allBookingItems]);
+  // Derived pricing totals
+  const { totalBase, totalGST, grandTotal } = React.useMemo(() => {
+    const base = parseFloat(formData.custom_room_rate) || 0;
+    
+    // Distribute base and calculate GST based on backend slab logic
+    const items = [...(formData.selectedRoomTypes || [])];
+    if (formData.room_type_id) {
+        items.push({ num_rooms: parseInt(formData.num_rooms) || 1 });
+    }
+
+    const gst = items.reduce((sum, item) => {
+      const itemRooms = parseInt(item.num_rooms) || 1;
+      // Item's share of the global base
+      const itemBaseShare = (base / totalRoomsForCalc) * itemRooms;
+      const dailyRatePerRoom = itemBaseShare / (Math.max(1, nights) * itemRooms);
+      
+      let taxRate = 0.18; 
+      if (dailyRatePerRoom < 7500) taxRate = 0.12; 
+      
+      return sum + (itemBaseShare * taxRate);
+    }, 0);
+    
+    return { totalBase: base, totalGST: gst, grandTotal: base + gst };
+  }, [formData.custom_room_rate, formData.selectedRoomTypes, formData.room_type_id, formData.num_rooms, totalRoomsForCalc, nights]);
 
   return (
     <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-[100] p-2 sm:p-4 overflow-y-auto overflow-x-hidden">
@@ -3512,7 +3529,7 @@ const BookingFormModal = ({
                         {formData.room_type_id && (
                           <>
                             <div className="space-y-1">
-                              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide ml-1">Total Booking Amount (All Nights/Rooms)</label>
+                              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide ml-1">Base Room Traffic (Excl. GST)</label>
                               <div className="group relative">
                                 <div className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-slate-400 group-focus-within:text-indigo-600 transition-colors text-xs">₹</div>
                                 <input
@@ -3524,7 +3541,7 @@ const BookingFormModal = ({
                                   className="w-full pl-8 pr-3 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all outline-none font-bold text-slate-700 shadow-sm text-sm"
                                 />
                               </div>
-                              <p className="text-[9px] text-slate-400 ml-1 font-medium italic">* Total for entire stay (all rooms & nights)</p>
+                              <p className="text-[9px] text-slate-400 ml-1 font-medium italic">* Base amount for entire stay (all rooms & nights)</p>
                             </div>
 
                             <div className="grid grid-cols-3 gap-4">
@@ -3585,83 +3602,120 @@ const BookingFormModal = ({
                       <div className="flex items-center justify-between">
                         <h3 className="text-sm font-bold text-slate-800 tracking-tight font-sans">Selected Categories</h3>
                         <span className="px-2.5 py-1 bg-indigo-50 text-indigo-700 text-[10px] font-bold rounded-lg uppercase tracking-wide">
-                          {totalRoomsCount} {totalRoomsCount === 1 ? "Room" : "Rooms"} • {nights} {nights === 1 ? "Night" : "Nights"}
+                          {totalRoomsForCalc} {totalRoomsForCalc === 1 ? "Room" : "Rooms"} • {nights} {nights === 1 ? "Night" : "Nights"}
                         </span>
                       </div>
                       
                       <div className="space-y-3 max-h-[220px] overflow-y-auto pr-1 custom-scrollbar">
-                        {selectedItems.map((item) => (
-                          <div key={item.id} className="bg-white p-3.5 rounded-xl border border-slate-100 shadow-sm flex items-center justify-between gap-3 group/item hover:border-slate-200 transition-all duration-300">
-                            <div className="flex-1 min-w-0">
-                              <p className="font-bold text-slate-700 text-sm truncate flex items-center gap-1.5">
-                                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
-                                {item.room_type_name}
-                              </p>
-                              <p className="text-[10px] text-slate-400 font-semibold mt-0.5">
-                                {item.num_rooms} {item.num_rooms === 1 ? "Room" : "Rooms"} • {item.adults} Adults {item.children > 0 ? `, ${item.children} Children` : ""}
-                              </p>
-                              <p className="text-[10px] text-indigo-600 font-bold mt-1">
-                                Total Stay Amount
-                              </p>
-                            </div>
-                            <div className="text-right shrink-0 flex items-center gap-3">
-                              <div>
-                                <p className="font-extrabold text-slate-800 text-sm">
-                                  {formatCurrency ? formatCurrency(item.custom_room_rate) : '₹' + Number(item.custom_room_rate).toFixed(2)}
+                        {selectedItems.map((item) => {
+                          const itemBase = totalRoomsForCalc > 0 ? (totalBase / totalRoomsForCalc) * (item.num_rooms || 1) : 0;
+                          return (
+                            <div key={item.id} className="bg-white p-3.5 rounded-xl border border-slate-100 shadow-sm flex items-center justify-between gap-3 group/item hover:border-slate-200 transition-all duration-300">
+                              <div className="flex-1 min-w-0">
+                                <p className="font-bold text-slate-700 text-sm truncate flex items-center gap-1.5">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
+                                  {item.room_type_name}
                                 </p>
-                                <p className="text-[8px] text-slate-400 font-bold uppercase tracking-wider">Subtotal</p>
+                                <p className="text-[10px] text-slate-400 font-semibold mt-0.5">
+                                  {item.num_rooms} {item.num_rooms === 1 ? "Room" : "Rooms"} • {item.adults} Adults {item.children > 0 ? `, ${item.children} Children` : ""}
+                                </p>
+                                <p className="text-[10px] text-indigo-600 font-bold mt-1">
+                                  Base Traffic (Excl. GST)
+                                </p>
+                                {itemBase > 0 && nights > 0 && (
+                                  <p className="text-[9px] text-slate-500 font-medium mt-0.5">
+                                    Calculation: {formatCurrency(itemBase)} / {item.num_rooms} {item.num_rooms === 1 ? 'room' : 'rooms'} / {nights} {nights === 1 ? 'night' : 'nights'} = 
+                                    <span className="font-bold text-indigo-600 ml-1">
+                                      {formatCurrency(itemBase / (item.num_rooms * nights))} / night
+                                    </span>
+                                  </p>
+                                )}
                               </div>
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveRoomType(item.id)}
-                                className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-500 hover:text-rose-600 rounded-lg transition-colors border border-rose-100"
-                                title="Remove room type"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                              <div className="text-right shrink-0 flex items-center gap-3">
+                                <div>
+                                  <p className="font-extrabold text-slate-800 text-sm">
+                                    {formatCurrency ? formatCurrency(itemBase) : '₹' + Number(itemBase).toFixed(2)}
+                                  </p>
+                                  <p className="text-[8px] text-slate-400 font-bold uppercase tracking-wider">Subtotal</p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveRoomType(item.id)}
+                                  className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-500 hover:text-rose-600 rounded-lg transition-colors border border-rose-100"
+                                  title="Remove room type"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
 
                         {currentUnsavedItem && (
                           <div className="bg-amber-50/40 p-3.5 rounded-xl border border-amber-100/70 border-dashed shadow-sm flex items-center justify-between gap-3 relative overflow-hidden">
-                            <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/5 rounded-full blur-xl pointer-events-none"></div>
-                            <div className="flex-1 min-w-0">
-                              <p className="font-bold text-amber-800 text-sm truncate flex items-center gap-1.5">
-                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
-                                {currentUnsavedItem.room_type_name}
-                              </p>
-                              <p className="text-[10px] text-amber-600 font-semibold mt-0.5">
-                                {currentUnsavedItem.num_rooms} {currentUnsavedItem.num_rooms === 1 ? "Room" : "Rooms"} • {currentUnsavedItem.adults} Guests (Configuring)
-                              </p>
-                              <p className="text-[10px] text-amber-700 font-bold mt-1">
-                                Total Stay Amount
-                              </p>
-                            </div>
-                            <div className="text-right shrink-0">
-                              <p className="font-extrabold text-amber-800 text-sm">
-                                {formatCurrency ? formatCurrency(currentUnsavedItem.custom_room_rate) : '₹' + Number(currentUnsavedItem.custom_room_rate).toFixed(2)}
-                              </p>
-                              <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 text-[8px] font-bold rounded uppercase tracking-wider">Unsaved Preview</span>
-                            </div>
+                            {(() => {
+                              const itemBase = totalRoomsForCalc > 0 ? (totalBase / totalRoomsForCalc) * (currentUnsavedItem.num_rooms || 1) : 0;
+                              return (
+                                <>
+                                  <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/5 rounded-full blur-xl pointer-events-none"></div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="font-bold text-amber-800 text-sm truncate flex items-center gap-1.5">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                                      {currentUnsavedItem.room_type_name}
+                                    </p>
+                                    <p className="text-[10px] text-amber-600 font-semibold mt-0.5">
+                                      {currentUnsavedItem.num_rooms} {currentUnsavedItem.num_rooms === 1 ? "Room" : "Rooms"} • {currentUnsavedItem.adults} Guests (Configuring)
+                                    </p>
+                                    <p className="text-[10px] text-amber-700 font-bold mt-1">
+                                      Base Traffic (Excl. GST)
+                                    </p>
+                                    {itemBase > 0 && nights > 0 && (
+                                      <p className="text-[9px] text-amber-600/80 font-medium mt-0.5">
+                                        Calculation: {formatCurrency(itemBase)} / {currentUnsavedItem.num_rooms} {currentUnsavedItem.num_rooms === 1 ? 'room' : 'rooms'} / {nights} {nights === 1 ? 'night' : 'nights'} = 
+                                        <span className="font-bold text-amber-700 ml-1">
+                                          {formatCurrency(itemBase / (currentUnsavedItem.num_rooms * nights))} / night
+                                        </span>
+                                      </p>
+                                    )}
+                                  </div>
+                                  <div className="text-right shrink-0 flex flex-col items-end justify-center">
+                                    <p className="font-extrabold text-amber-800 text-sm">
+                                      {formatCurrency ? formatCurrency(itemBase) : '₹' + Number(itemBase).toFixed(2)}
+                                    </p>
+                                    <span className="px-1.5 py-0.5 mt-1 bg-amber-100 text-amber-800 text-[8px] font-bold rounded uppercase tracking-wider inline-block">Unsaved Preview</span>
+                                  </div>
+                                </>
+                              );
+                            })()}
                           </div>
                         )}
                       </div>
 
                       {/* Grand Total Glassmorphic Card */}
-                      <div className="mt-2 bg-gradient-to-br from-slate-900 to-indigo-950 p-5 rounded-2xl text-white shadow-xl relative overflow-hidden border border-slate-800">
-                        <div className="absolute -right-10 -bottom-10 w-32 h-32 bg-indigo-500/20 rounded-full blur-2xl pointer-events-none"></div>
-                        <div className="absolute -left-10 -top-10 w-32 h-32 bg-rose-500/15 rounded-full blur-2xl pointer-events-none"></div>
-                        <div className="flex justify-between items-center relative z-10">
-                          <div>
-                            <p className="text-[10px] text-slate-300 font-bold uppercase tracking-widest leading-none mb-1">Grand Total Amount</p>
-                            <p className="text-[10px] text-indigo-200 font-semibold">Includes {totalRoomsCount} rooms for {nights} nights</p>
+                      <div className="mt-2 bg-gradient-to-br from-slate-900 to-indigo-950 p-6 rounded-3xl text-white shadow-2xl relative overflow-hidden border border-slate-800 space-y-4">
+                        <div className="absolute -right-10 -bottom-10 w-48 h-48 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
+                        <div className="absolute -left-10 -top-10 w-48 h-48 bg-rose-500/10 rounded-full blur-3xl pointer-events-none"></div>
+                        
+                        <div className="relative z-10 flex flex-col gap-3">
+                          <div className="flex justify-between items-center text-slate-400">
+                            <span className="text-[10px] font-bold uppercase tracking-widest">Base Room Traffic</span>
+                            <span className="text-sm font-bold tracking-tight">{formatCurrency(totalBase)}</span>
                           </div>
-                          <div className="text-right">
-                            <p className="text-2xl font-extrabold tracking-tight text-white leading-none mb-1">
-                              {formatCurrency ? formatCurrency(grandTotal) : '₹' + grandTotal.toLocaleString()}
-                            </p>
-                            <p className="text-[9px] text-slate-300 font-bold uppercase tracking-wider leading-none">Net Payable</p>
+                          <div className="flex justify-between items-center text-indigo-300">
+                            <span className="text-[10px] font-bold uppercase tracking-widest">Calculated GST (Taxes)</span>
+                            <span className="text-sm font-bold tracking-tight">+{formatCurrency(totalGST)}</span>
+                          </div>
+                          <div className="h-px bg-white/10 my-1"></div>
+                          <div className="flex justify-between items-end">
+                            <div>
+                              <p className="text-[10px] text-slate-300 font-black uppercase tracking-widest leading-none mb-1">Final Booking Total</p>
+                              <p className="text-[9px] text-indigo-400 font-bold uppercase tracking-wider leading-none">Net Payable for {nights} night(s)</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-3xl font-black tracking-tighter text-white leading-none">
+                                {formatCurrency ? formatCurrency(grandTotal) : '₹' + grandTotal.toLocaleString()}
+                              </p>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -5108,7 +5162,12 @@ const Bookings = () => {
   const handleChange = (e) => {
     const { name, value } = e.target;
     console.log("Input changed:", name, value);
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    setFormData((prev) => ({ 
+      ...prev, 
+      [name]: value,
+      // If they manually edit the custom_room_rate, flag it so auto-fetch doesn't overwrite it
+      ...(name === 'custom_room_rate' ? { _manual_custom_rate: true } : {})
+    }));
   };
 
   const handleRoomTypeChange = (e) => {
@@ -5118,7 +5177,9 @@ const Bookings = () => {
       ...prev,
       room_type_id: value,
       roomNumbers: [],
-      custom_room_rate: selectedType ? (selectedType.base_price || 0) : ""
+      custom_room_rate: selectedType ? (selectedType.base_price || 0) : "",
+      // Reset manual flag when category changes
+      _manual_custom_rate: false
     }));
   };
 
@@ -5135,17 +5196,20 @@ const Bookings = () => {
       return;
     }
 
-    const customRate = formData.custom_room_rate !== "" ? parseFloat(formData.custom_room_rate) : (selectedType.base_price || 0.0);
     const numRooms = parseInt(formData.num_rooms) || 1;
     const adults = parseInt(formData.adults) || 1;
     const children = parseInt(formData.children) || 0;
+
+    // Determine the "default" dynamic total for this specific item (all rooms for this category)
+    // We use the last dynamic value fetched by the useEffect if available
+    const defaultItemTotal = formData._last_preview_dynamic_total || (selectedType.base_price || 0.0) * numRooms;
 
     const newItem = {
       id: Date.now(), // unique timestamp ID
       room_type_id: selectedType.id,
       room_type_name: selectedType.name,
-      custom_room_rate: customRate,
       num_rooms: numRooms,
+      default_total: defaultItemTotal, // Store the dynamic base price for this item
       adults: adults,
       children: children,
       roomNumbers: formData.roomNumbers || []
@@ -5154,13 +5218,13 @@ const Bookings = () => {
     setFormData((prev) => ({
       ...prev,
       selectedRoomTypes: [...(prev.selectedRoomTypes || []), newItem],
-      // Reset only configuration inputs so they can add another
+      // Reset only category selection fields
       room_type_id: "",
-      custom_room_rate: "",
       num_rooms: 1,
       adults: 1,
       children: 0,
-      roomNumbers: []
+      roomNumbers: [],
+      _last_preview_dynamic_total: null
     }));
   };
 
@@ -5172,37 +5236,49 @@ const Bookings = () => {
     }));
   };
 
-  // NEW: Automatically query dynamic price when dates or room category changes
+  // NEW: Automatically query dynamic price and update Global Reservation Total
   useEffect(() => {
     const fetchDynamicPrice = async () => {
+      // 1. Calculate base sum of items already in cart
+      const cartBaseSum = (formData.selectedRoomTypes || []).reduce((sum, item) => sum + (item.default_total || 0), 0);
+
+      let previewTotalVal = 0.0;
+
+      // 2. If there is a room currently being configured (preview), fetch its dynamic price
       if (formData.room_type_id && formData.checkIn && formData.checkOut) {
         try {
-          const selectedType = roomTypeObjects.find(rt => rt.id === Number(formData.room_type_id));
           const response = await API.post("/bookings/calculate-price", {
             room_type_id: Number(formData.room_type_id),
             check_in: formData.checkIn,
             check_out: formData.checkOut,
-            room_count: 1
+            room_count: parseInt(formData.num_rooms) || 1
           });
-          const totalVal = response.data?.total_amount || 0.0;
-
-          setFormData((prev) => {
-            // Only auto-update if the user hasn't typed a completely custom value
-            // (either it's empty, or it currently matches the base price, or we can assume they want the new total)
-            // Given we changed the field to mean "Total Amount", we should probably update it to the dynamic total
-            // unless they manually edited it. For simplicity, let's always suggest the dynamic total if it changes.
-            if (prev.custom_room_rate === "" || Number(prev.custom_room_rate) === selectedType?.base_price || prev._last_dynamic_total !== totalVal) {
-              return { ...prev, custom_room_rate: totalVal.toFixed(2), _last_dynamic_total: totalVal };
-            }
-            return prev;
-          });
+          previewTotalVal = response.data?.total_amount || 0.0;
         } catch (err) {
           console.error("Error fetching dynamic price:", err);
         }
       }
+
+      const combinedDynamicTotal = cartBaseSum + previewTotalVal;
+
+      setFormData((prev) => {
+        const nextState = { ...prev, _last_preview_dynamic_total: previewTotalVal, _last_combined_dynamic_total: combinedDynamicTotal };
+
+        // IMPROVED: Only auto-fill if the current value is empty or 0
+        // This prevents the "jumping" price issue the user is seeing.
+        if (prev.custom_room_rate && prev.custom_room_rate !== "0" && prev.custom_room_rate !== "0.00") {
+          return nextState;
+        }
+
+        return { 
+          ...nextState, 
+          custom_room_rate: combinedDynamicTotal > 0 ? combinedDynamicTotal.toFixed(2) : prev.custom_room_rate 
+        };
+      });
     };
+    
     fetchDynamicPrice();
-  }, [formData.room_type_id, formData.checkIn, formData.checkOut, roomTypeObjects]);
+  }, [formData.room_type_id, formData.checkIn, formData.checkOut, formData.num_rooms, formData.selectedRoomTypes, roomTypeObjects]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -5281,6 +5357,10 @@ const Bookings = () => {
       }
 
       const createdBookings = [];
+      const globalBase = parseFloat(formData.custom_room_rate) || 0;
+      
+      // Recalculate total rooms for distribution in this scope
+      const totalRoomsForBooking = itemsToBook.reduce((sum, item) => sum + (parseInt(item.num_rooms) || 1), 0);
 
       for (const item of itemsToBook) {
         const roomIds = (item.roomNumbers || [])
@@ -5341,8 +5421,8 @@ const Bookings = () => {
           }
         }
 
-        // Since custom_room_rate is now the Total Booking Amount, we just pass it directly.
-        const postCustomRate = item.custom_room_rate ? parseFloat(item.custom_room_rate) : null;
+        // Proportional distribution of the global base amount
+        const postCustomRate = totalRoomsForBooking > 0 ? (globalBase / totalRoomsForBooking) * (parseInt(item.num_rooms) || 1) : 0;
 
         const response = await API.post(
           "/bookings",
