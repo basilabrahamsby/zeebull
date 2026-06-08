@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useCallback, memo, useMemo } from "react"; // FORCE UPDATE
+import React, { useState, useEffect, useCallback, memo, useMemo, useRef } from "react"; // FORCE UPDATE
 import DashboardLayout from "../layout/DashboardLayout";
 import BannerMessage from "../components/BannerMessage";
 import axios from "axios"; // We need axios to create the api service object
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { DollarSign, BedDouble, Users, Utensils, Package, Hash, Calendar, CreditCard, X, Search, Filter, XCircle, RefreshCw, Edit, Save } from 'lucide-react';
+import { DollarSign, BedDouble, Users, Utensils, Package, Hash, Calendar, CreditCard, X, Search, Filter, XCircle, RefreshCw, Edit, Save, ChevronDown, User, Tag } from 'lucide-react';
 import jsPDF from 'jspdf';
 import { useNavigate } from "react-router-dom";
 import autoTable from 'jspdf-autotable';
@@ -980,6 +980,22 @@ const Billing = () => {
   const [isFetchingMore, setIsFetchingMore] = useState(false);
   const [checkoutRequest, setCheckoutRequest] = useState(null);
   const [checkingInventory, setCheckingInventory] = useState(false);
+  
+  // Custom Dropdown States
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [dropdownSearch, setDropdownSearch] = useState("");
+  const dropdownRef = useRef(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   // New State for Inventory Verification Modal
   const [checkoutInventoryModal, setCheckoutInventoryModal] = useState(null); // Request ID
@@ -1557,7 +1573,7 @@ const Billing = () => {
     try {
       // Extract actual room number from composite key if needed
       const actualRoomNumber = roomNumber.includes('-') ? roomNumber.split('-')[1] : roomNumber;
-      const res = await api.get(`/bill/${actualRoomNumber}?checkout_mode=${checkoutMode}`);
+      const res = await api.get(`/bill/${actualRoomNumber}?checkout_mode=multiple`);
       if (res.data && res.data.room_numbers) {
         console.log("DEBUG BILL DATA:", res.data);
         console.log("INVENTORY CHARGES:", res.data.charges?.inventory_charges);
@@ -1566,8 +1582,7 @@ const Billing = () => {
         setEnableLateFee((res.data.charges?.late_checkout_fee || 0) > 0);
         setLateFeeAmount(res.data.charges?.late_checkout_fee || 0);
         const roomCount = res.data.room_numbers.length;
-        const modeText = checkoutMode === "single" ? "single room" : "all rooms in the booking";
-        showBannerMessage("success", `Bill retrieved for ${roomCount} room(s) (${modeText}).`);
+        showBannerMessage("success", `Bill retrieved for ${roomCount} room(s) in the booking.`);
       } else {
         throw new Error("Invalid bill data received");
       }
@@ -2061,89 +2076,141 @@ const Billing = () => {
             <label htmlFor="room-select" className="block text-gray-700 font-medium mb-2">
               Select a Room or Booking to Checkout
             </label>
-            <select
-              id="room-select"
-              value={roomNumber}
-              onChange={(e) => {
-                const value = e.target.value;
-                if (!value) {
-                  setRoomNumber("");
-                  setCheckoutMode("multiple");
-                  setBillData(null);
-                  setPanNumber("");
-                  return;
-                }
-                // Use composite key: booking_id-room_number-checkout_mode
-                const parts = value.split('-');
-                if (parts.length >= 3) {
-                  const [bookingId, roomNum, mode] = parts;
-                  const selected = activeRooms.find(b =>
-                    b.booking_id.toString() === bookingId &&
-                    b.room_number === roomNum &&
-                    b.checkout_mode === mode
-                  );
-                  setRoomNumber(value);
-                  if (selected) {
-                    setCheckoutMode(selected.checkout_mode || mode || "multiple");
-                    setBillData(null); // Clear bill data when selection changes
-                    setPanNumber("");
-                  }
-                } else {
-                  // Fallback for old format (shouldn't happen, but just in case)
-                  const selected = activeRooms.find(b => b.room_number === value);
-                  setRoomNumber(value);
-                  if (selected) {
-                    setCheckoutMode(selected.checkout_mode || "multiple");
-                    setBillData(null);
-                    setPanNumber("");
-                  }
-                }
-              }}
-              className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            >
-              <option value="">-- Select a Room or Booking to Checkout --</option>
-              {activeRooms.map((booking, index) => {
-                // Create unique composite key: booking_id-room_number-checkout_mode
-                const uniqueValue = `${booking.booking_id}-${booking.room_number}-${booking.checkout_mode}`;
-                return (
-                  <option key={`${uniqueValue}-${index}`} value={uniqueValue}>
-                    {booking.display_label || `${booking.room_numbers?.join(', ') || booking.room_number} (${booking.guest_name})`}
-                  </option>
-                );
-              })}
-            </select>
+            <div className="relative" ref={dropdownRef}>
+              <button
+                type="button"
+                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                className="w-full bg-white px-4 py-3 border border-gray-300 rounded-lg flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm hover:border-indigo-300 transition-all text-left"
+              >
+                <div className="flex items-center gap-3 overflow-hidden">
+                  <User size={20} className="text-gray-400 shrink-0" />
+                  <div className="truncate">
+                    {roomNumber ? (() => {
+                      const parts = roomNumber.split('-');
+                      const bookingId = parts[0];
+                      const roomNum = parts[1];
+                      const selected = activeRooms.find(b => b.booking_id.toString() === bookingId && b.room_number === roomNum);
+                      return selected ? (
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-indigo-700">{selected.guest_name}</span>
+                          <span className="text-gray-400">|</span>
+                          <span className="text-gray-600 font-medium">Rooms: {selected.room_numbers?.join(', ') || selected.room_number}</span>
+                        </div>
+                      ) : "Select a Booking";
+                    })() : (
+                      <span className="text-gray-400">-- Select an Active Booking --</span>
+                    )}
+                  </div>
+                </div>
+                <ChevronDown size={20} className={`text-gray-400 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {isDropdownOpen && (
+                <div className="absolute z-50 mt-2 w-full bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden animate-fade-in-down">
+                  <div className="p-2 border-b bg-gray-50">
+                    <div className="relative">
+                      <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                      <input
+                        type="text"
+                        placeholder="Search guest or room..."
+                        value={dropdownSearch}
+                        onChange={(e) => setDropdownSearch(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                        autoFocus
+                      />
+                    </div>
+                  </div>
+                  <div className="max-h-80 overflow-y-auto">
+                    {activeRooms.filter(booking => {
+                      const searchLower = dropdownSearch.toLowerCase();
+                      return (
+                        booking.guest_name?.toLowerCase().includes(searchLower) ||
+                        booking.room_number?.toLowerCase().includes(searchLower) ||
+                        booking.room_numbers?.some(r => r.toLowerCase().includes(searchLower)) ||
+                        booking.booking_id?.toString().includes(searchLower)
+                      );
+                    }).length > 0 ? (
+                      activeRooms
+                        .filter(booking => {
+                          const searchLower = dropdownSearch.toLowerCase();
+                          return (
+                            booking.guest_name?.toLowerCase().includes(searchLower) ||
+                            booking.room_number?.toLowerCase().includes(searchLower) ||
+                            booking.room_numbers?.some(r => r.toLowerCase().includes(searchLower)) ||
+                            booking.booking_id?.toString().includes(searchLower)
+                          );
+                        })
+                        .map((booking, index) => {
+                          const uniqueValue = `${booking.booking_id}-${booking.room_number}-${booking.checkout_mode}`;
+                          const isSelected = roomNumber === uniqueValue;
+                          return (
+                            <div
+                              key={`${uniqueValue}-${index}`}
+                              onClick={() => {
+                                setRoomNumber(uniqueValue);
+                                setBillData(null);
+                                setPanNumber("");
+                                setIsDropdownOpen(false);
+                                setDropdownSearch("");
+                              }}
+                              className={`p-4 cursor-pointer border-b last:border-0 hover:bg-indigo-50 transition-colors ${isSelected ? 'bg-indigo-50 border-l-4 border-l-indigo-600' : ''}`}
+                            >
+                              <div className="flex justify-between items-start mb-1">
+                                <h4 className="font-bold text-gray-900">{booking.guest_name}</h4>
+                                <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full border border-gray-200">
+                                  <Tag size={10} />
+                                  ID: {booking.booking_id}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-4">
+                                <div className="flex items-center gap-1.5 text-sm text-gray-600">
+                                  <BedDouble size={14} className="text-indigo-500" />
+                                  <span className="font-medium">Rooms: {booking.room_numbers?.join(', ') || booking.room_number}</span>
+                                </div>
+                                {booking.booking_type === 'package' && (
+                                  <span className="flex items-center gap-1 text-xs font-semibold text-purple-600">
+                                    <Package size={14} />
+                                    Package
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })
+                    ) : (
+                      <div className="p-8 text-center text-gray-500 italic">
+                        No active bookings found for "{dropdownSearch}"
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
             {roomNumber && (() => {
               // Parse composite key to find the correct selection
               let selected = null;
-              let actualMode = "multiple";
 
               if (roomNumber.includes('-')) {
                 const parts = roomNumber.split('-');
                 if (parts.length >= 3) {
-                  const [bookingId, roomNum, mode] = parts;
+                  const [bookingId, roomNum] = parts;
                   selected = activeRooms.find(b =>
                     b.booking_id.toString() === bookingId &&
-                    b.room_number === roomNum &&
-                    b.checkout_mode === mode
+                    b.room_number === roomNum
                   );
-                  actualMode = selected?.checkout_mode || mode || "multiple";
                 }
               } else {
                 // Fallback for old format
                 selected = activeRooms.find(b => b.room_number === roomNumber);
-                actualMode = selected?.checkout_mode || "multiple";
               }
 
-              const isMultiple = actualMode === "multiple";
               return (
-                <div className={`mt-2 p-3 ${isMultiple ? 'bg-blue-50 border-blue-200' : 'bg-green-50 border-green-200'} border rounded-lg text-sm ${isMultiple ? 'text-blue-800' : 'text-green-800'}`}>
+                <div className="mt-2 p-3 bg-blue-50 border-blue-200 border rounded-lg text-sm text-blue-800">
                   <p className="font-semibold">
-                    {isMultiple ? "⚠️ Important: This will checkout ALL rooms in the booking" : "✓ Single Room Checkout: Only this room will be checked out"}
+                    ✓ Booking Checkout: This will checkout ALL rooms in the booking
                   </p>
                   <p className="mt-1">Rooms: {selected?.room_numbers?.join(', ') || roomNumber}</p>
-                  {selected?.room_numbers && selected.room_numbers.length > 1 && !isMultiple && (
-                    <p className="mt-1 text-xs italic">Other rooms in this booking will remain checked in.</p>
-                  )}
                 </div>
               );
             })()}

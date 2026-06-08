@@ -2456,30 +2456,17 @@ def get_active_rooms(db: Session = Depends(get_db), current_user: User = Depends
                 and link.room.status.lower() not in ["available", "checked-out", "checked_out", "checked out"]  # Exclude already checked-out rooms
             ])
             if room_numbers:
-                # Add individual room options (one per room)
-                for room_num in room_numbers:
-                    result.append({
-                        "room_number": room_num,
-                        "room_numbers": [room_num],  # Single room
-                        "guest_name": booking.guest_name,
-                        "booking_id": booking.id,
-                        "booking_type": "regular",
-                        "checkout_mode": "single",
-                        "display_label": f"Room {room_num} ({booking.guest_name})"
-                    })
-                
-                # Add grouped booking option (all rooms together) - only if more than 1 room
-                if len(room_numbers) > 1:
-                    first_room = room_numbers[0]
-                    result.append({
-                        "room_number": first_room,  # Primary room for checkout API
-                        "room_numbers": room_numbers,  # All rooms in this booking
-                        "guest_name": booking.guest_name,
-                        "booking_id": booking.id,
-                        "booking_type": "regular",
-                        "checkout_mode": "multiple",
-                        "display_label": f"All Rooms in Booking #{booking.id}: {', '.join(room_numbers)} ({booking.guest_name})"
-                    })
+                # Add grouped booking option (all rooms together) for the entire booking
+                first_room = room_numbers[0]
+                result.append({
+                    "room_number": first_room,  # Primary room for checkout API
+                    "room_numbers": room_numbers,  # All rooms in this booking
+                    "guest_name": booking.guest_name,
+                    "booking_id": booking.id,
+                    "booking_type": "regular",
+                    "checkout_mode": "multiple",
+                    "display_label": f"Booking #{booking.id}: Rooms {', '.join(room_numbers)} ({booking.guest_name})"
+                })
         
         # Process package bookings
         for pkg_booking in active_package_bookings:
@@ -2518,30 +2505,17 @@ def get_active_rooms(db: Session = Depends(get_db), current_user: User = Depends
                 and link.room.status.lower() not in ["available", "checked-out", "checked_out", "checked out"]  # Exclude already checked-out rooms
             ])
             if room_numbers:
-                # Add individual room options (one per room)
-                for room_num in room_numbers:
-                    result.append({
-                        "room_number": room_num,
-                        "room_numbers": [room_num],  # Single room
-                        "guest_name": pkg_booking.guest_name,
-                        "booking_id": pkg_booking.id,
-                        "booking_type": "package",
-                        "checkout_mode": "single",
-                        "display_label": f"Room {room_num} ({pkg_booking.guest_name})"
-                    })
-                
-                # Add grouped booking option (all rooms together) - only if more than 1 room
-                if len(room_numbers) > 1:
-                    first_room = room_numbers[0]
-                    result.append({
-                        "room_number": first_room,  # Primary room for checkout API
-                        "room_numbers": room_numbers,  # All rooms in this booking
-                        "guest_name": pkg_booking.guest_name,
-                        "booking_id": pkg_booking.id,
-                        "booking_type": "package",
-                        "checkout_mode": "multiple",
-                        "display_label": f"All Rooms in Package #{pkg_booking.id}: {', '.join(room_numbers)} ({pkg_booking.guest_name})"
-                    })
+                # Add grouped booking option (all rooms together) for the entire package booking
+                first_room = room_numbers[0]
+                result.append({
+                    "room_number": first_room,  # Primary room for checkout API
+                    "room_numbers": room_numbers,  # All rooms in this booking
+                    "guest_name": pkg_booking.guest_name,
+                    "booking_id": pkg_booking.id,
+                    "booking_type": "package",
+                    "checkout_mode": "multiple",
+                    "display_label": f"Package #{pkg_booking.id}: Rooms {', '.join(room_numbers)} ({pkg_booking.guest_name})"
+                })
         
         # Sort by booking ID descending (most recent first)
         result = sorted(result, key=lambda x: x['booking_id'], reverse=True)
@@ -3397,6 +3371,7 @@ def _calculate_bill_for_single_room(db: Session, room_number: str, branch_id: in
 
                 
     # Calculate GST using dynamic helper
+    is_inclusive = getattr(booking, 'rate_plan_code', None) == 'TAX_INCLUSIVE'
     gst_breakdown = calculate_gst_breakdown(
         db=db,
         branch_id=branch_id,
@@ -3408,7 +3383,8 @@ def _calculate_bill_for_single_room(db: Session, room_number: str, branch_id: in
         inventory_charges=charges.inventory_charges or 0,
         nights=stay_days,
         use_night_charges=True,
-        booking_id=booking.id if booking else None
+        booking_id=booking.id if booking else None,
+        is_inclusive=is_inclusive
     )
     
     # Update charges object
