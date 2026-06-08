@@ -3260,9 +3260,9 @@ const BookingFormModal = ({
   const grandTotal = React.useMemo(() => {
     return allBookingItems.reduce((sum, item) => {
       const rate = item.custom_room_rate || 0;
-      return sum + (rate * item.num_rooms * nights);
+      return sum + Number(rate);
     }, 0);
-  }, [allBookingItems, nights]);
+  }, [allBookingItems]);
 
   const totalRoomsCount = React.useMemo(() => {
     return allBookingItems.reduce((sum, item) => sum + (item.num_rooms || 1), 0);
@@ -3509,57 +3509,61 @@ const BookingFormModal = ({
                           </select>
                         </div>
 
-                        <div className="space-y-1">
-                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide ml-1">Room Tariff (Per Night / Per Room)</label>
-                          <div className="group relative">
-                            <div className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-slate-400 group-focus-within:text-indigo-600 transition-colors text-xs">₹</div>
-                            <input
-                              type="number"
-                              name="custom_room_rate"
-                              value={formData.custom_room_rate}
-                              onChange={handleChange}
-                              placeholder="0.00"
-                              className="w-full pl-8 pr-3 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all outline-none font-bold text-slate-700 shadow-sm text-sm"
-                            />
-                          </div>
-                          <p className="text-[9px] text-slate-400 ml-1 font-medium italic">* Editable for this booking only</p>
-                        </div>
+                        {formData.room_type_id && (
+                          <>
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide ml-1">Total Booking Amount (All Nights/Rooms)</label>
+                              <div className="group relative">
+                                <div className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-slate-400 group-focus-within:text-indigo-600 transition-colors text-xs">₹</div>
+                                <input
+                                  type="number"
+                                  name="custom_room_rate"
+                                  value={formData.custom_room_rate}
+                                  onChange={handleChange}
+                                  placeholder="0.00"
+                                  className="w-full pl-8 pr-3 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all outline-none font-bold text-slate-700 shadow-sm text-sm"
+                                />
+                              </div>
+                              <p className="text-[9px] text-slate-400 ml-1 font-medium italic">* Total for entire stay (all rooms & nights)</p>
+                            </div>
 
-                        <div className="grid grid-cols-3 gap-4">
-                          <div className="space-y-1">
-                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide ml-1">No. of Rooms</label>
-                            <input
-                              type="number"
-                              name="num_rooms"
-                              value={formData.num_rooms || 1}
-                              onChange={handleChange}
-                              min="1"
-                              className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all outline-none font-bold text-slate-700 shadow-sm text-sm"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide ml-1">Adults</label>
-                            <input
-                              type="number"
-                              name="adults"
-                              value={formData.adults}
-                              onChange={handleChange}
-                              min="1"
-                              className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all outline-none font-bold text-slate-700 shadow-sm text-sm"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide ml-1">Children</label>
-                            <input
-                              type="number"
-                              name="children"
-                              value={formData.children}
-                              onChange={handleChange}
-                              min="0"
-                              className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all outline-none font-bold text-slate-700 shadow-sm text-sm"
-                            />
-                          </div>
-                        </div>
+                            <div className="grid grid-cols-3 gap-4">
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide ml-1">No. of Rooms</label>
+                                <input
+                                  type="number"
+                                  name="num_rooms"
+                                  value={formData.num_rooms || 1}
+                                  onChange={handleChange}
+                                  min="1"
+                                  className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all outline-none font-bold text-slate-700 shadow-sm text-sm"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide ml-1">Adults</label>
+                                <input
+                                  type="number"
+                                  name="adults"
+                                  value={formData.adults}
+                                  onChange={handleChange}
+                                  min="1"
+                                  className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all outline-none font-bold text-slate-700 shadow-sm text-sm"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide ml-1">Children</label>
+                                <input
+                                type="number"
+                                name="children"
+                                value={formData.children}
+                                onChange={handleChange}
+                                min="0"
+                                className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all outline-none font-bold text-slate-700 shadow-sm text-sm"
+                                />
+                                </div>
+                                </div>
+                                </>
+                                )}
                       </div>
 
                       {formData.room_type_id && (
@@ -3597,13 +3601,13 @@ const BookingFormModal = ({
                                 {item.num_rooms} {item.num_rooms === 1 ? "Room" : "Rooms"} • {item.adults} Adults {item.children > 0 ? `, ${item.children} Children` : ""}
                               </p>
                               <p className="text-[10px] text-indigo-600 font-bold mt-1">
-                                {formatCurrency ? formatCurrency(item.custom_room_rate) : '₹' + item.custom_room_rate.toFixed(2)} / night per room
+                                Total Stay Amount
                               </p>
                             </div>
                             <div className="text-right shrink-0 flex items-center gap-3">
                               <div>
                                 <p className="font-extrabold text-slate-800 text-sm">
-                                  {formatCurrency ? formatCurrency(item.custom_room_rate * item.num_rooms * nights) : '₹' + (item.custom_room_rate * item.num_rooms * nights).toFixed(2)}
+                                  {formatCurrency ? formatCurrency(item.custom_room_rate) : '₹' + Number(item.custom_room_rate).toFixed(2)}
                                 </p>
                                 <p className="text-[8px] text-slate-400 font-bold uppercase tracking-wider">Subtotal</p>
                               </div>
@@ -3631,12 +3635,12 @@ const BookingFormModal = ({
                                 {currentUnsavedItem.num_rooms} {currentUnsavedItem.num_rooms === 1 ? "Room" : "Rooms"} • {currentUnsavedItem.adults} Guests (Configuring)
                               </p>
                               <p className="text-[10px] text-amber-700 font-bold mt-1">
-                                {formatCurrency ? formatCurrency(currentUnsavedItem.custom_room_rate) : '₹' + currentUnsavedItem.custom_room_rate.toFixed(2)} / night per room
+                                Total Stay Amount
                               </p>
                             </div>
                             <div className="text-right shrink-0">
                               <p className="font-extrabold text-amber-800 text-sm">
-                                {formatCurrency ? formatCurrency(currentUnsavedItem.custom_room_rate * currentUnsavedItem.num_rooms * nights) : '₹' + (currentUnsavedItem.custom_room_rate * currentUnsavedItem.num_rooms * nights).toFixed(2)}
+                                {formatCurrency ? formatCurrency(currentUnsavedItem.custom_room_rate) : '₹' + Number(currentUnsavedItem.custom_room_rate).toFixed(2)}
                               </p>
                               <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 text-[8px] font-bold rounded uppercase tracking-wider">Unsaved Preview</span>
                             </div>
@@ -5181,16 +5185,14 @@ const Bookings = () => {
             room_count: 1
           });
           const totalVal = response.data?.total_amount || 0.0;
-          
-          const from = new Date(formData.checkIn);
-          const to = new Date(formData.checkOut);
-          const diffTime = to.getTime() - from.getTime();
-          const nights = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
-          const dailyUnitRate = totalVal / nights;
 
           setFormData((prev) => {
-            if (prev.custom_room_rate === "" || Number(prev.custom_room_rate) === selectedType?.base_price) {
-              return { ...prev, custom_room_rate: dailyUnitRate.toFixed(2) };
+            // Only auto-update if the user hasn't typed a completely custom value
+            // (either it's empty, or it currently matches the base price, or we can assume they want the new total)
+            // Given we changed the field to mean "Total Amount", we should probably update it to the dynamic total
+            // unless they manually edited it. For simplicity, let's always suggest the dynamic total if it changes.
+            if (prev.custom_room_rate === "" || Number(prev.custom_room_rate) === selectedType?.base_price || prev._last_dynamic_total !== totalVal) {
+              return { ...prev, custom_room_rate: totalVal.toFixed(2), _last_dynamic_total: totalVal };
             }
             return prev;
           });
@@ -5235,17 +5237,26 @@ const Bookings = () => {
       let itemsToBook = [...(formData.selectedRoomTypes || [])];
       
       if (formData.room_type_id) {
-        const isAlreadyAdded = itemsToBook.some(item => String(item.room_type_id) === String(formData.room_type_id));
-        if (!isAlreadyAdded) {
-          itemsToBook.push({
-            room_type_id: parseInt(formData.room_type_id),
-            custom_room_rate: formData.custom_room_rate ? parseFloat(formData.custom_room_rate) : null,
-            num_rooms: parseInt(formData.num_rooms) || 1,
-            adults: parseInt(formData.adults) || 1,
-            children: parseInt(formData.children) || 0,
-            roomNumbers: formData.roomNumbers || []
-          });
+        const existingIndex = itemsToBook.findIndex(item => String(item.room_type_id) === String(formData.room_type_id));
+        const previewItem = {
+          room_type_id: parseInt(formData.room_type_id),
+          custom_room_rate: formData.custom_room_rate ? parseFloat(formData.custom_room_rate) : null,
+          num_rooms: parseInt(formData.num_rooms) || 1,
+          adults: parseInt(formData.adults) || 1,
+          children: parseInt(formData.children) || 0,
+          roomNumbers: formData.roomNumbers || []
+        };
+        
+        if (existingIndex >= 0) {
+          // If the user modified the preview form for a room type already in the cart, update the cart item
+          itemsToBook[existingIndex] = { ...itemsToBook[existingIndex], ...previewItem };
+        } else {
+          itemsToBook.push(previewItem);
         }
+      } else if (itemsToBook.length === 1 && formData.custom_room_rate) {
+        // Fallback: If they typed a custom rate but the room type was reset (e.g. after clicking Add Room),
+        // apply the rate to the only item in the cart to prevent user frustration.
+        itemsToBook[0].custom_room_rate = parseFloat(formData.custom_room_rate);
       }
 
       // Fallback fallback if both are empty
@@ -5330,9 +5341,8 @@ const Bookings = () => {
           }
         }
 
-        // Calculate rate to pass to backend. In backend: stored_room_rate = custom_room_rate / num_rooms.
-        // Therefore, we pass (item.custom_room_rate * item.num_rooms) so that each room's stored_room_rate equals item.custom_room_rate.
-        const postCustomRate = item.custom_room_rate ? (item.custom_room_rate * item.num_rooms) : null;
+        // Since custom_room_rate is now the Total Booking Amount, we just pass it directly.
+        const postCustomRate = item.custom_room_rate ? parseFloat(item.custom_room_rate) : null;
 
         const response = await API.post(
           "/bookings",
