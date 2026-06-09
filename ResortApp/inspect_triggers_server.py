@@ -9,40 +9,25 @@ engine = create_engine(DATABASE_URL)
 
 def inspect():
     with engine.connect() as conn:
-        print("--- Detailed Trigger Inspection ---")
+        print("--- Comprehensive Trigger Inspection ---")
         
-        # 1. Triggers on users table
-        print("\nTriggers on 'users':")
         sql = text("""
             SELECT 
+                event_object_table AS table_name,
                 trigger_name, 
-                event_manipulation, 
-                action_statement, 
-                action_timing
+                event_manipulation AS event, 
+                action_statement AS action, 
+                action_timing AS timing
             FROM information_schema.triggers 
-            WHERE event_object_table = 'users'
+            ORDER BY table_name, trigger_name
         """)
         results = conn.execute(sql).mappings().all()
+        if not results:
+            print("No triggers found in the database.")
         for r in results:
-            print(f"Name: {r['trigger_name']}, Event: {r['action_timing']} {r['event_manipulation']}")
-            print(f"Action: {r['action_statement']}")
-            print("-" * 20)
-
-        # 2. Triggers on employees table
-        print("\nTriggers on 'employees':")
-        sql = text("""
-            SELECT 
-                trigger_name, 
-                event_manipulation, 
-                action_statement, 
-                action_timing
-            FROM information_schema.triggers 
-            WHERE event_object_table = 'employees'
-        """)
-        results = conn.execute(sql).mappings().all()
-        for r in results:
-            print(f"Name: {r['trigger_name']}, Event: {r['action_timing']} {r['event_manipulation']}")
-            print(f"Action: {r['action_statement']}")
+            print(f"Table: {r['table_name']}")
+            print(f"  Name: {r['trigger_name']}, Event: {r['timing']} {r['event']}")
+            print(f"  Action: {r['action']}")
             print("-" * 20)
 
         # 3. Check for any record in employees where role is 'PURCHASE MANAGER' but it's actually a guest
