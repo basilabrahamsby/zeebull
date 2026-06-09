@@ -1,5 +1,4 @@
 
-from sqlalchemy import create_session
 from sqlalchemy import create_engine, text
 import os
 from dotenv import load_dotenv
