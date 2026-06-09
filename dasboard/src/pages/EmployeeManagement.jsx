@@ -1638,7 +1638,10 @@ const EmployeeListAndForm = () => {
 
       // Combine users with their employee data
       const combinedUsers = users
-        .filter(user => user.role?.name?.toLowerCase() !== 'guest') // Hide guest users from employee management
+        .filter(user => {
+          const roleName = (user.role?.name || "").toLowerCase().trim();
+          return roleName !== 'guest' && roleName !== 'guest user';
+        }) // Hide guest users from employee management
         .map(user => {
           const empData = employeeMap.get(user.id);
           return {
