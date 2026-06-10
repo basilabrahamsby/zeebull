@@ -2086,7 +2086,7 @@ const EmployeeListAndForm = () => {
                         </div>
                         <div className="flex items-center gap-2">
                           <DollarSign size={12} className="text-green-500" />
-                          <span className="text-xs font-black text-gray-900">{emp.salary ? formatCurrency(emp.salary) : 'Not Disclosed'}</span>
+                          <span className="text-xs font-black text-gray-900">{emp.salary ? formatCurrency(emp.salary) : formatCurrency(0)}</span>
                         </div>
                       </div>
                     </td>
