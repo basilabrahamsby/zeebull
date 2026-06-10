@@ -1640,8 +1640,12 @@ const EmployeeListAndForm = () => {
       const combinedUsers = users
         .filter(user => {
           const roleName = (user.role?.name || "").toLowerCase().trim();
-          return roleName !== 'guest' && roleName !== 'guest user';
-        }) // Hide guest users from employee management
+          const isGuest = roleName === 'guest' || roleName === 'guest user';
+          const hasEmpRecord = employeeMap.has(user.id);
+          const isAdmin = user.email === 'admin@orchid.com';
+          
+          return !isGuest && (hasEmpRecord || isAdmin);
+        }) // Hide guest users and users without employee records (except admin)
         .map(user => {
           const empData = employeeMap.get(user.id);
           return {
