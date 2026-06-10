@@ -17,7 +17,7 @@ def create_food_item(db: Session, item: FoodItemCreate, image_paths: list[str], 
     db.refresh(db_item)
     return db_item
 
-def get_all_food_items(db: Session, skip: int = 0, limit: int = 100, branch_id: int = None):
+def get_all_food_items(db: Session, skip: int = 0, limit: int = 20, branch_id: int = None):
     query = db.query(FoodItem)
     if branch_id is not None:
         query = query.filter(FoodItem.branch_id == branch_id)
@@ -32,6 +32,12 @@ def get_all_food_items(db: Session, skip: int = 0, limit: int = 100, branch_id: 
         .all()
     )
     return items 
+
+def get_food_items_count(db: Session, branch_id: int = None):
+    query = db.query(FoodItem)
+    if branch_id is not None:
+        query = query.filter(FoodItem.branch_id == branch_id)
+    return query.count()
 
 def delete_food_item(db: Session, item_id: int, branch_id: int):
     item = db.query(FoodItem).filter(FoodItem.id == item_id, FoodItem.branch_id == branch_id).first()

@@ -143,6 +143,10 @@ def _list_items_impl(db: Session, skip: int = 0, limit: int = 20, branch_id: int
         # Return empty list to prevent frontend breakage
         return []
 
+@router.get("/count", response_model=int)
+def count_items(db: Session = Depends(get_db), branch_id: int = Depends(get_branch_id)):
+    return food_item.get_food_items_count(db, branch_id=branch_id)
+
 @router.get("", response_model=List[FoodItemOut])
 def list_items(db: Session = Depends(get_db), current_user: User = Depends(get_current_user), branch_id: int = Depends(get_branch_id), skip: int = 0, limit: int = 20):
     return _list_items_impl(db, skip, limit, branch_id=branch_id)

@@ -9,11 +9,18 @@ def create_category(db: Session, category: FoodCategoryCreate, branch_id: int):
     db.refresh(new_cat)
     return new_cat
 
-def get_categories(db: Session, skip: int = 0, limit: int = 100, branch_id: int = None):
+def get_categories(db: Session, skip: int = 0, limit: int = 20, branch_id: int = None):
     query = db.query(FoodCategory)
     if branch_id is not None:
         query = query.filter(FoodCategory.branch_id == branch_id)
     return query.offset(skip).limit(limit).all()
+
+def get_categories_count(db: Session, branch_id: int = None):
+    query = db.query(FoodCategory)
+    if branch_id is not None:
+        query = query.filter(FoodCategory.branch_id == branch_id)
+    return query.count()
+
 
 def delete_category(db: Session, cat_id: int, branch_id: int):
     cat = db.query(FoodCategory).filter(FoodCategory.id == cat_id, FoodCategory.branch_id == branch_id).first()

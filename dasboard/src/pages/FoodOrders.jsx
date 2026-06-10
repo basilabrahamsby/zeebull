@@ -142,6 +142,13 @@ export default function FoodOrders() {
   // Time-wise pricing
   const [timeWisePrices, setTimeWisePrices] = useState([]);
 
+  // Pagination states for Food Items and Categories
+  const [foodItemPage, setFoodItemPage] = useState(1);
+  const [totalFoodItemsCount, setTotalFoodItemsCount] = useState(0);
+  const [categoryPage, setCategoryPage] = useState(1);
+  const [totalCategoriesCount, setTotalCategoriesCount] = useState(0);
+  const itemsPerPage = 20;
+
   const statusColors = {
     pending: "bg-yellow-100 text-yellow-800",
     in_progress: "bg-blue-100 text-blue-800",
@@ -767,27 +774,63 @@ export default function FoodOrders() {
   };
 
   // Food Management functions
-  const fetchCategories = async () => {
+  const fetchCategoriesCount = async () => {
     try {
-      const res = await API.get("/food-categories", {
+      const res = await API.get("/food-categories/count", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setTotalCategoriesCount(res.data);
+    } catch (err) {
+      console.error("Failed to load categories count:", err);
+    }
+  };
+
+  const fetchCategories = async (p = categoryPage) => {
+    try {
+      const res = await API.get(`/food-categories?skip=${(p - 1) * itemsPerPage}&limit=${itemsPerPage}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setCategories(res.data);
+      fetchCategoriesCount();
     } catch (err) {
       console.error("Failed to load categories:", err);
     }
   };
 
-  const fetchFoodItems = async () => {
+  const fetchFoodItemsCount = async () => {
     try {
-      const res = await API.get("/food-items", {
+      const res = await API.get("/food-items/count", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setTotalFoodItemsCount(res.data);
+    } catch (err) {
+      console.error("Failed to fetch food items count:", err);
+    }
+  };
+
+  const fetchFoodItems = async (p = foodItemPage) => {
+    try {
+      const res = await API.get(`/food-items?skip=${(p - 1) * itemsPerPage}&limit=${itemsPerPage}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setFoodItems(res.data);
+      fetchFoodItemsCount();
     } catch (err) {
       console.error("Failed to fetch items", err);
     }
   };
+
+  useEffect(() => {
+    if (activeTab === "management") {
+      fetchFoodItems(foodItemPage);
+    }
+  }, [foodItemPage, activeTab]);
+
+  useEffect(() => {
+    if (activeTab === "management") {
+      fetchCategories(categoryPage);
+    }
+  }, [categoryPage, activeTab]);
 
   const handleFoodImageChange = (e) => {
     const newFiles = Array.from(e.target.files);
@@ -3430,9 +3473,9 @@ export default function FoodOrders() {
 
             {/* KPI Section */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              <KpiCard title="Total Food Items" value={totalItems} color="bg-gradient-to-r from-green-500 to-green-700" icon={<i className="fas fa-utensils"></i>} />
-              <KpiCard title="Item Categories" value={totalCategories} color="bg-gradient-to-r from-blue-500 to-blue-700" icon={<i className="fas fa-tags"></i>} />
-              <KpiCard title="Items Available" value={availableItemsCount} color="bg-gradient-to-r from-purple-500 to-purple-700" icon={<i className="fas fa-check-circle"></i>} />
+              <KpiCard title="Total Food Items" value={<CountUp end={totalFoodItemsCount} duration={1.5} />} color="bg-gradient-to-r from-green-500 to-green-700" icon={<UtensilsCrossed />} />
+              <KpiCard title="Item Categories" value={<CountUp end={totalCategoriesCount} duration={1.5} />} color="bg-gradient-to-r from-blue-500 to-blue-700" icon={<Package />} />
+              <KpiCard title="Items Available" value={<CountUp end={availableItemsCount} duration={1.5} />} color="bg-gradient-to-r from-purple-500 to-purple-700" icon={<CheckCircle />} />
             </div>
 
             {/* Business Performance KPIs */}
@@ -3977,6 +4020,37 @@ export default function FoodOrders() {
                   ))
                 )}
               </div>
+              {/* Food Items Pagination */}
+              {totalFoodItemsCount > itemsPerPage && (
+                <div className="mt-8 flex justify-center items-center gap-2">
+                  <button
+                    onClick={() => setFoodItemPage(p => Math.max(1, p - 1))}
+                    disabled={foodItemPage === 1}
+                    className="px-4 py-2 border rounded-lg disabled:opacity-50 hover:bg-gray-50 transition-colors"
+                  >
+                    Previous
+                  </button>
+                  {Array.from({ length: Math.ceil(totalFoodItemsCount / itemsPerPage) }, (_, i) => (
+                    <button
+                      key={i + 1}
+                      onClick={() => setFoodItemPage(i + 1)}
+                      className={`w-10 h-10 rounded-lg border transition-all ${foodItemPage === i + 1
+                        ? "bg-indigo-600 text-white border-indigo-600 shadow-md"
+                        : "hover:bg-gray-50 text-gray-600"
+                        }`}
+                    >
+                      {i + 1}
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => setFoodItemPage(p => Math.min(Math.ceil(totalFoodItemsCount / itemsPerPage), p + 1))}
+                    disabled={foodItemPage === Math.ceil(totalFoodItemsCount / itemsPerPage)}
+                    className="px-4 py-2 border rounded-lg disabled:opacity-50 hover:bg-gray-50 transition-colors"
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
             </div>
 
 
@@ -4321,6 +4395,37 @@ export default function FoodOrders() {
                   </div>
                 ))}
               </div>
+              {/* Categories Pagination */}
+              {totalCategoriesCount > itemsPerPage && (
+                <div className="mt-8 flex justify-center items-center gap-2">
+                  <button
+                    onClick={() => setCategoryPage(p => Math.max(1, p - 1))}
+                    disabled={categoryPage === 1}
+                    className="px-4 py-2 border rounded-lg disabled:opacity-50 hover:bg-gray-50 transition-colors"
+                  >
+                    Previous
+                  </button>
+                  {Array.from({ length: Math.ceil(totalCategoriesCount / itemsPerPage) }, (_, i) => (
+                    <button
+                      key={i + 1}
+                      onClick={() => setCategoryPage(i + 1)}
+                      className={`w-10 h-10 rounded-lg border transition-all ${categoryPage === i + 1
+                        ? "bg-indigo-600 text-white border-indigo-600 shadow-md"
+                        : "hover:bg-gray-50 text-gray-600"
+                        }`}
+                    >
+                      {i + 1}
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => setCategoryPage(p => Math.min(Math.ceil(totalCategoriesCount / itemsPerPage), p + 1))}
+                    disabled={categoryPage === Math.ceil(totalCategoriesCount / itemsPerPage)}
+                    className="px-4 py-2 border rounded-lg disabled:opacity-50 hover:bg-gray-50 transition-colors"
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}

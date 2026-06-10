@@ -37,6 +37,10 @@ def _read_all_impl(db: Session, skip: int = 0, limit: int = 20, branch_id: int =
     """Helper function for read_all"""
     return crud.get_categories(db, skip=skip, limit=limit, branch_id=branch_id)
 
+@router.get("/count", response_model=int)
+def count_categories(db: Session = Depends(get_db), branch_id: int = Depends(get_branch_id)):
+    return crud.get_categories_count(db, branch_id=branch_id)
+
 @router.get("", response_model=list[FoodCategoryOut])
 def read_all(db: Session = Depends(get_db), current_user: User = Depends(get_current_user), branch_id: int = Depends(get_branch_id), skip: int = 0, limit: int = 20):
     return _read_all_impl(db, skip, limit, branch_id=branch_id)
