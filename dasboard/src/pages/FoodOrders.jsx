@@ -145,6 +145,7 @@ export default function FoodOrders() {
   // Pagination states for Food Items and Categories
   const [foodItemPage, setFoodItemPage] = useState(1);
   const [totalFoodItemsCount, setTotalFoodItemsCount] = useState(0);
+  const [availableFoodItemsCount, setAvailableFoodItemsCount] = useState(0);
   const [categoryPage, setCategoryPage] = useState(1);
   const [totalCategoriesCount, setTotalCategoriesCount] = useState(0);
   const itemsPerPage = 20;
@@ -808,6 +809,17 @@ export default function FoodOrders() {
     }
   };
 
+  const fetchAvailableFoodItemsCount = async () => {
+    try {
+      const res = await API.get("/food-items/count?available=true", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setAvailableFoodItemsCount(res.data);
+    } catch (err) {
+      console.error("Failed to fetch available food items count:", err);
+    }
+  };
+
   const fetchFoodItems = async (p = foodItemPage) => {
     try {
       const res = await API.get(`/food-items?skip=${(p - 1) * itemsPerPage}&limit=${itemsPerPage}`, {
@@ -815,6 +827,7 @@ export default function FoodOrders() {
       });
       setFoodItems(res.data);
       fetchFoodItemsCount();
+      fetchAvailableFoodItemsCount();
     } catch (err) {
       console.error("Failed to fetch items", err);
     }
