@@ -1773,7 +1773,7 @@ export default function FoodOrders() {
   // Food Management calculations
   const totalItems = foodItems.length;
   const totalCategories = categories.length;
-  const availableItemsCount = foodItems.filter(item => item.available).length;
+  const availableItemsCount = availableFoodItemsCount;
   const filteredFoodItems = foodItems.filter(item => {
     const searchMatch = item.name.toLowerCase().includes(filters.search.toLowerCase());
     const categoryMatch = filters.category === 'all' || item.category_id === parseInt(filters.category);
