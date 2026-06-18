@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Generating Quotation PDF...</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #1a1a2e; color: #e0e0e0; }
+        .container { text-align: center; }
+        h2 { color: #00d4ff; }
+        p { color: #aaa; }
+        .done { color: #4caf50; font-size: 1.2em; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>📋 Zeebull Quotation Generator</h2>
+        <p id="status">Generating PDF...</p>
+    </div>
+
+    <script>
+        window.onload = function() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF('p', 'mm', 'a4');
+            const pageWidth = doc.internal.pageSize.getWidth();
+            const pageHeight = doc.internal.pageSize.getHeight();
+            const margin = 15;
+            let y = 15;
+
+            // Colors
+            const primary = [41, 98, 255];      // Blue
+            const dark = [33, 37, 41];           // Dark text
+            const gray = [108, 117, 125];        // Gray text
+            const lightBg = [248, 249, 250];     // Light background
+            const headerBg = [41, 98, 255];      // Blue header
+            const white = [255, 255, 255];
+
+            // ── HEADER BAR ──
+            doc.setFillColor(...primary);
+            doc.rect(0, 0, pageWidth, 40, 'F');
+
+            doc.setTextColor(...white);
+            doc.setFontSize(22);
+            doc.setFont('helvetica', 'bold');
+            doc.text('ZEEBULL', margin, 18);
+
+            doc.setFontSize(9);
+            doc.setFont('helvetica', 'normal');
+            doc.text('Software Development & Digital Solutions', margin, 26);
+
+            doc.setFontSize(18);
+            doc.setFont('helvetica', 'bold');
+            doc.text('QUOTATION', pageWidth - margin, 18, { align: 'right' });
+
+            doc.setFontSize(9);
+            doc.setFont('helvetica', 'normal');
+            doc.text('ZB/2026/HAS-001', pageWidth - margin, 26, { align: 'right' });
+
+            y = 50;
+
+            // ── QUOTATION META ──
+            doc.setTextColor(...dark);
+            doc.setFontSize(9);
+
+            const metaLeft = [
+                ['Prepared For:', '[Client Name / Hospital Name]'],
+                ['Attention:', '[Contact Person]'],
+            ];
+            const metaRight = [
+                ['Date:', 'June 01, 2026'],
+                ['Valid Until:', 'July 01, 2026'],
+            ];
+
+            metaLeft.forEach((row, i) => {
+                doc.setFont('helvetica', 'bold');
+                doc.text(row[0], margin, y + (i * 6));
+                doc.setFont('helvetica', 'normal');
+                doc.text(row[1], margin + 28, y + (i * 6));
+            });
+
+            metaRight.forEach((row, i) => {
+                doc.setFont('helvetica', 'bold');
+                doc.text(row[0], pageWidth - 75, y + (i * 6));
+                doc.setFont('helvetica', 'normal');
+                doc.text(row[1], pageWidth - 75 + 22, y + (i * 6));
+            });
+
+            y += 20;
+
+            // ── DIVIDER ──
+            doc.setDrawColor(220, 220, 220);
+            doc.setLineWidth(0.5);
+            doc.line(margin, y, pageWidth - margin, y);
+            y += 8;
+
+            // ── PROJECT TITLE ──
+            doc.setFontSize(13);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(...primary);
+            doc.text('Hospital Appointment Booking System', margin, y);
+            y += 8;
+
+            doc.setFontSize(9);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(...gray);
+            const desc = 'A complete digital appointment booking platform for hospitals with Normal & Fast-Track booking, covering UI/UX design, backend API, web admin dashboard, and mobile apps for patients and doctors.';
+            const descLines = doc.splitTextToSize(desc, pageWidth - (margin * 2));
+            doc.text(descLines, margin, y);
+            y += descLines.length * 5 + 8;
+
+            // ── COST BREAKDOWN TABLE ──
+            doc.setFontSize(11);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(...dark);
+            doc.text('Cost Breakdown', margin, y);
+            y += 6;
+
+            doc.autoTable({
+                startY: y,
+                head: [['#', 'Deliverable', 'Description', 'Amount']],
+                body: [
+                    ['1', 'UI/UX Design', 'Wireframes, screen designs, user flows & prototypes for all apps and web dashboard (Figma)', '₹10,000'],
+                    ['2', 'Backend API', 'FastAPI server, PostgreSQL database, authentication, scheduling engine, payment integration, notifications, cloud deployment', '₹18,000'],
+                    ['3', 'Web Admin Dashboard', 'Hospital admin panel — doctor mgmt, department mgmt, appointment mgmt, schedule mgmt, reports & analytics, settings', '₹13,000'],
+                    ['4', 'Patient App — Android', 'Dept & doctor browsing, slot booking (Normal/Fast-Track), appointment mgmt, payments, QR check-in, notifications', '₹10,000'],
+                    ['5', 'Patient App — iOS', 'Same as Android — built with Flutter (shared codebase)', '₹7,000'],
+                    ['6', 'Doctor App — Android', 'Today\'s appointments, patient queue, schedule management, consultation status updates, notifications', '₹12,000'],
+                    ['7', 'Doctor App — iOS', 'Same as Android — built with Flutter (shared codebase)', '₹10,000'],
+                ],
+                foot: [['', '', 'Total', '₹80,000']],
+                theme: 'grid',
+                headStyles: { fillColor: primary, textColor: white, fontStyle: 'bold', fontSize: 8.5, cellPadding: 3 },
+                bodyStyles: { fontSize: 8, textColor: dark, cellPadding: 2.5 },
+                footStyles: { fillColor: [230, 240, 255], textColor: primary, fontStyle: 'bold', fontSize: 9.5, cellPadding: 3 },
+                columnStyles: {
+                    0: { cellWidth: 8, halign: 'center' },
+                    1: { cellWidth: 38, fontStyle: 'bold' },
+                    2: { cellWidth: 100 },
+                    3: { cellWidth: 24, halign: 'right', fontStyle: 'bold' },
+                },
+                margin: { left: margin, right: margin },
+                alternateRowStyles: { fillColor: [250, 251, 252] },
+            });
+
+            y = doc.lastAutoTable.finalY + 12;
+
+            // ── TIMELINE ──
+            doc.setFontSize(11);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(...dark);
+            doc.text('Timeline', margin, y);
+            y += 6;
+
+            doc.autoTable({
+                startY: y,
+                head: [['Phase', 'Duration']],
+                body: [
+                    ['Design + Development + Testing', '14–20 Weeks'],
+                    ['Post-Launch Support', '30 Days (Warranty)'],
+                ],
+                theme: 'grid',
+                headStyles: { fillColor: primary, textColor: white, fontStyle: 'bold', fontSize: 8.5, cellPadding: 3 },
+                bodyStyles: { fontSize: 8.5, textColor: dark, cellPadding: 2.5 },
+                margin: { left: margin, right: margin },
+                columnStyles: {
+                    0: { cellWidth: 100 },
+                    1: { cellWidth: 70, halign: 'center' },
+                },
+            });
+
+            y = doc.lastAutoTable.finalY + 12;
+
+            // ── PAYMENT TERMS ──
+            doc.setFontSize(11);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(...dark);
+            doc.text('Payment Terms', margin, y);
+            y += 6;
+
+            doc.autoTable({
+                startY: y,
+                head: [['Milestone', 'Percentage', 'Amount']],
+                body: [
+                    ['Advance (on project confirmation)', '30%', '₹24,000'],
+                    ['Mid-project delivery', '30%', '₹24,000'],
+                    ['Final delivery & sign-off', '40%', '₹32,000'],
+                ],
+                foot: [['Total', '100%', '₹80,000']],
+                theme: 'grid',
+                headStyles: { fillColor: primary, textColor: white, fontStyle: 'bold', fontSize: 8.5, cellPadding: 3 },
+                bodyStyles: { fontSize: 8.5, textColor: dark, cellPadding: 2.5 },
+                footStyles: { fillColor: [230, 240, 255], textColor: primary, fontStyle: 'bold', fontSize: 9, cellPadding: 3 },
+                margin: { left: margin, right: margin },
+                columnStyles: {
+                    0: { cellWidth: 90 },
+                    1: { cellWidth: 35, halign: 'center' },
+                    2: { cellWidth: 40, halign: 'right' },
+                },
+            });
+
+            y = doc.lastAutoTable.finalY + 12;
+
+            // ── Check if we need a new page ──
+            if (y > pageHeight - 80) {
+                doc.addPage();
+                y = 20;
+            }
+
+            // ── WHAT'S INCLUDED ──
+            doc.setFontSize(11);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(...dark);
+            doc.text("What's Included", margin, y);
+            y += 6;
+
+            const includes = [
+                'Full source code ownership (transferred on final payment)',
+                'App Store & Play Store deployment assistance',
+                'Initial cloud server setup & deployment',
+                'Functional testing, API testing, device compatibility testing',
+                'API documentation & admin user guide',
+                '30 days post-launch bug fix warranty',
+                'Admin panel walkthrough & training for hospital staff',
+            ];
+
+            doc.setFontSize(8.5);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(...dark);
+            includes.forEach((item) => {
+                doc.setFillColor(41, 98, 255);
+                doc.circle(margin + 2, y - 1.2, 1, 'F');
+                doc.text(item, margin + 6, y);
+                y += 5.5;
+            });
+
+            y += 5;
+
+            // ── WHAT'S NOT INCLUDED ──
+            doc.setFontSize(11);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(...dark);
+            doc.text("What's Not Included", margin, y);
+            y += 6;
+
+            const excludes = [
+                'Monthly cloud/hosting charges (est. ₹2,000–5,000/month)',
+                'SMS & email service charges (third-party per-message costs)',
+                'Apple Developer Account (₹8,300/year)',
+                'Google Play Developer Account (₹2,100 one-time)',
+                'Domain registration & SSL certificate',
+                'Payment gateway transaction fees (Razorpay/Stripe)',
+                'Content & media (doctor photos, hospital branding, copywriting)',
+            ];
+
+            doc.setFontSize(8.5);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(...gray);
+            excludes.forEach((item) => {
+                doc.setFillColor(180, 180, 180);
+                doc.circle(margin + 2, y - 1.2, 1, 'F');
+                doc.text(item, margin + 6, y);
+                y += 5.5;
+            });
+
+            y += 5;
+
+            // ── Check if we need a new page ──
+            if (y > pageHeight - 80) {
+                doc.addPage();
+                y = 20;
+            }
+
+            // ── TERMS ──
+            doc.setFontSize(11);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(...dark);
+            doc.text('Terms & Conditions', margin, y);
+            y += 6;
+
+            const terms = [
+                'Scope changes will be assessed and quoted separately as Change Requests (CR).',
+                'Full source code and IP rights transferred to client upon final payment.',
+                'Both parties agree to maintain confidentiality of all project-related information.',
+                'Cloud hosting, SMS/email, app store fees, and payment gateway charges are borne by the client.',
+                'Weekly progress updates will be shared. A dedicated POC is required from the client.',
+                'If cancelled mid-way, payment for completed milestones is non-refundable.',
+                'This quotation is valid for 30 days from the date of issue.',
+            ];
+
+            doc.setFontSize(8);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(...gray);
+            terms.forEach((item, i) => {
+                const termText = `${i + 1}. ${item}`;
+                const lines = doc.splitTextToSize(termText, pageWidth - (margin * 2));
+                doc.text(lines, margin, y);
+                y += lines.length * 4.5 + 1.5;
+            });
+
+            y += 8;
+
+            // ── Check if we need a new page for signatures ──
+            if (y > pageHeight - 65) {
+                doc.addPage();
+                y = 20;
+            }
+
+            // ── SIGNATURE SECTION ──
+            doc.setDrawColor(220, 220, 220);
+            doc.setLineWidth(0.5);
+            doc.line(margin, y, pageWidth - margin, y);
+            y += 8;
+
+            doc.setFontSize(11);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(...dark);
+            doc.text('Acceptance', margin, y);
+            y += 10;
+
+            // Client side
+            doc.setFontSize(9);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(...primary);
+            doc.text('Client', margin, y);
+            y += 7;
+
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(...gray);
+            doc.setFontSize(8.5);
+
+            doc.text('Name:', margin, y);
+            doc.setDrawColor(180, 180, 180);
+            doc.line(margin + 18, y + 1, margin + 70, y + 1);
+            y += 8;
+
+            doc.text('Designation:', margin, y);
+            doc.line(margin + 18, y + 1, margin + 70, y + 1);
+            y += 8;
+
+            doc.text('Signature:', margin, y);
+            doc.line(margin + 18, y + 1, margin + 70, y + 1);
+            y += 8;
+
+            doc.text('Date:', margin, y);
+            doc.line(margin + 18, y + 1, margin + 70, y + 1);
+            y += 12;
+
+            // Zeebull side
+            const zY = y - 35;
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(...primary);
+            doc.setFontSize(9);
+            doc.text('Zeebull Development Team', pageWidth / 2 + 10, zY);
+
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(...gray);
+            doc.setFontSize(8.5);
+
+            doc.text('Name:', pageWidth / 2 + 10, zY + 7);
+            doc.line(pageWidth / 2 + 28, zY + 8, pageWidth - margin, zY + 8);
+
+            doc.text('Designation:', pageWidth / 2 + 10, zY + 15);
+            doc.line(pageWidth / 2 + 28, zY + 16, pageWidth - margin, zY + 16);
+
+            doc.text('Signature:', pageWidth / 2 + 10, zY + 23);
+            doc.line(pageWidth / 2 + 28, zY + 24, pageWidth - margin, zY + 24);
+
+            doc.text('Date:', pageWidth / 2 + 10, zY + 31);
+            doc.line(pageWidth / 2 + 28, zY + 32, pageWidth - margin, zY + 32);
+
+            // ── FOOTER on every page ──
+            const totalPages = doc.internal.getNumberOfPages();
+            for (let i = 1; i <= totalPages; i++) {
+                doc.setPage(i);
+                doc.setFillColor(41, 98, 255);
+                doc.rect(0, pageHeight - 12, pageWidth, 12, 'F');
+                doc.setTextColor(...white);
+                doc.setFontSize(7.5);
+                doc.setFont('helvetica', 'normal');
+                doc.text('Zeebull Development Team  |  contact@zeebull.com  |  +91-XXXXXXXXXX', pageWidth / 2, pageHeight - 4.5, { align: 'center' });
+            }
+
+            // Save
+            doc.save('Zeebull_Quotation_Hospital_Booking_System.pdf');
+
+            document.getElementById('status').innerHTML = '<span class="done">✅ PDF Generated Successfully!</span><br><br>Check your Downloads folder for:<br><strong>Zeebull_Quotation_Hospital_Booking_System.pdf</strong>';
+        };
+    </script>
+</body>
+</html>

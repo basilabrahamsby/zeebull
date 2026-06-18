@@ -451,7 +451,7 @@ def book_package_api(
             
             send_email(
                 to_email=booking.guest_email,
-                subject=f"Package Booking Confirmation {formatted_booking_id} - Elysian Retreat",
+                subject=f"Package Booking Confirmation {formatted_booking_id} - Orchid Resort",
                 html_content=email_html,
                 to_name=result.guest_name
             )
@@ -535,7 +535,7 @@ def book_package_guest_api(
                     
                     send_email(
                         to_email=guest_email,
-                        subject=f"Package Booking Confirmation {formatted_booking_id} - Elysian Retreat",
+                        subject=f"Package Booking Confirmation {formatted_booking_id} - Orchid Resort",
                         html_content=email_html,
                         to_name=result.guest_name
                     )

@@ -3135,6 +3135,7 @@ def _calculate_bill_for_single_room(db: Session, room_number: str, branch_id: in
                     
                     charges.inventory_usage.append({
                         "date": checkout_request.completed_at or get_ist_now(),
+                        "item_id": item_id,
                         "item_name": clean_name + (f" @ {price}" if len(price_groups) > 1 else ""),
                         "category": inv_item.category.name if inv_item.category else "Rental",
                         "quantity": group_qty,
@@ -4092,9 +4093,12 @@ def _calculate_bill_for_entire_booking(db: Session, room_number: str, branch_id:
             is_rentable = r_price > 0
             is_fixed_asset = detail.item.is_asset_fixed if detail.item else False
 
+            item_gst = float(detail.item.category.default_gst_rate if (detail.item and detail.item.category) else 0.0)
+
             if is_rentable:
                 charges.inventory_usage.append({
                     "date": issue.issue_date,
+                    "item_id": detail.item_id,
                     "item_name": f"Room {r_num}: {clean_name}",
                     "room_number": r_num,
                     "category": detail.item.category.name if detail.item.category else "Rental",
@@ -4108,7 +4112,31 @@ def _calculate_bill_for_entire_booking(db: Session, room_number: str, branch_id:
                 })
                 if u_charge > 0:
                     charges.inventory_charges = (charges.inventory_charges or 0) + u_charge
+                    inventory_gst_breakdown[item_gst] = inventory_gst_breakdown.get(item_gst, 0.0) + u_charge
+            elif not is_rentable and not is_fixed_asset and getattr(detail, 'is_payable', False):
+                # Consumable stock issue
+                total_item_charge = float(detail.item.selling_price or detail.item.unit_price or 0.0) * detail.issued_quantity
+                if total_item_charge > 0:
+                    charges.consumables_charges = (charges.consumables_charges or 0) + total_item_charge
+                    consumables_gst_breakdown[item_gst] = consumables_gst_breakdown.get(item_gst, 0.0) + total_item_charge
+                    charges.consumables_items.append({
+                        "date": issue.issue_date,
+                        "item_id": detail.item_id,
+                        "item_name": f"Room {r_num}: {clean_name}",
+                        "quantity": detail.issued_quantity,
+                        "unit": detail.unit or "pcs",
+                        "charge": total_item_charge,
+                        "notes": "Consumable issue (unverified)"
+                    })
             elif is_fixed_asset:
+                charges.fixed_assets.append({
+                    "date": issue.issue_date,
+                    "item_id": detail.item_id,
+                    "item_name": f"Room {r_num}: {clean_name}",
+                    "quantity": detail.issued_quantity,
+                    "unit": detail.unit or "pcs",
+                    "notes": "Fixed asset in room"
+                })
                 if bad_charge > 0:
                     charges.fixed_assets.append({
                         "item_name": f"Room {r_num}: {clean_name}",
@@ -4130,6 +4158,14 @@ def _calculate_bill_for_entire_booking(db: Session, room_number: str, branch_id:
     total_missing_charges = charges.asset_damage_charges or 0
     total_consumables_charges = charges.consumables_charges or 0
     total_inventory_charges = charges.inventory_charges or 0
+    
+    # Process rate maps
+    c_map = {}
+    i_map = {}
+    if consumables_gst_breakdown:
+        c_map = consumables_gst_breakdown
+    if inventory_gst_breakdown:
+        i_map = inventory_gst_breakdown
 
     # Calculate GST using dynamic helper
     total_room_nights = stay_days * len(all_rooms) if not is_package else stay_days
@@ -4144,7 +4180,10 @@ def _calculate_bill_for_entire_booking(db: Session, room_number: str, branch_id:
         inventory_charges=charges.inventory_charges or 0,
         nights=total_room_nights,
         use_night_charges=True,
-        booking_id=booking.id if booking else None
+        booking_id=booking.id if booking else None,
+        is_inclusive=is_inclusive,
+        consumables_breakdown=c_map,
+        inventory_breakdown=i_map
     )
     
     # Update charges object

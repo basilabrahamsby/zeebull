@@ -159,7 +159,7 @@ class Checkout(Base):
 
 
     # uselist=True: one booking can now have multiple checkout records (one per room).
-    booking = relationship("Booking", back_populates="checkouts", uselist=True)
-    package_booking = relationship("PackageBooking", back_populates="checkouts", uselist=True)
+    booking = relationship("Booking", back_populates="checkouts")
+    package_booking = relationship("PackageBooking", back_populates="checkouts")
     verifications = relationship("CheckoutVerification", back_populates="checkout", cascade="all, delete-orphan")
     payments = relationship("CheckoutPayment", back_populates="checkout", cascade="all, delete-orphan")

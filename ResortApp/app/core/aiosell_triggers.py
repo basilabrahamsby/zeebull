@@ -31,22 +31,21 @@ def _calculate_availability_for_date(db: Session, room_type_id: int, target_date
     # Resolve branch_id: use passed value, fallback to room_type's branch
     effective_branch = branch_id if branch_id is not None else room_type.branch_id
 
-    # 1. Physical room count (non-deleted)
+    # 1. Physical room count (non-deleted and NOT in Maintenance)
     total_physical = db.query(Room).filter(
         Room.room_type_id == room_type_id,
         Room.branch_id == effective_branch,
-        Room.status != "Deleted"
+        Room.status != "Deleted",
+        Room.status != "Maintenance"
     ).count()
 
-    # Internal capacity: use the actual physical room count (non-deleted)
-    # This ensures that inventory pushed to Aiosell matches the actual rooms defined in the system.
+    # Internal capacity: use the actual physical room count (non-deleted, non-maintenance)
     capacity = total_physical
 
-    # Active booking statuses — match exact DB values (case-sensitive)
+    # Active booking statuses
     ACTIVE_STATUSES = ["Booked", "booked", "checked-in", "Checked-in", "Confirmed", "confirmed", "Occupied", "occupied"]
 
-    # 2. Hard allocations (specific room assigned to booking)
-    # Count physical rooms of THIS type currently held by active bookings
+    # 2. Regular Hard allocations
     assigned_overlaps = db.query(BookingRoom).join(Booking).join(Room).filter(
         Room.room_type_id == room_type_id,
         Booking.branch_id == effective_branch,
@@ -55,10 +54,9 @@ def _calculate_availability_for_date(db: Session, room_type_id: int, target_date
         Booking.check_out > target_date
     ).count()
 
-    # 3. Soft allocations (bookings of this type with unassigned room remainder)
-    # We count the total 'num_rooms' requested for this type, subtracting any physical assignments already made
-    # to avoid double counting if some rooms are assigned but others aren't.
+    # 3. Regular Soft allocations
     from sqlalchemy import func, or_, and_
+    from app.models.Package import Package  # Import Package model here if needed
     
     bookings_of_type = db.query(Booking).filter(
         Booking.room_type_id == room_type_id,
@@ -70,13 +68,10 @@ def _calculate_availability_for_date(db: Session, room_type_id: int, target_date
 
     soft_remainder = 0
     for b in bookings_of_type:
-        # Count how many rooms for THIS booking are assigned to rooms of THIS type
-        # (This handles the case where a booking might have rooms of different types)
         num_assigned_this_type = db.query(BookingRoom).join(Room).filter(
             BookingRoom.booking_id == b.id,
             Room.room_type_id == room_type_id
         ).count()
-        
         soft_remainder += max(0, (b.num_rooms or 1) - num_assigned_this_type)
 
     # 4. Package Hard allocations
@@ -88,12 +83,35 @@ def _calculate_availability_for_date(db: Session, room_type_id: int, target_date
         PackageBooking.check_out > target_date
     ).count()
 
-    # 5. Package Soft allocations (Note: Packages generally use hard-assigned rooms 
-    # but we count them here if any unassigned remainder exists, similar to regular bookings)
-    # However, since PackageBooking doesn't have a direct room_type_id, we primarily
-    # rely on assigned rooms. If there are future soft-package types, they would go here.
+    # 5. Package Soft allocations & Whole Property blocking
+    package_bookings = db.query(PackageBooking).join(Package).filter(
+        PackageBooking.branch_id == effective_branch,
+        PackageBooking.status.in_(ACTIVE_STATUSES),
+        PackageBooking.check_in <= target_date,
+        PackageBooking.check_out > target_date
+    ).all()
+
+    soft_package_remainder = 0
+    for pb in package_bookings:
+        # If any whole property package is booked, everything is blocked
+        if pb.package.booking_type == "whole_property":
+            return 0
+            
+        # Check if this package is relevant to this room type
+        is_relevant = False
+        if pb.package.room_types:
+            allowed_types = [t.strip() for t in pb.package.room_types.split(",")]
+            if str(room_type_id) in allowed_types:
+                is_relevant = True
+        
+        if is_relevant:
+            num_assigned_this_type = db.query(PackageBookingRoom).join(Room).filter(
+                PackageBookingRoom.package_booking_id == pb.id,
+                Room.room_type_id == room_type_id
+            ).count()
+            soft_package_remainder += max(0, (pb.num_rooms or 1) - num_assigned_this_type)
     
-    total_bookings = assigned_overlaps + soft_remainder + assigned_packages
+    total_bookings = assigned_overlaps + soft_remainder + assigned_packages + soft_package_remainder
 
     # Physical availability (internal view)
     physical_available = max(0, capacity - total_bookings)

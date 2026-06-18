@@ -31,6 +31,9 @@ def apply_branch_scope(query, model, branch_id: Optional[int]):
 
 # Cache for KPIs to improve performance
 _kpi_cache = {}
+_charts_cache = {}
+_reports_cache = {}
+_trends_cache = {}
 
 @router.get("/kpis")
 def get_kpis(
@@ -218,24 +221,48 @@ def get_chart_data(
     - Primary source: Checkout totals (actual billed revenue)
     - Fallback: Estimated revenue from current bookings if no checkouts exist
     """
-    from sqlalchemy import cast
+    # Throttle: Only calculate once every 2 minutes per branch
+    now = datetime.now()
+    cache_key = branch_id or 0
+    if cache_key in _charts_cache:
+        cached_time, cached_data = _charts_cache[cache_key]
+        if now - cached_time < timedelta(minutes=2):
+            return cached_data
+
+    from sqlalchemy import cast, case
 
     # --- Primary: use billed totals from Checkout + Unbilled Active charges ---
-    # We sum Checkout components PLUS unbilled FoodOrders and AssignedServices
+    # We sum Checkout components PLUS unbilled FoodOrders and AssignedServices in single queries
+    checkout_sums = apply_branch_scope(
+        db.query(
+            func.sum(Checkout.room_total),
+            func.sum(Checkout.package_total),
+            func.sum(Checkout.food_total),
+            func.sum(Checkout.service_total)
+        ),
+        Checkout,
+        branch_id
+    ).first() or (0, 0, 0, 0)
     
-    room_total = (apply_branch_scope(db.query(func.sum(Checkout.room_total)), Checkout, branch_id).scalar() or 0)
+    room_total = float(checkout_sums[0] or 0)
+    package_total = float(checkout_sums[1] or 0)
+    food_total_settled = float(checkout_sums[2] or 0)
+    service_total_settled = float(checkout_sums[3] or 0)
     
-    package_total = (apply_branch_scope(db.query(func.sum(Checkout.package_total)), Checkout, branch_id).scalar() or 0)
+    unbilled_food = apply_branch_scope(
+        db.query(func.sum(FoodOrder.amount)), 
+        FoodOrder, 
+        branch_id
+    ).filter(FoodOrder.billing_status.in_(["unbilled", "unpaid"])).scalar() or 0
     
-    food_total = (
-        (apply_branch_scope(db.query(func.sum(Checkout.food_total)), Checkout, branch_id).scalar() or 0) +
-        (apply_branch_scope(db.query(func.sum(FoodOrder.amount)), FoodOrder, branch_id).filter(FoodOrder.billing_status.in_(["unbilled", "unpaid"])).scalar() or 0)
-    )
-
-    service_total = (
-        (apply_branch_scope(db.query(func.sum(Checkout.service_total)), Checkout, branch_id).scalar() or 0) +
-        (apply_branch_scope(db.query(func.sum(func.coalesce(AssignedService.override_charges, Service.charges))), AssignedService, branch_id).join(Service).filter(AssignedService.billing_status.in_(["unbilled", "unpaid"])).scalar() or 0)
-    )
+    unbilled_service = apply_branch_scope(
+        db.query(func.sum(func.coalesce(AssignedService.override_charges, Service.charges))), 
+        AssignedService, 
+        branch_id
+    ).join(Service).filter(AssignedService.billing_status.in_(["unbilled", "unpaid"])).scalar() or 0
+    
+    food_total = food_total_settled + float(unbilled_food)
+    service_total = service_total_settled + float(unbilled_service)
 
     # If everything is zero, build a lightweight estimate from active data to avoid empty charts
     # Limit queries to prevent timeouts
@@ -301,29 +328,68 @@ def get_chart_data(
         {"name": 'Service Charges', "value": round(float(service_total), 2)},
     ]
 
-    # --- Weekly performance ---
+    # --- Weekly performance (Optimized to single grouped queries) ---
     weekly_performance = []
     today = get_ist_today().date()
+    seven_days_ago = today - timedelta(days=6)
+    
+    # Query checkout date casting, revenue sums, and checkout counts in a single query
+    checkout_stats = apply_branch_scope(
+        db.query(
+            func.cast(Checkout.checkout_date, Date).label('day_date'),
+            func.sum(Checkout.grand_total).label('rev'),
+            func.count(Checkout.id).label('cnt')
+        ),
+        Checkout,
+        branch_id
+    ).filter(
+        func.cast(Checkout.checkout_date, Date) >= seven_days_ago,
+        func.cast(Checkout.checkout_date, Date) <= today
+    ).group_by(
+        func.cast(Checkout.checkout_date, Date)
+    ).all()
+    
+    stats_map = {row.day_date: (float(row.rev or 0), int(row.cnt or 0)) for row in checkout_stats}
+    
+    # Query booking starts for the weekly range to handle baseline fallbacks
+    booking_starts = apply_branch_scope(
+        db.query(
+            Booking.check_in,
+            func.count(Booking.id)
+        ),
+        Booking,
+        branch_id
+    ).filter(
+        Booking.check_in >= seven_days_ago,
+        Booking.check_in <= today
+    ).group_by(
+        Booking.check_in
+    ).all()
+    
+    booking_map = {row[0]: int(row[1] or 0) for row in booking_starts}
+    
     for i in range(6, -1, -1):
         day = today - timedelta(days=i)
-        # Billed revenue and checkout count for each day
-        day_revenue = db.query(func.coalesce(func.sum(Checkout.grand_total), 0)).filter(func.cast(Checkout.checkout_date, Date) == day).scalar() or 0
-        day_checkouts = db.query(func.count(Checkout.id)).filter(func.cast(Checkout.checkout_date, Date) == day).scalar() or 0
-
+        day_revenue, day_checkouts = stats_map.get(day, (0.0, 0))
+        
         # Fallback: if still zero, count bookings starting that day
         if not day_revenue:
-            starts = db.query(func.count(Booking.id)).filter(Booking.check_in == day).scalar() or 0
+            starts = booking_map.get(day, 0)
             day_revenue = float(starts) * 1000.0  # symbolic baseline so chart shows activity
+            
         weekly_performance.append({
             "day": day.strftime("%a"),
-            "revenue": round(float(day_revenue), 2),
-            "checkouts": int(day_checkouts),
+            "revenue": round(day_revenue, 2),
+            "checkouts": day_checkouts,
         })
 
-    return {
+    result = {
         "revenue_breakdown": revenue_breakdown,
         "weekly_performance": weekly_performance,
     }
+    _charts_cache[cache_key] = (now, result)
+    return result
+
 
 @router.get("/vendors/{vendor_id}/transactions")
 def get_vendor_transactions(
@@ -357,6 +423,14 @@ def get_reports_data(
     """
     Provides a consolidated dataset for the main reports/account page.
     """
+    # Throttle: Only calculate once every 2 minutes per branch
+    now = datetime.now()
+    cache_key = branch_id or 0
+    if cache_key in _reports_cache:
+        cached_time, cached_data = _reports_cache[cache_key]
+        if now - cached_time < timedelta(minutes=2):
+            return cached_data
+
     # Fetch recent bookings (regular and package)
     bookings_q = db.query(Booking).order_by(Booking.id.desc())
     recent_bookings = apply_branch_scope(bookings_q, Booking, branch_id).limit(5).all()
@@ -377,7 +451,7 @@ def get_reports_data(
     expenses_query_result = db.query(Expense.category, func.sum(Expense.amount).label("total_amount")).group_by(Expense.category).all()
     expenses_by_category = [{"category": category, "amount": total_amount} for category, total_amount in expenses_query_result]
 
-    return [{
+    result = [{
         "kpis": {
             "total_revenue": (
                 (apply_branch_scope(db.query(func.sum(Checkout.grand_total)), Checkout, branch_id).scalar() or 0) +
@@ -393,6 +467,8 @@ def get_reports_data(
         "recent_bookings": all_recent,
         "expenses_by_category": expenses_by_category,
     }]
+    _reports_cache[cache_key] = (now, result)
+    return result
 
 
 def get_date_range(period: str):
@@ -1534,6 +1610,14 @@ def get_financial_trends(db: Session = Depends(get_db), branch_id: Optional[int]
     """
     Returns monthly revenue, expense, and profit for the last 6 months.
     """
+    # Throttle: Only calculate once every 5 minutes per branch
+    now = datetime.now()
+    cache_key = branch_id or 0
+    if cache_key in _trends_cache:
+        cached_time, cached_data = _trends_cache[cache_key]
+        if now - cached_time < timedelta(minutes=5):
+            return cached_data
+
     trends = []
     today = date.today()
     
@@ -1562,7 +1646,7 @@ def get_financial_trends(db: Session = Depends(get_db), branch_id: Optional[int]
         if branch_id is not None:
             rev_q = rev_q.filter(Checkout.branch_id == branch_id)
         settled_rev = float(rev_q.scalar() or 0.0)
-
+ 
         # Unbilled revenue for this month
         food_unbilled_q = db.query(func.sum(FoodOrder.amount)).filter(
             FoodOrder.created_at >= start_date,
@@ -1570,14 +1654,14 @@ def get_financial_trends(db: Session = Depends(get_db), branch_id: Optional[int]
             FoodOrder.billing_status.in_(["unbilled", "unpaid"])
         )
         food_unbilled = float(apply_branch_scope(food_unbilled_q, FoodOrder, branch_id).scalar() or 0)
-
+ 
         service_unbilled_q = db.query(func.sum(func.coalesce(AssignedService.override_charges, Service.charges))).join(Service).filter(
             AssignedService.assigned_at >= start_date,
             AssignedService.assigned_at < end_date,
             AssignedService.billing_status.in_(["unbilled", "unpaid"])
         )
         service_unbilled = float(apply_branch_scope(service_unbilled_q, AssignedService, branch_id).scalar() or 0)
-
+ 
         rev = settled_rev + food_unbilled + service_unbilled
         
         exp_q = db.query(func.sum(Expense.amount)).filter(Expense.date >= start_date, Expense.date < end_date)
@@ -1600,4 +1684,5 @@ def get_financial_trends(db: Session = Depends(get_db), branch_id: Optional[int]
             "profit": round(float(profit), 2)
         })
         
+    _trends_cache[cache_key] = (now, trends)
     return trends

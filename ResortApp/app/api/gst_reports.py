@@ -405,10 +405,8 @@ def get_b2c_sales_register(
             or_(
                 Checkout.is_b2b == False,
                 Checkout.is_b2b == None,
-                and_(
-                    Checkout.guest_gstin.is_(None),
-                    Checkout.guest_gstin == ""
-                )
+                Checkout.guest_gstin.is_(None),
+                Checkout.guest_gstin == ""
             )
         )
         if branch_id is not None:

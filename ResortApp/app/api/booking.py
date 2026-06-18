@@ -12,6 +12,7 @@ from app.utils.auth import get_db, get_current_user
 from app.utils.api_optimization import optimize_limit, MAX_LIMIT_LOW_NETWORK
 from app.utils.booking_id import parse_display_id, format_display_id
 from app.utils.pricing import calculate_dynamic_booking_price
+from app.utils.checkout_helpers import calculate_gst_breakdown
 from app.models.booking import Booking, BookingRoom
 from app.utils.branch_scope import get_branch_id
 from app.models.user import User
@@ -1049,7 +1050,9 @@ def create_booking(
             raise HTTPException(status_code=400, detail=f"No rooms of type '{room_type.name}' available for selected dates (Available: {max(0, capacity - effective_overlaps)}, Requested: {rooms_requested}).")
 
         num_rooms_val = booking.num_rooms or 1
-        stored_room_rate = (booking.custom_room_rate / num_rooms_val) if (booking.custom_room_rate and booking.custom_room_rate > 0) else 0.0
+        nights = max(1, (booking.check_out - booking.check_in).days)
+        # Distribute the total manually set amount across all rooms and nights
+        stored_room_rate = (booking.custom_room_rate / (num_rooms_val * nights)) if (booking.custom_room_rate and booking.custom_room_rate > 0) else 0.0
 
         db_booking = Booking(
             guest_name=booking.guest_name,
@@ -1066,7 +1069,8 @@ def create_booking(
             branch_id=branch_id,
             status="Booked",
             num_rooms=num_rooms_val,
-            room_rate=stored_room_rate
+            room_rate=stored_room_rate,
+            total_amount=booking.custom_room_rate if booking.custom_room_rate else 0.0
         )
         
         db.add(db_booking)
@@ -1112,7 +1116,9 @@ def create_booking(
                 raise HTTPException(status_code=400, detail=f"Room {room.number} is unavailable.")
 
         num_rooms_val = num_rooms
-        stored_room_rate = (booking.custom_room_rate / num_rooms_val) if (booking.custom_room_rate and booking.custom_room_rate > 0) else 0.0
+        nights = max(1, (booking.check_out - booking.check_in).days)
+        # Store the base room rate per night per room
+        stored_room_rate = (booking.custom_room_rate / (num_rooms_val * nights)) if (booking.custom_room_rate and booking.custom_room_rate > 0) else 0.0
 
         db_booking = Booking(
             guest_name=booking.guest_name,
@@ -1161,12 +1167,31 @@ def create_booking(
     total_amt = 0.0
     try:
         room_count = len(booking_full.booking_rooms) or booking_full.num_rooms or 1
+        nights = max(1, (booking_full.check_out - booking_full.check_in).days)
+        base_amt = 0.0
+
         if booking.custom_room_rate and booking.custom_room_rate > 0:
-            nights = max(1, (booking_full.check_out - booking_full.check_in).days)
-            # Custom rate is now treated as "Total per night for all rooms"
-            total_amt = booking.custom_room_rate * nights
+            # Custom rate is treated as "Base Room Charges" (excluding GST)
+            base_amt = booking.custom_room_rate
+            # Store the BASE room rate per night
+            booking_full.room_rate = base_amt / (nights * room_count)
         elif booking_full.room_type_id and booking_full.check_in and booking_full.check_out:
-            total_amt = calculate_dynamic_booking_price(db, booking_full.room_type_id, booking_full.check_in, booking_full.check_out, room_count)
+            base_amt = calculate_dynamic_booking_price(db, booking_full.room_type_id, booking_full.check_in, booking_full.check_out, room_count)
+            # Store base rate
+            booking_full.room_rate = base_amt / (nights * room_count)
+
+        # Calculate GST on top of base_amt at the time of booking
+        gst_data = calculate_gst_breakdown(
+            db=db,
+            branch_id=branch_id,
+            room_charges=base_amt,
+            food_charges=0,
+            package_charges=0,
+            nights=nights,
+            is_inclusive=False
+        )
+        total_amt = base_amt + gst_data["total_gst"]
+
     except Exception as e:
         print(f"Error calculating dynamic price for booking {booking_full.id}: {e}")
     

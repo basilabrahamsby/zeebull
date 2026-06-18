@@ -1027,6 +1027,14 @@ const Billing = () => {
     resort_location: ""
   });
 
+  const [gstSettings, setGstSettings] = useState({
+    gst_enabled: true,
+    gst_room_type: "SLAB",
+    gst_slab_rate_1: "5",
+    gst_slab_rate_2: "12",
+    gst_slab_rate_3: "18"
+  });
+
   const getDynamicTotals = () => {
     if (!billData) return { subtotal: 0, totalGST: 0, totalBill: 0, advanceDeposit: 0, netPayable: 0, refundAmount: 0 };
     const originalLateFee = billData.charges?.late_checkout_fee || 0;
@@ -1196,6 +1204,16 @@ const Billing = () => {
           settingsObj[setting.key] = setting.value;
         });
         setResortSettings(prev => ({ ...prev, ...settingsObj }));
+
+        // Process GST settings
+        setGstSettings(prev => ({
+          ...prev,
+          gst_enabled: settingsObj.gst_enabled?.toLowerCase() === "true",
+          gst_room_type: settingsObj.gst_room_type?.toUpperCase() || "SLAB",
+          gst_slab_rate_1: settingsObj.gst_slab_rate_1 || "5",
+          gst_slab_rate_2: settingsObj.gst_slab_rate_2 || "12",
+          gst_slab_rate_3: settingsObj.gst_slab_rate_3 || "18"
+        }));
       } catch (error) {
         console.error('Failed to fetch resort settings:', error);
       }
@@ -1962,21 +1980,29 @@ const Billing = () => {
     text += `Subtotal: ${formatCurrency(subtotal)}\n`;
     // GST Breakdown
     if (billData.charges.room_gst > 0) {
-      const gstRate = billData.charges.room_charges <= 7500 ? '12%' : '18%';
+      const numRooms = billData.room_numbers?.length || 1;
+      const stayNights = billData.stay_nights || 1;
+      const dailyRatePerRoom = (billData.charges.room_charges || 0) / (stayNights * numRooms);
+      const gstRate = dailyRatePerRoom < 5000 ? `${gstSettings.gst_slab_rate_1}%` :
+                     dailyRatePerRoom <= 7500 ? `${gstSettings.gst_slab_rate_2}%` : `${gstSettings.gst_slab_rate_3}%`;
       text += `Room GST (${gstRate}): +${formatCurrency(billData.charges.room_gst || 0)}\n`;
     }
     if (billData.charges.package_gst > 0) {
-      const gstRate = billData.charges.package_charges <= 7500 ? '12%' : '18%';
+      const numRooms = billData.room_numbers?.length || 1;
+      const stayNights = billData.stay_nights || 1;
+      const dailyRatePerRoom = (billData.charges.package_charges || 0) / (stayNights * numRooms);
+      const gstRate = dailyRatePerRoom < 5000 ? `${gstSettings.gst_slab_rate_1}%` :
+                     dailyRatePerRoom <= 7500 ? `${gstSettings.gst_slab_rate_2}%` : `${gstSettings.gst_slab_rate_3}%`;
       text += `Package GST (${gstRate}): +${formatCurrency(billData.charges.package_gst || 0)}\n`;
     }
     if (billData.charges.food_gst > 0) {
-      text += `Food GST (5%): +${formatCurrency(billData.charges.food_gst || 0)}\n`;
+      text += `Food GST (${resortSettings.food_gst_rate || 5}%): +${formatCurrency(billData.charges.food_gst || 0)}\n`;
     }
     if (billData.charges.service_gst > 0) {
-      text += `Service GST: +${formatCurrency(billData.charges.service_gst || 0)}\n`;
+      text += `Service GST (${resortSettings.service_gst_rate || 5}%): +${formatCurrency(billData.charges.service_gst || 0)}\n`;
     }
     if (billData.charges.consumables_gst > 0) {
-      text += `Consumables GST (5%): +${formatCurrency(billData.charges.consumables_gst || 0)}\n`;
+      text += `Consumables GST (${resortSettings.food_gst_rate || 5}%): +${formatCurrency(billData.charges.consumables_gst || 0)}\n`;
     }
     text += `Total GST: +${formatCurrency(totalGST || 0)}\n`;
     text += `Total Bill Value: ${formatCurrency(totalBill)}\n`;
@@ -2429,27 +2455,27 @@ const Billing = () => {
                     {/* GST Breakdown */}
                     {billData.charges.room_gst > 0 && (
                       <p className="text-xs text-gray-500">Room GST ({
-                        dailyRatePerRoom < 5000 ? '5%' :
-                          dailyRatePerRoom <= 7500 ? '12%' : '18%'
+                        dailyRatePerRoom < 5000 ? `${gstSettings.gst_slab_rate_1}%` :
+                          dailyRatePerRoom <= 7500 ? `${gstSettings.gst_slab_rate_2}%` : `${gstSettings.gst_slab_rate_3}%`
                       }): +{formatCurrency(billData.charges.room_gst || 0)}</p>
                     )}
                     {billData.charges.package_gst > 0 && (
                       <p className="text-xs text-gray-500">Package GST ({
-                        (billData.charges.package_charges / (stayNights * numRooms)) < 5000 ? '5%' :
-                          (billData.charges.package_charges / (stayNights * numRooms)) <= 7500 ? '12%' : '18%'
+                        (billData.charges.package_charges / (stayNights * numRooms)) < 5000 ? `${gstSettings.gst_slab_rate_1}%` :
+                          (billData.charges.package_charges / (stayNights * numRooms)) <= 7500 ? `${gstSettings.gst_slab_rate_2}%` : `${gstSettings.gst_slab_rate_3}%`
                       }): +{formatCurrency(billData.charges.package_gst || 0)}</p>
                     )}
                     {billData.charges.food_gst > 0 && (
-                      <p className="text-xs text-gray-500">Food GST (5%): +{formatCurrency(billData.charges.food_gst || 0)}</p>
+                      <p className="text-xs text-gray-500">Food GST ({resortSettings.food_gst_rate || 5}%): +{formatCurrency(billData.charges.food_gst || 0)}</p>
                     )}
                     {billData.charges.service_gst > 0 && (
-                      <p className="text-xs text-gray-500">Service GST (5%): +{formatCurrency(billData.charges.service_gst || 0)}</p>
+                      <p className="text-xs text-gray-500">Service GST ({resortSettings.service_gst_rate || 5}%): +{formatCurrency(billData.charges.service_gst || 0)}</p>
                     )}
                     {billData.charges.consumables_gst > 0 && (
-                      <p className="text-xs text-gray-500">Consumables GST (5%): +{formatCurrency(billData.charges.consumables_gst || 0)}</p>
+                      <p className="text-xs text-gray-500">Consumables GST ({resortSettings.food_gst_rate || 5}%): +{formatCurrency(billData.charges.consumables_gst || 0)}</p>
                     )}
                     {billData.charges.inventory_gst > 0 && (
-                      <p className="text-xs text-gray-500">Inventory GST (5%): +{formatCurrency(billData.charges.inventory_gst || 0)}</p>
+                      <p className="text-xs text-gray-500">Inventory GST ({resortSettings.service_gst_rate || 5}%): +{formatCurrency(billData.charges.inventory_gst || 0)}</p>
                     )}
                     {billData.charges.asset_damage_gst > 0 && (
                       <p className="text-xs text-gray-500">Damage GST (5%): +{formatCurrency(billData.charges.asset_damage_gst || 0)}</p>

@@ -388,12 +388,19 @@ def calculate_gst_breakdown(
     inventory_charges: float = 0.0, 
     nights: int = 1,
     use_night_charges: bool = False,
-    booking_id: int = None
+    booking_id: int = None,
+    is_inclusive: bool = False,
+    consumables_breakdown: Dict[float, float] = None,
+    inventory_breakdown: Dict[float, float] = None
 ) -> Dict:
     """
     Calculate GST breakdown with dynamic rates from branch settings.
     Respects the gst_enabled toggle.
     Room GST is slab-based depending on daily price range, or derived from NightCharge if enabled.
+    
+    Args:
+        consumables_breakdown: Map of GST rate (e.g. 5.0) to base amount.
+        inventory_breakdown: Map of GST rate (e.g. 18.0) to base amount.
     """
     from app.utils.settings_helpers import get_gst_settings
     from app.models.day_audit import NightCharge
@@ -432,10 +439,11 @@ def calculate_gst_breakdown(
                 room_gst_rate = 0.0
     
     if room_gst == 0.0 and room_charges > 0:
-        if gst_settings.get("gst_room_type") == "MANUAL":
-            room_gst_rate = float(gst_settings.get("room_gst_rate", 0)) / 100.0
+        gst_type = gst_settings.get("gst_room_type", "FLAT")
+        if gst_type != "SLAB":
+            room_gst_rate = float(gst_settings.get("room_gst_rate", 12)) / 100.0
         else:
-            # Slab-based Logic (Default)
+            # Slab-based Logic
             daily_rate = (room_charges + package_charges) / max(1, nights)
             
             r1 = float(gst_settings.get("gst_slab_rate_1", 5)) / 100.0
@@ -448,24 +456,63 @@ def calculate_gst_breakdown(
             elif daily_rate < 7500:
                 room_gst_rate = r2
             
-        room_gst = room_charges * room_gst_rate
+        if is_inclusive:
+            # Formula: GST = Total - (Total / (1 + Rate))
+            room_gst = room_charges - (room_charges / (1 + room_gst_rate))
+        else:
+            room_gst = room_charges * room_gst_rate
     
     # Package GST (usually same as room rate)
-    package_gst = package_charges * room_gst_rate
+    if is_inclusive:
+        package_gst = package_charges - (package_charges / (1 + room_gst_rate))
+    else:
+        package_gst = package_charges * room_gst_rate
     
     # Food GST
-    food_rate = float(gst_settings["food_gst_rate"]) / 100.0
-    food_gst = food_charges * food_rate
+    food_rate = float(gst_settings.get("food_gst_rate", 5)) / 100.0
+    if is_inclusive:
+        food_gst = food_charges - (food_charges / (1 + food_rate))
+    else:
+        food_gst = food_charges * food_rate
     
     # Service GST
-    service_rate = float(gst_settings["service_gst_rate"]) / 100.0
-    service_gst = service_charges * service_rate
+    service_rate = float(gst_settings.get("service_gst_rate", 5)) / 100.0
+    if is_inclusive:
+        service_gst = service_charges - (service_charges / (1 + service_rate))
+    else:
+        service_gst = service_charges * service_rate
     
-    # Consumables (usually same as food rate or service rate, let's use food rate as default)
-    consumables_gst = consumables_charges * food_rate
-    
-    # Inventory (usually same as service rate)
-    inventory_gst = inventory_charges * service_rate
+    # Consumables GST
+    consumables_gst = 0.0
+    if consumables_breakdown:
+        for rate, amt in consumables_breakdown.items():
+            r = float(rate) / 100.0
+            if is_inclusive:
+                consumables_gst += amt - (amt / (1 + r))
+            else:
+                consumables_gst += amt * r
+    else:
+        # Fallback to food rate if no breakdown provided
+        if is_inclusive:
+            consumables_gst = consumables_charges - (consumables_charges / (1 + food_rate))
+        else:
+            consumables_gst = consumables_charges * food_rate
+            
+    # Inventory GST
+    inventory_gst = 0.0
+    if inventory_breakdown:
+        for rate, amt in inventory_breakdown.items():
+            r = float(rate) / 100.0
+            if is_inclusive:
+                inventory_gst += amt - (amt / (1 + r))
+            else:
+                inventory_gst += amt * r
+    else:
+        # Fallback to service rate if no breakdown provided
+        if is_inclusive:
+            inventory_gst = inventory_charges - (inventory_charges / (1 + service_rate))
+        else:
+            inventory_gst = inventory_charges * service_rate
     
     total_gst = room_gst + food_gst + package_gst + service_gst + consumables_gst + inventory_gst
     

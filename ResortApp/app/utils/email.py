@@ -13,8 +13,8 @@ def get_smtp_config():
         'port': int(os.getenv('SMTP_PORT', '587')),
         'username': os.getenv('SMTP_USER', ''),
         'password': os.getenv('SMTP_PASSWORD', ''),
-        'from_email': os.getenv('SMTP_FROM_EMAIL', os.getenv('SMTP_USER', 'noreply@elysianretreat.com')),
-        'from_name': os.getenv('SMTP_FROM_NAME', 'Elysian Retreat'),
+        'from_email': os.getenv('SMTP_FROM_EMAIL', os.getenv('SMTP_USER', 'orchidresort@gmail.com')),
+        'from_name': os.getenv('SMTP_FROM_NAME', 'Orchid Resort'),
         'use_tls': os.getenv('SMTP_USE_TLS', 'true').lower() == 'true'
     }
 
@@ -161,6 +161,9 @@ def create_booking_confirmation_email(
             guest_details_html += f'<br><span class="detail-label">Mobile:</span> {guest_mobile}'
         guest_details_html += '</span></div>'
     
+    config = get_smtp_config()
+    from_name = config.get('from_name', 'Orchid Resort')
+    
     html = f"""
     <!DOCTYPE html>
     <html>
@@ -239,14 +242,14 @@ def create_booking_confirmation_email(
     </head>
     <body>
         <div class="header">
-            <h1>✨ Elysian Retreat</h1>
+            <h1>✨ {from_name}</h1>
             <p>Booking Confirmation</p>
         </div>
         
         <div class="content">
             <p>Dear {guest_name},</p>
             
-            <p>Thank you for your booking! We are delighted to confirm your reservation at Elysian Retreat.</p>
+            <p>Thank you for your booking! We are delighted to confirm your reservation at {from_name}.</p>
             
             <div class="highlight">
                 <strong>Booking ID: {formatted_booking_id}</strong><br>
@@ -296,18 +299,18 @@ def create_booking_confirmation_email(
                 • Check-in time is from 2:00 PM onwards<br>
                 • Check-out time is before 11:00 AM<br>
                 • Please bring a valid ID proof for verification<br>
-                • For any queries, please contact us at: <a href="mailto:info@elysianretreat.com">info@elysianretreat.com</a>
+                • For any queries, please contact us at: <a href="mailto:{config.get('from_email', 'info@elysianretreat.com')}">{config.get('from_email', 'info@elysianretreat.com')}</a>
             </div>
             
-            <p>We look forward to welcoming you and ensuring you have a memorable stay at Elysian Retreat!</p>
+            <p>We look forward to welcoming you and ensuring you have a memorable stay at {from_name}!</p>
             
             <p>Warm regards,<br>
-            <strong>The Elysian Retreat Team</strong></p>
+            <strong>The {from_name} Team</strong></p>
         </div>
         
         <div class="footer">
             <p>This is an automated confirmation email. Please do not reply to this email.</p>
-            <p>&copy; {datetime.now().year} Elysian Retreat. All rights reserved.</p>
+            <p>&copy; {datetime.now().year} {from_name}. All rights reserved.</p>
         </div>
     </body>
     </html>

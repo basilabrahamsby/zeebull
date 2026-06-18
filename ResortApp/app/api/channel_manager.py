@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, BackgroundTasks, Query
 from sqlalchemy.orm import Session
 from datetime import datetime
 import os
@@ -87,20 +87,22 @@ async def aiosell_webhook(
 async def aiosell_full_sync(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    branch_id: int = 1
+    branch_id: int = Query(1)
 ):
     """Manually trigger a full inventory and rate sync for all room types in a branch"""
-    from app.core.aiosell_triggers import trigger_inventory_push
+    from app.core.aiosell_triggers import trigger_inventory_push, trigger_rates_push
     
     room_types = db.query(RoomType).filter(RoomType.branch_id == branch_id).all()
     if not room_types:
-        return {"success": False, "message": "No room types found for this branch."}
+        return {"success": False, "message": f"No room types found for branch {branch_id}."}
         
     for rt in room_types:
-        background_tasks.add_task(trigger_inventory_push, rt.id)
+        if rt.channel_manager_id:
+            background_tasks.add_task(trigger_inventory_push, rt.id)
+            background_tasks.add_task(trigger_rates_push, rt.id)
         
     logger.info(f"Manual sync triggered for branch {branch_id}. Queued {len(room_types)} room types.")
-    return {"success": True, "message": f"Sync queued for {len(room_types)} room types."}
+    return {"success": True, "message": f"Sync queued for {len(room_types)} room types (Inventory + Rates)."}
 
 
 def _map_room_type(db: Session, room_code: str, branch_id: int = None):

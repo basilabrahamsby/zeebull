@@ -35,6 +35,34 @@ router = APIRouter(prefix="/employees", tags=["Employees"])
 UPLOAD_DIR = os.path.join(_UPLOAD_ROOT, "employees")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
+from sqlalchemy import text
+@router.get("/debug-db-triggers")
+def debug_db_triggers(db: Session = Depends(get_db)):
+    try:
+        # Check for overlapping guests in employees table
+        overlap_sql = text("""
+            SELECT e.id, e.name, e.role, u.email 
+            FROM employees e 
+            JOIN users u ON e.user_id = u.id 
+            WHERE e.role = 'PURCHASE MANAGER' OR u.email LIKE 'guest_%'
+        """)
+        overlap_res = db.execute(overlap_sql).mappings().all()
+        
+        # Check for database triggers on users or employees
+        trigger_sql = text("""
+            SELECT event_object_table, trigger_name, action_statement 
+            FROM information_schema.triggers 
+            WHERE event_object_table IN ('users', 'employees')
+        """)
+        trigger_res = db.execute(trigger_sql).mappings().all()
+        
+        return {
+            "guests_in_employees": [dict(r) for r in overlap_res],
+            "triggers": [dict(r) for r in trigger_res]
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
 @router.post("")
 def add_employee(
     db: Session = Depends(get_db),

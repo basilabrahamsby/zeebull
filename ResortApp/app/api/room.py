@@ -1048,22 +1048,26 @@ def update_room(
 
 @router.get("/stats")
 def get_room_stats(db: Session = Depends(get_db), branch_id: int = Depends(get_branch_id)):
+    from sqlalchemy import case, func
     def bscope(q):
         return q.filter(Room.branch_id == branch_id) if branch_id is not None else q
-    total = bscope(db.query(Room)).count()
-    occupied = bscope(db.query(Room).filter(Room.status.in_(["Occupied", "Checked-in", "Booked"]))).count()
-    available = bscope(db.query(Room).filter(Room.status == "Available")).count()
-    maintenance = bscope(db.query(Room).filter(Room.status == "Maintenance")).count()
-    dirty = bscope(db.query(Room).filter(Room.housekeeping_status == "Dirty")).count()
+        
+    stats_query = bscope(db.query(
+        func.count(Room.id).label('total'),
+        func.sum(case((Room.status.in_(["Occupied", "Checked-in", "Booked", "occupied", "checked-in", "checked_in", "booked"]), 1), else_=0)).label('occupied'),
+        func.sum(case((Room.status == "Available", 1), else_=0)).label('available'),
+        func.sum(case((Room.status == "Maintenance", 1), else_=0)).label('maintenance'),
+        func.sum(case((Room.housekeeping_status == "Dirty", 1), else_=0)).label('dirty')
+    )).first()
 
-    
     return {
-        "total": total,
-        "occupied": occupied,
-        "available": available,
-        "maintenance": maintenance,
-        "dirty": dirty
+        "total": stats_query[0] or 0,
+        "occupied": int(stats_query[1] or 0),
+        "available": int(stats_query[2] or 0),
+        "maintenance": int(stats_query[3] or 0),
+        "dirty": int(stats_query[4] or 0)
     }
+
 
 
 # ---------------- ROOM ACTIVITY TRACKING ----------------

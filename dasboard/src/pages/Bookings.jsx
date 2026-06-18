@@ -3216,7 +3216,7 @@ const BookingFormModal = ({
   packageBookingForm, handlePackageBookingChange, handlePackageBookingSubmit,
   packages, packageRooms, handlePackageRoomSelect,
   today, formatCurrency, RoomSelection, feedback,
-  showBannerMessage
+  showBannerMessage, gstSettings
 }) => {
   if (!isOpen) return null;
 
@@ -3276,14 +3276,30 @@ const BookingFormModal = ({
       const itemBaseShare = (base / totalRoomsForCalc) * itemRooms;
       const dailyRatePerRoom = itemBaseShare / (Math.max(1, nights) * itemRooms);
       
-      let taxRate = 0.18; 
-      if (dailyRatePerRoom < 7500) taxRate = 0.12; 
+      let taxRate = 0.18; // Default
+      
+      if (gstSettings) {
+        const r1 = parseFloat(gstSettings.gst_slab_rate_1 || 5) / 100;
+        const r2 = parseFloat(gstSettings.gst_slab_rate_2 || 12) / 100;
+        const r3 = parseFloat(gstSettings.gst_slab_rate_3 || 18) / 100;
+
+        if (dailyRatePerRoom < 5000) {
+          taxRate = r1;
+        } else if (dailyRatePerRoom < 7500) {
+          taxRate = r2;
+        } else {
+          taxRate = r3;
+        }
+      } else {
+        // Fallback to legacy hardcoded logic if settings aren't loaded
+        if (dailyRatePerRoom < 7500) taxRate = 0.12;
+      }
       
       return sum + (itemBaseShare * taxRate);
     }, 0);
     
     return { totalBase: base, totalGST: gst, grandTotal: base + gst };
-  }, [formData.custom_room_rate, formData.selectedRoomTypes, formData.room_type_id, formData.num_rooms, totalRoomsForCalc, nights]);
+  }, [formData.custom_room_rate, formData.selectedRoomTypes, formData.room_type_id, formData.num_rooms, totalRoomsForCalc, nights, gstSettings]);
 
   return (
     <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-[100] p-2 sm:p-4 overflow-y-auto overflow-x-hidden">
@@ -3998,6 +4014,14 @@ const Bookings = () => {
     todaysGuestsCheckin: 0,
     todaysGuestsCheckout: 0,
   });
+
+  const [gstSettings, setGstSettings] = useState({
+    gst_enabled: true,
+    gst_room_type: "SLAB",
+    gst_slab_rate_1: "5",
+    gst_slab_rate_2: "12",
+    gst_slab_rate_3: "18"
+  });
   const [modalBooking, setModalBooking] = useState(null);
   const [bookingToExtend, setBookingToExtend] = useState(null);
   const [bookingToCheckIn, setBookingToCheckIn] = useState(null);
@@ -4130,6 +4154,7 @@ const Bookings = () => {
         roomTypesRes,
         itemsRes,
         locationsRes,
+        settingsRes,
       ] = await Promise.all([
         API.get("/rooms/", authHeader()),
         API.get("/bookings?skip=0&limit=20&order_by=id&order=desc", authHeader()),
@@ -4138,11 +4163,26 @@ const Bookings = () => {
         API.get("/rooms/types", authHeader()),
         API.get("/inventory/items?limit=500", authHeader()),
         API.get("/inventory/locations?limit=10000", authHeader()),
+        API.get("/settings/", authHeader()),
       ]);
 
       const allRooms = roomsRes.data;
       const allRoomTypes = roomTypesRes.data;
       setRoomTypeObjects(allRoomTypes);
+
+      // Process settings
+      const settingsMap = {};
+      if (settingsRes.data && Array.isArray(settingsRes.data)) {
+        settingsRes.data.forEach(s => { settingsMap[s.key] = s.value; });
+        setGstSettings(prev => ({
+          ...prev,
+          gst_enabled: settingsMap.gst_enabled?.toLowerCase() === "true",
+          gst_room_type: settingsMap.gst_room_type?.toUpperCase() || "SLAB",
+          gst_slab_rate_1: settingsMap.gst_slab_rate_1 || "5",
+          gst_slab_rate_2: settingsMap.gst_slab_rate_2 || "12",
+          gst_slab_rate_3: settingsMap.gst_slab_rate_3 || "18"
+        }));
+      }
       const { bookings: initialBookings, total } = bookingsRes.data;
       const packageBookings = packageBookingsRes.data || [];
       const rawItems = itemsRes.data || [];
@@ -7201,6 +7241,7 @@ const Bookings = () => {
               RoomSelection={RoomSelection}
               feedback={feedback}
               showBannerMessage={showBannerMessage}
+              gstSettings={gstSettings}
             />
           )}
         </AnimatePresence>
