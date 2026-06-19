@@ -74,7 +74,7 @@ const FoodItems = () => {
 
   const fetchFoodItems = async () => {
     try {
-      const res = await API.get("/food-items/", {
+      const res = await API.get("/food-items/?limit=10000", {
         headers: { Authorization: `Bearer ${token}` },
       });
       setFoodItems(res.data);

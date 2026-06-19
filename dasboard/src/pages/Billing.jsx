@@ -1210,6 +1210,7 @@ const Billing = () => {
           ...prev,
           gst_enabled: settingsObj.gst_enabled?.toLowerCase() === "true",
           gst_room_type: settingsObj.gst_room_type?.toUpperCase() || "SLAB",
+          room_gst_rate: settingsObj.room_gst_rate || "12",
           gst_slab_rate_1: settingsObj.gst_slab_rate_1 || "5",
           gst_slab_rate_2: settingsObj.gst_slab_rate_2 || "12",
           gst_slab_rate_3: settingsObj.gst_slab_rate_3 || "18"
@@ -1983,16 +1984,18 @@ const Billing = () => {
       const numRooms = billData.room_numbers?.length || 1;
       const stayNights = billData.stay_nights || 1;
       const dailyRatePerRoom = (billData.charges.room_charges || 0) / (stayNights * numRooms);
-      const gstRate = dailyRatePerRoom < 5000 ? `${gstSettings.gst_slab_rate_1}%` :
-                     dailyRatePerRoom <= 7500 ? `${gstSettings.gst_slab_rate_2}%` : `${gstSettings.gst_slab_rate_3}%`;
+      const gstRate = gstSettings.gst_room_type === "MANUAL" ? `${gstSettings.room_gst_rate || 12}%` :
+                     (dailyRatePerRoom < 5000 ? `${gstSettings.gst_slab_rate_1}%` :
+                      dailyRatePerRoom <= 7500 ? `${gstSettings.gst_slab_rate_2}%` : `${gstSettings.gst_slab_rate_3}%`);
       text += `Room GST (${gstRate}): +${formatCurrency(billData.charges.room_gst || 0)}\n`;
     }
     if (billData.charges.package_gst > 0) {
       const numRooms = billData.room_numbers?.length || 1;
       const stayNights = billData.stay_nights || 1;
       const dailyRatePerRoom = (billData.charges.package_charges || 0) / (stayNights * numRooms);
-      const gstRate = dailyRatePerRoom < 5000 ? `${gstSettings.gst_slab_rate_1}%` :
-                     dailyRatePerRoom <= 7500 ? `${gstSettings.gst_slab_rate_2}%` : `${gstSettings.gst_slab_rate_3}%`;
+      const gstRate = gstSettings.gst_room_type === "MANUAL" ? `${gstSettings.room_gst_rate || 12}%` :
+                     (dailyRatePerRoom < 5000 ? `${gstSettings.gst_slab_rate_1}%` :
+                      dailyRatePerRoom <= 7500 ? `${gstSettings.gst_slab_rate_2}%` : `${gstSettings.gst_slab_rate_3}%`);
       text += `Package GST (${gstRate}): +${formatCurrency(billData.charges.package_gst || 0)}\n`;
     }
     if (billData.charges.food_gst > 0) {
@@ -2455,14 +2458,16 @@ const Billing = () => {
                     {/* GST Breakdown */}
                     {billData.charges.room_gst > 0 && (
                       <p className="text-xs text-gray-500">Room GST ({
-                        dailyRatePerRoom < 5000 ? `${gstSettings.gst_slab_rate_1}%` :
-                          dailyRatePerRoom <= 7500 ? `${gstSettings.gst_slab_rate_2}%` : `${gstSettings.gst_slab_rate_3}%`
+                        gstSettings.gst_room_type === "MANUAL" ? `${gstSettings.room_gst_rate || 12}%` :
+                          dailyRatePerRoom < 5000 ? `${gstSettings.gst_slab_rate_1}%` :
+                            dailyRatePerRoom <= 7500 ? `${gstSettings.gst_slab_rate_2}%` : `${gstSettings.gst_slab_rate_3}%`
                       }): +{formatCurrency(billData.charges.room_gst || 0)}</p>
                     )}
                     {billData.charges.package_gst > 0 && (
                       <p className="text-xs text-gray-500">Package GST ({
-                        (billData.charges.package_charges / (stayNights * numRooms)) < 5000 ? `${gstSettings.gst_slab_rate_1}%` :
-                          (billData.charges.package_charges / (stayNights * numRooms)) <= 7500 ? `${gstSettings.gst_slab_rate_2}%` : `${gstSettings.gst_slab_rate_3}%`
+                        gstSettings.gst_room_type === "MANUAL" ? `${gstSettings.room_gst_rate || 12}%` :
+                          (billData.charges.package_charges / (stayNights * numRooms)) < 5000 ? `${gstSettings.gst_slab_rate_1}%` :
+                            (billData.charges.package_charges / (stayNights * numRooms)) <= 7500 ? `${gstSettings.gst_slab_rate_2}%` : `${gstSettings.gst_slab_rate_3}%`
                       }): +{formatCurrency(billData.charges.package_gst || 0)}</p>
                     )}
                     {billData.charges.food_gst > 0 && (

@@ -5,11 +5,49 @@ import { useBranch } from "../contexts/BranchContext";
 import {
   CalendarCheck, CalendarX, Clock, DollarSign, Users, LogIn, LogOut,
   CheckCircle2, AlertTriangle, XCircle, ChevronRight, Loader2,
-  TrendingUp, Utensils, Wrench, Banknote, History, RefreshCw, Building2
+  TrendingUp, Utensils, Wrench, Banknote, History, RefreshCw, Building2,
+  Printer, PlusCircle
 } from "lucide-react";
 import { toast } from "react-hot-toast";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
+
+const BUDGET_CATEGORIES = [
+  "Utilities",
+  "Maintenance",
+  "Salary",
+  "Food & Beverage",
+  "Marketing",
+  "Transportation",
+  "Supplies",
+  "Other",
+];
+
+const DEPARTMENTS = [
+  "Restaurant",
+  "Facility",
+  "Hotel",
+  "Office",
+  "Security",
+  "Fire & Safety",
+  "Housekeeping"
+];
+
+function numberToWords(num) {
+  const a = ['', 'One ', 'Two ', 'Three ', 'Four ', 'Five ', 'Six ', 'Seven ', 'Eight ', 'Nine ', 'Ten ', 'Eleven ', 'Twelve ', 'Thirteen ', 'Fourteen ', 'Fifteen ', 'Sixteen ', 'Seventeen ', 'Eighteen ', 'Nineteen '];
+  const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+
+  if ((num = num.toString()).length > 9) return 'overflow';
+  let n = ('000000000' + num).substr(-9).match(/^(\d{2})(\d{2})(\d{2})(\d{1})(\d{2})$/);
+  if (!n) return '';
+  let str = '';
+  str += (Number(n[1]) != 0) ? (a[Number(n[1])] || b[n[1][0]] + ' ' + a[n[1][1]]) + 'Crore ' : '';
+  str += (Number(n[2]) != 0) ? (a[Number(n[2])] || b[n[2][0]] + ' ' + a[n[2][1]]) + 'Lakh ' : '';
+  str += (Number(n[3]) != 0) ? (a[Number(n[3])] || b[n[3][0]] + ' ' + a[n[3][1]]) + 'Thousand ' : '';
+  str += (Number(n[4]) != 0) ? (a[Number(n[4])] || b[n[4][0]] + ' ' + a[n[4][1]]) + 'Hundred ' : '';
+  str += (Number(n[5]) != 0) ? ((str != '') ? 'and ' : '') + (a[Number(n[5])] || b[n[5][0]] + ' ' + a[n[5][1]]) + 'Rupees ' : 'Rupees ';
+  return str + 'Only';
+}
 
 function formatDate(d) {
   if (!d) return "—";
@@ -36,6 +74,75 @@ function todayISO() {
   const day = String(d.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 }
+
+function formatDayBookDate(d) {
+  if (!d) return "—";
+  const date = new Date(d);
+  const day = String(date.getDate()).padStart(2, '0');
+  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const month = monthNames[date.getMonth()];
+  const year = date.getFullYear().toString().slice(-2);
+  return `${day}-${month}-${year}`;
+}
+
+const mapTransactionToDayBook = (tx) => {
+  let vchType = "Receipt";
+  const type = tx.reference_type?.toLowerCase() || "";
+  if (type === "expense" || type === "purchase_payment" || type === "vendor_payment") {
+    vchType = "Payment";
+  } else if (type === "purchase") {
+    vchType = "Purchase";
+  } else if (type === "checkout") {
+    vchType = "Sales";
+  } else if (type === "contra") {
+    vchType = "Contra";
+  } else {
+    vchType = tx.reference_type ? tx.reference_type.charAt(0).toUpperCase() + tx.reference_type.slice(1).toLowerCase() : "Journal";
+  }
+
+  let vchNo = tx.entry_number || "";
+  const match = vchNo.match(/\d+$/);
+  if (match) {
+    vchNo = match[0];
+  }
+
+  let particulars = tx.description || "General Transaction";
+  const debitLedger = tx.lines?.[0]?.debit;
+  const creditLedger = tx.lines?.[0]?.credit;
+
+  let debitAmount = 0;
+  let creditAmount = 0;
+
+  if (vchType === "Payment" || vchType === "Purchase") {
+    particulars = debitLedger || tx.description || "Expense Account";
+    debitAmount = tx.total_amount || 0;
+  } else if (vchType === "Receipt" || vchType === "Sales") {
+    particulars = creditLedger || tx.description || "Revenue Account";
+    creditAmount = tx.total_amount || 0;
+  } else {
+    const isCashDebited = tx.lines?.some(l => l.debit?.toLowerCase().includes("cash") && !l.debit?.toLowerCase().includes("bank"));
+    if (isCashDebited) {
+      particulars = creditLedger || tx.description || "Contra A/C";
+      creditAmount = tx.total_amount || 0;
+    } else {
+      particulars = debitLedger || tx.description || "Contra A/C";
+      debitAmount = tx.total_amount || 0;
+    }
+  }
+
+  if (particulars) {
+    particulars = particulars.toUpperCase();
+  }
+
+  return {
+    date: formatDayBookDate(tx.entry_date),
+    particulars,
+    vchType,
+    vchNo,
+    debitAmount,
+    creditAmount
+  };
+};
 
 // ─── Sub-components ─────────────────────────────────────────────────────────
 
@@ -96,6 +203,24 @@ export default function DayAudit() {
   const [actionLoading, setActionLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("today"); // 'today' | 'history' | 'report'
 
+  // Employees list for Payment Voucher dropdown
+  const [employees, setEmployees] = useState([]);
+  
+  // Payment Voucher states
+  const [showCreateVoucher, setShowCreateVoucher] = useState(false);
+  const [voucherForm, setVoucherForm] = useState({
+    employee_id: "",
+    category: "",
+    department: "",
+    amount: "",
+    payment_mode: "Cash",
+    description: "",
+    date: todayISO()
+  });
+  
+  const [showVoucherSlip, setShowVoucherSlip] = useState(false);
+  const [selectedVoucherTx, setSelectedVoucherTx] = useState(null);
+
   // Historical Report
   const [selectedAudit, setSelectedAudit] = useState(null);
   const [historicalTransactions, setHistoricalTransactions] = useState([]);
@@ -122,6 +247,15 @@ export default function DayAudit() {
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
 
   // ── Data Fetching ──────────────────────────────────────────────────────────
+
+  const fetchEmployees = async () => {
+    try {
+      const res = await API.get("/employees?limit=1000");
+      setEmployees(res.data || []);
+    } catch (err) {
+      console.error("Failed to fetch employees:", err);
+    }
+  };
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -200,7 +334,10 @@ export default function DayAudit() {
     }
   }, [activeBranchId]);
 
-  useEffect(() => { fetchAll(); }, [fetchAll]);
+  useEffect(() => { 
+    fetchAll();
+    fetchEmployees();
+  }, [fetchAll]);
 
   // ── Actions ────────────────────────────────────────────────────────────────
 
@@ -219,6 +356,43 @@ export default function DayAudit() {
       fetchAll();
     } catch (err) {
       toast.error(err.response?.data?.detail || "Failed to open day");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleCreateVoucher = async (e) => {
+    e.preventDefault();
+    setActionLoading(true);
+    try {
+      const data = new FormData();
+      data.append("employee_id", voucherForm.employee_id);
+      data.append("category", voucherForm.category);
+      data.append("amount", voucherForm.amount);
+      data.append("date", voucherForm.date);
+      data.append("description", voucherForm.description || "");
+      if (voucherForm.department) data.append("department", voucherForm.department);
+      data.append("payment_mode", voucherForm.payment_mode);
+
+      await API.post("/expenses", data, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      toast.success("Payment Voucher created successfully!");
+      setShowCreateVoucher(false);
+      setVoucherForm({
+        employee_id: "",
+        category: "",
+        department: "",
+        amount: "",
+        payment_mode: "Cash",
+        description: "",
+        date: todayISO()
+      });
+      fetchAll();
+    } catch (err) {
+      console.error("Create voucher error:", err);
+      toast.error(err.response?.data?.detail || "Failed to create voucher");
     } finally {
       setActionLoading(false);
     }
@@ -356,29 +530,51 @@ export default function DayAudit() {
       <style>
         {`
           @media print {
-            /* Hide everything by default */
             body * {
-              visibility: hidden;
+              visibility: hidden !important;
             }
-            /* Show only the print root and its children */
-            #print-root, #print-root * {
-              visibility: visible;
+            
+            /* Print Voucher */
+            .print-voucher-active .print-voucher-area,
+            .print-voucher-active .print-voucher-area * {
+              visibility: visible !important;
             }
-            #print-root {
+            .print-voucher-active .print-voucher-area {
               position: absolute;
               left: 0;
               top: 0;
               width: 100% !important;
+              background: white !important;
+              color: black !important;
+              border: none !important;
+              box-shadow: none !important;
+              padding: 0 !important;
             }
-            /* Explicitly hide unwanted elements even if they are children of print-root */
+            
+            /* Print Day Book */
+            .print-report-active:not(.print-voucher-active) .print-daybook-area,
+            .print-report-active:not(.print-voucher-active) .print-daybook-area * {
+              visibility: visible !important;
+            }
+            .print-report-active:not(.print-voucher-active) .print-daybook-area {
+              position: absolute;
+              left: 0;
+              top: 0;
+              width: 100% !important;
+              background: white !important;
+              color: black !important;
+              border: none !important;
+              box-shadow: none !important;
+              padding: 0 !important;
+            }
+
             .no-print, .no-print * {
               display: none !important;
               visibility: hidden !important;
             }
-            /* Optimize for paper */
             @page {
               size: auto;
-              margin: 10mm;
+              margin: 15mm 10mm;
             }
             * {
               -webkit-print-color-adjust: exact !important;
@@ -387,7 +583,7 @@ export default function DayAudit() {
           }
         `}
       </style>
-      <div id="print-root" className="max-w-6xl mx-auto space-y-6 pb-10">
+      <div id="print-root" className={`max-w-6xl mx-auto space-y-6 pb-10 ${showVoucherSlip ? "print-voucher-active" : ""} ${activeTab === "report" ? "print-report-active" : ""}`}>
 
         {/* ── Header ── */}
         <div className="flex items-start justify-between">
@@ -471,7 +667,15 @@ export default function DayAudit() {
             </div>
           </div>
 
-          <div>
+          <div className="flex items-center gap-3">
+            {isOpen && (
+              <button
+                onClick={() => setShowCreateVoucher(true)}
+                className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-705 text-white font-bold px-6 py-3 rounded-xl hover:bg-emerald-700 transition-all shadow-lg"
+              >
+                <PlusCircle size={18} /> Create Voucher
+              </button>
+            )}
             {isOpen ? (
               <button
                 onClick={() => setShowCloseConfirm(true)}
@@ -525,12 +729,13 @@ export default function DayAudit() {
                     <th className="px-6 py-3 text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100">Description</th>
                     <th className="px-6 py-3 text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100 text-right">Debit</th>
                     <th className="px-6 py-3 text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100 text-right">Credit</th>
+                    <th className="px-6 py-3 text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {cashTransactions.length === 0 ? (
                     <tr>
-                      <td colSpan="6" className="px-6 py-10 text-center text-gray-400 italic">No cash transactions recorded today.</td>
+                      <td colSpan="7" className="px-6 py-10 text-center text-gray-400 italic">No cash transactions recorded today.</td>
                     </tr>
                   ) : (
                     cashTransactions.map((tx) => {
@@ -547,6 +752,17 @@ export default function DayAudit() {
                           <td className="px-6 py-4 text-sm text-gray-600 max-w-xs truncate" title={tx.description}>{tx.description}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-emerald-600 text-right">{debit > 0 ? formatCurrency(debit) : "—"}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-rose-600 text-right">{credit > 0 ? formatCurrency(credit) : "—"}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-right">
+                            <button
+                              onClick={() => {
+                                setSelectedVoucherTx(tx);
+                                setShowVoucherSlip(true);
+                              }}
+                              className="inline-flex items-center gap-1.5 text-indigo-600 hover:text-indigo-800 font-semibold text-xs border border-indigo-100 hover:border-indigo-200 px-2.5 py-1.5 rounded-lg transition-colors bg-indigo-50/50"
+                            >
+                              <Printer size={13} /> Voucher
+                            </button>
+                          </td>
                         </tr>
                       );
                     })
@@ -578,12 +794,13 @@ export default function DayAudit() {
                     <th className="px-6 py-3 text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100">Description</th>
                     <th className="px-6 py-3 text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100 text-right">Debit</th>
                     <th className="px-6 py-3 text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100 text-right">Credit</th>
+                    <th className="px-6 py-3 text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {accountTransactions.length === 0 ? (
                     <tr>
-                      <td colSpan="6" className="px-6 py-10 text-center text-gray-400 italic">No bank transactions recorded today.</td>
+                      <td colSpan="7" className="px-6 py-10 text-center text-gray-400 italic">No bank transactions recorded today.</td>
                     </tr>
                   ) : (
                     accountTransactions.map((tx) => {
@@ -605,6 +822,17 @@ export default function DayAudit() {
                           <td className="px-6 py-4 text-sm text-gray-600 max-w-xs truncate" title={tx.description}>{tx.description}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-indigo-600 text-right">{debit > 0 ? formatCurrency(debit) : "—"}</td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-rose-600 text-right">{credit > 0 ? formatCurrency(credit) : "—"}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-right">
+                            <button
+                              onClick={() => {
+                                setSelectedVoucherTx(tx);
+                                setShowVoucherSlip(true);
+                              }}
+                              className="inline-flex items-center gap-1.5 text-indigo-600 hover:text-indigo-800 font-semibold text-xs border border-indigo-100 hover:border-indigo-200 px-2.5 py-1.5 rounded-lg transition-colors bg-indigo-50/50"
+                            >
+                              <Printer size={13} /> Voucher
+                            </button>
+                          </td>
                         </tr>
                       );
                     })
@@ -838,91 +1066,108 @@ export default function DayAudit() {
               </div>
 
               {selectedAudit.override_reason && (
-                <div className="p-4 bg-amber-50 rounded-xl text-sm text-amber-800 leading-relaxed border border-amber-100">
+                <div className="p-4 bg-amber-50 rounded-xl text-sm text-amber-800 leading-relaxed border border-amber-100 no-print">
                   <strong>Balance Override Reason:</strong> {selectedAudit.override_reason}
                 </div>
               )}
 
-              {/* 2. Transaction Tables */}
-              <div className="space-y-6">
-                {/* Cash Table */}
-                <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
-                  <div className="px-6 py-3 bg-emerald-50 border-b border-gray-100 flex items-center justify-between">
-                    <h4 className="text-xs font-black text-emerald-700 uppercase tracking-widest flex items-center gap-2">
-                      <Banknote size={14} /> Cash Transaction Log
-                    </h4>
-                    <span className="text-[10px] font-bold text-emerald-600 bg-white px-2 py-0.5 rounded-full">{splitTransactions(historicalTransactions).cash.length} entries</span>
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs">
-                      <thead>
-                        <tr className="bg-gray-50/50">
-                          <th className="px-6 py-3 font-black text-gray-400 uppercase tracking-widest">Type</th>
-                          <th className="px-6 py-3 font-black text-gray-400 uppercase tracking-widest">Time</th>
-                          <th className="px-6 py-3 font-black text-gray-400 uppercase tracking-widest">Description</th>
-                          <th className="px-6 py-3 font-black text-gray-400 uppercase tracking-widest text-right">Debit</th>
-                          <th className="px-6 py-3 font-black text-gray-400 uppercase tracking-widest text-right">Credit</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-50">
-                        {splitTransactions(historicalTransactions).cash.map(tx => {
-                          const { debit, credit } = getDebitCredit(tx, "cash");
-                          return (
-                            <tr key={tx.id} className="hover:bg-gray-50/30">
-                              <td className="px-6 py-3 font-bold text-gray-700">{tx.reference_type}</td>
-                              <td className="px-6 py-3 text-gray-500 whitespace-nowrap">{formatTime(tx.entry_date)}</td>
-                              <td className="px-6 py-3 text-gray-600 truncate max-w-md">{tx.description}</td>
-                              <td className="px-6 py-3 text-right font-bold text-emerald-600">{debit > 0 ? formatCurrency(debit) : "—"}</td>
-                              <td className="px-6 py-3 text-right font-bold text-rose-600">{credit > 0 ? formatCurrency(credit) : "—"}</td>
-                            </tr>
-                          );
-                        })}
-                        {splitTransactions(historicalTransactions).cash.length === 0 && (
-                          <tr><td colSpan="5" className="px-6 py-8 text-center text-gray-400 italic">No cash transactions this day.</td></tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
+              {/* 2. Unified Day Book Ledger Table */}
+              <div className="bg-white p-8 md:p-12 rounded-2xl border border-gray-100 shadow-sm print-daybook-area text-black font-sans">
+                {/* Traditional Ledger Header */}
+                <div className="text-center pb-6 border-b-2 border-gray-800">
+                  <h2 className="text-2xl font-black uppercase tracking-wider text-gray-900">{activeBranch?.name || "ORCHID RESORT"}</h2>
+                  <p className="text-xs font-bold text-gray-700 mt-1 uppercase">{activeBranch?.location || "Resort Premises"}</p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Contact: {activeBranch?.contact_number || "9345589917"} | E-Mail: {activeBranch?.email || "orchidresort@gmail.com"}
+                  </p>
+                  
+                  <h3 className="text-xl font-extrabold mt-4 tracking-wider text-gray-800">Day Book</h3>
+                  <p className="text-xs font-bold text-gray-600 mt-1">For {formatDayBookDate(selectedAudit.business_date)}</p>
                 </div>
 
-                {/* Account Table */}
-                <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
-                  <div className="px-6 py-3 bg-indigo-50 border-b border-gray-100 flex items-center justify-between">
-                    <h4 className="text-xs font-black text-indigo-700 uppercase tracking-widest flex items-center gap-2">
-                      <TrendingUp size={14} /> Account/Bank Transaction Log
-                    </h4>
-                    <span className="text-[10px] font-bold text-indigo-600 bg-white px-2 py-0.5 rounded-full">{splitTransactions(historicalTransactions).acc.length} entries</span>
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs">
-                      <thead>
-                        <tr className="bg-gray-50/50">
-                          <th className="px-6 py-3 font-black text-gray-400 uppercase tracking-widest">Type</th>
-                          <th className="px-6 py-3 font-black text-gray-400 uppercase tracking-widest">Time</th>
-                          <th className="px-6 py-3 font-black text-gray-400 uppercase tracking-widest">Description</th>
-                          <th className="px-6 py-3 font-black text-gray-400 uppercase tracking-widest text-right">Debit</th>
-                          <th className="px-6 py-3 font-black text-gray-400 uppercase tracking-widest text-right">Credit</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-50">
-                        {splitTransactions(historicalTransactions).acc.map(tx => {
-                          const { debit, credit } = getDebitCredit(tx, "bank");
+                <div className="flex justify-between items-center text-[10px] font-bold text-gray-500 py-3 uppercase tracking-wider">
+                  <span>Branch Code: {activeBranchId}</span>
+                  <span>Page 1</span>
+                </div>
+
+                {/* Day Book Table View */}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs font-sans">
+                    <thead>
+                      <tr className="border-t-2 border-b-2 border-black font-extrabold text-gray-900">
+                        <th className="px-4 py-3 text-left">Date</th>
+                        <th className="px-4 py-3 text-left">Particulars</th>
+                        <th className="px-4 py-3 text-left">Vch Type</th>
+                        <th className="px-4 py-3 text-left">Vch No.</th>
+                        <th className="px-4 py-3 text-right">
+                          Debit Amount
+                          <span className="block text-[9px] font-normal text-gray-500 lowercase mt-0.5">inwards qty</span>
+                        </th>
+                        <th className="px-4 py-3 text-right">
+                          Credit Amount
+                          <span className="block text-[9px] font-normal text-gray-500 lowercase mt-0.5">outwards qty</span>
+                        </th>
+                        <th className="px-4 py-3 text-right no-print">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {[...historicalTransactions]
+                        .sort((a, b) => new Date(a.entry_date) - new Date(b.entry_date))
+                        .map(tx => {
+                          const row = mapTransactionToDayBook(tx);
                           return (
-                            <tr key={tx.id} className="hover:bg-gray-50/30">
-                              <td className="px-6 py-3 font-bold text-gray-700">{tx.reference_type}</td>
-                              <td className="px-6 py-3 text-gray-500 whitespace-nowrap">{formatTime(tx.entry_date)}</td>
-                              <td className="px-6 py-3 text-gray-600 truncate max-w-md">{tx.description}</td>
-                              <td className="px-6 py-3 text-right font-bold text-indigo-600">{debit > 0 ? formatCurrency(debit) : "—"}</td>
-                              <td className="px-6 py-3 text-right font-bold text-rose-600">{credit > 0 ? formatCurrency(credit) : "—"}</td>
+                            <tr key={tx.id} className="hover:bg-gray-50/50">
+                              <td className="px-4 py-3 whitespace-nowrap text-gray-600 font-mono text-[11px]">{row.date}</td>
+                              <td className="px-4 py-3 font-bold text-gray-900">{row.particulars}</td>
+                              <td className="px-4 py-3 font-semibold text-gray-700">{row.vchType}</td>
+                              <td className="px-4 py-3 text-gray-600 font-mono text-[11px]">{row.vchNo}</td>
+                              <td className="px-4 py-3 text-right font-bold text-gray-900 font-mono text-[11px]">
+                                {row.debitAmount > 0 ? Number(row.debitAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 }) : ""}
+                              </td>
+                              <td className="px-4 py-3 text-right font-bold text-gray-900 font-mono text-[11px]">
+                                {row.creditAmount > 0 ? Number(row.creditAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 }) : ""}
+                              </td>
+                              <td className="px-4 py-3 text-right whitespace-nowrap text-sm no-print">
+                                <button
+                                  onClick={() => {
+                                    setSelectedVoucherTx(tx);
+                                    setShowVoucherSlip(true);
+                                  }}
+                                  className="inline-flex items-center gap-1.5 text-indigo-600 hover:text-indigo-800 font-semibold text-xs border border-indigo-100 hover:border-indigo-200 px-2 py-1 rounded-lg transition-colors bg-indigo-50/50"
+                                >
+                                  <Printer size={12} /> Voucher
+                                </button>
+                              </td>
                             </tr>
                           );
                         })}
-                        {splitTransactions(historicalTransactions).acc.length === 0 && (
-                          <tr><td colSpan="5" className="px-6 py-8 text-center text-gray-400 italic">No bank transactions this day.</td></tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
+                      {historicalTransactions.length === 0 && (
+                        <tr>
+                          <td colSpan="7" className="px-4 py-8 text-center text-gray-400 italic">No transactions recorded on this day.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                    <tfoot>
+                      <tr className="border-t-2 border-b-4 border-double border-black font-extrabold text-gray-900 bg-gray-50/30">
+                        <td colSpan="4" className="px-4 py-3 text-right uppercase tracking-wider text-xs">Total:</td>
+                        <td className="px-4 py-3 text-right font-black font-mono text-[12px]">
+                          {formatCurrency(
+                            [...historicalTransactions]
+                              .map(mapTransactionToDayBook)
+                              .reduce((sum, r) => sum + r.debitAmount, 0)
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right font-black font-mono text-[12px]">
+                          {formatCurrency(
+                            [...historicalTransactions]
+                              .map(mapTransactionToDayBook)
+                              .reduce((sum, r) => sum + r.creditAmount, 0)
+                          )}
+                        </td>
+                        <td className="no-print"></td>
+                      </tr>
+                    </tfoot>
+                  </table>
                 </div>
               </div>
             </div>
@@ -1108,6 +1353,320 @@ export default function DayAudit() {
             </div>
           </div>
         )}
+
+        {/* ── MODAL: Create Payment Voucher ── */}
+        {showCreateVoucher && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 no-print">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
+              <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+                <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                  <PlusCircle size={22} className="text-emerald-500" />
+                  Create Payment Voucher
+                </h3>
+                <button onClick={() => setShowCreateVoucher(false)} className="text-gray-400 hover:text-gray-600">
+                  <XCircle size={22} />
+                </button>
+              </div>
+              <form onSubmit={handleCreateVoucher} className="p-6 space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Select Employee *</label>
+                    <select
+                      value={voucherForm.employee_id}
+                      onChange={e => setVoucherForm({ ...voucherForm, employee_id: e.target.value })}
+                      className="w-full border-2 border-gray-100 rounded-xl px-4 py-3 focus:border-indigo-400 outline-none transition-all text-sm"
+                      required
+                    >
+                      <option value="">Choose Employee</option>
+                      {employees.map(emp => (
+                        <option key={emp.id} value={emp.id}>{emp.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Date *</label>
+                    <input
+                      type="date"
+                      value={voucherForm.date}
+                      onChange={e => setVoucherForm({ ...voucherForm, date: e.target.value })}
+                      className="w-full border-2 border-gray-100 rounded-xl px-4 py-3 focus:border-indigo-400 outline-none transition-all text-sm"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Category *</label>
+                    <select
+                      value={voucherForm.category}
+                      onChange={e => setVoucherForm({ ...voucherForm, category: e.target.value })}
+                      className="w-full border-2 border-gray-100 rounded-xl px-4 py-3 focus:border-indigo-400 outline-none transition-all text-sm"
+                      required
+                    >
+                      <option value="">Select Category</option>
+                      {BUDGET_CATEGORIES.map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Department</label>
+                    <select
+                      value={voucherForm.department}
+                      onChange={e => setVoucherForm({ ...voucherForm, department: e.target.value })}
+                      className="w-full border-2 border-gray-100 rounded-xl px-4 py-3 focus:border-indigo-400 outline-none transition-all text-sm"
+                    >
+                      <option value="">Select Department</option>
+                      {DEPARTMENTS.map(dept => (
+                        <option key={dept} value={dept}>{dept}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Amount (₹) *</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={voucherForm.amount}
+                      onChange={e => setVoucherForm({ ...voucherForm, amount: e.target.value })}
+                      className="w-full border-2 border-gray-100 rounded-xl px-4 py-3 focus:border-indigo-400 outline-none transition-all text-sm font-semibold"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Payment Mode *</label>
+                    <select
+                      value={voucherForm.payment_mode}
+                      onChange={e => setVoucherForm({ ...voucherForm, payment_mode: e.target.value })}
+                      className="w-full border-2 border-gray-100 rounded-xl px-4 py-3 focus:border-indigo-400 outline-none transition-all text-sm"
+                      required
+                    >
+                      <option value="Cash">Cash</option>
+                      <option value="Bank Transfer">Bank Transfer</option>
+                      <option value="UPI">UPI</option>
+                      <option value="Card">Card</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Description/Narration</label>
+                  <textarea
+                    value={voucherForm.description}
+                    onChange={e => setVoucherForm({ ...voucherForm, description: e.target.value })}
+                    className="w-full border-2 border-gray-100 rounded-xl px-4 py-3 focus:border-indigo-400 outline-none transition-all text-sm"
+                    rows={2}
+                    placeholder="Enter voucher narration details..."
+                  />
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button type="button" onClick={() => setShowCreateVoucher(false)}
+                    className="flex-1 py-3 border-2 border-gray-100 rounded-xl text-gray-600 font-semibold hover:bg-gray-50 transition-all">
+                    Cancel
+                  </button>
+                  <button type="submit" disabled={actionLoading}
+                    className="flex-1 py-3 bg-emerald-500 text-white font-bold rounded-xl hover:bg-emerald-600 transition-all flex items-center justify-center gap-2 disabled:opacity-60">
+                    {actionLoading ? <Loader2 size={18} className="animate-spin" /> : <PlusCircle size={18} />}
+                    Create Voucher
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* ── MODAL: View/Print Voucher Slip ── */}
+        {showVoucherSlip && selectedVoucherTx && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col no-print max-h-[90vh]">
+              <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
+                <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                  <Printer size={20} className="text-indigo-600" />
+                  Voucher Receipt Preview
+                </h3>
+                <button onClick={() => setShowVoucherSlip(false)} className="text-gray-400 hover:text-gray-600">
+                  <XCircle size={22} />
+                </button>
+              </div>
+
+              {/* Scrollable Preview Card */}
+              <div className="p-6 overflow-y-auto bg-gray-100/50 flex-1 flex justify-center">
+                <div className="bg-white border-2 border-gray-300 p-8 w-full max-w-xl text-black font-mono relative shadow-inner print-voucher-area">
+                  
+                  {/* Decorative receipt borders */}
+                  <div className="border-b-4 border-double border-gray-800 pb-4 text-center">
+                    <h2 className="text-xl font-black uppercase tracking-wider">{activeBranch?.name || "ORCHID RESORT"}</h2>
+                    <p className="text-xs text-gray-600 mt-1">{activeBranch?.location || "Resort Premises"}</p>
+                    <h3 className="text-sm font-bold border border-gray-800 px-3 py-1 w-fit mx-auto mt-3 tracking-widest bg-gray-50">
+                      PAYMENT VOUCHER
+                    </h3>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 py-4 text-xs border-b border-dashed border-gray-400">
+                    <div>
+                      <p><span className="font-bold">Voucher No:</span> {selectedVoucherTx.entry_number}</p>
+                      <p className="mt-1"><span className="font-bold">Reference:</span> {selectedVoucherTx.reference_type || "Expense"}</p>
+                    </div>
+                    <div className="text-right">
+                      <p><span className="font-bold">Date:</span> {formatDate(selectedVoucherTx.entry_date)}</p>
+                      <p className="mt-1"><span className="font-bold">Time:</span> {formatTime(selectedVoucherTx.entry_date)}</p>
+                    </div>
+                  </div>
+
+                  <div className="py-4 space-y-3 text-xs border-b border-dashed border-gray-400">
+                    <div className="flex justify-between">
+                      <span className="font-bold">Paid To (Debit Account):</span>
+                      <span className="text-right font-semibold">{selectedVoucherTx.lines?.[0]?.debit || "Expense Account"}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="font-bold">Paid From (Credit Account):</span>
+                      <span className="text-right font-semibold">{selectedVoucherTx.lines?.[0]?.credit || "Cash Account"}</span>
+                    </div>
+                    <div className="pt-2 flex justify-between items-center text-sm">
+                      <span className="font-bold uppercase tracking-wider">Amount Paid:</span>
+                      <span className="font-black text-lg border-b-2 border-gray-800 pb-0.5">{formatCurrency(selectedVoucherTx.total_amount)}</span>
+                    </div>
+                  </div>
+
+                  <div className="py-4 text-xs border-b border-dashed border-gray-400 space-y-2">
+                    <p><span className="font-bold">Amount in Words:</span></p>
+                    <p className="italic text-gray-700 bg-gray-50 p-2 rounded border border-gray-200">
+                      {numberToWords(Math.floor(selectedVoucherTx.total_amount))}
+                    </p>
+                  </div>
+
+                  <div className="py-4 text-xs border-b border-gray-800 space-y-2">
+                    <p><span className="font-bold">Narration / Remarks:</span></p>
+                    <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">
+                      {selectedVoucherTx.description || "No description provided."}
+                    </p>
+                  </div>
+
+                  {/* Signature Section */}
+                  <div className="grid grid-cols-3 gap-4 pt-12 text-[10px] text-center font-bold">
+                    <div className="space-y-1">
+                      <div className="border-t border-gray-400 mx-2 pt-1.5">Prepared By</div>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="border-t border-gray-400 mx-2 pt-1.5">Approved By</div>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="border-t border-gray-400 mx-2 pt-1.5">Receiver's Sign</div>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+
+              <div className="p-4 bg-gray-50 border-t border-gray-100 flex gap-3 no-print">
+                <button onClick={() => setShowVoucherSlip(false)}
+                  className="flex-1 py-3 border-2 border-gray-200 rounded-xl text-gray-600 font-bold hover:bg-gray-100 transition-all">
+                  Close Preview
+                </button>
+                <button onClick={() => window.print()}
+                  className="flex-1 py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-200">
+                  <Printer size={18} />
+                  Print Voucher
+                </button>
+              </div>
+            </div>
+            
+            {/* Hidden Printable Voucher for window.print() */}
+            <div className="hidden print:block absolute inset-0 bg-white p-8 font-mono text-black print-voucher-area">
+              <div className="border-b-4 border-double border-gray-800 pb-4 text-center">
+                <h2 className="text-xl font-black uppercase tracking-wider">{activeBranch?.name || "ORCHID RESORT"}</h2>
+                <p className="text-xs text-gray-600 mt-1">{activeBranch?.location || "Resort Premises"}</p>
+                <h3 className="text-sm font-bold border border-gray-800 px-3 py-1 w-fit mx-auto mt-3 tracking-widest bg-gray-50">
+                  PAYMENT VOUCHER
+                </h3>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 py-4 text-xs border-b border-dashed border-gray-400">
+                <div>
+                  <p><span className="font-bold">Voucher No:</span> {selectedVoucherTx.entry_number}</p>
+                  <p className="mt-1"><span className="font-bold">Reference:</span> {selectedVoucherTx.reference_type || "Expense"}</p>
+                </div>
+                <div className="text-right">
+                  <p><span className="font-bold">Date:</span> {formatDate(selectedVoucherTx.entry_date)}</p>
+                  <p className="mt-1"><span className="font-bold">Time:</span> {formatTime(selectedVoucherTx.entry_date)}</p>
+                </div>
+              </div>
+
+              <div className="py-4 space-y-3 text-xs border-b border-dashed border-gray-400">
+                <div className="flex justify-between">
+                  <span className="font-bold">Paid To (Debit Account):</span>
+                  <span className="text-right font-semibold">{selectedVoucherTx.lines?.[0]?.debit || "Expense Account"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="font-bold">Paid From (Credit Account):</span>
+                  <span className="text-right font-semibold">{selectedVoucherTx.lines?.[0]?.credit || "Cash Account"}</span>
+                </div>
+                <div className="pt-2 flex justify-between items-center text-sm">
+                  <span className="font-bold uppercase tracking-wider">Amount Paid:</span>
+                  <span className="font-black text-lg border-b-2 border-gray-800 pb-0.5">{formatCurrency(selectedVoucherTx.total_amount)}</span>
+                </div>
+              </div>
+
+              <div className="py-4 text-xs border-b border-dashed border-gray-400 space-y-2">
+                <p><span className="font-bold">Amount in Words:</span></p>
+                <p className="italic text-gray-700 bg-gray-50 p-2 rounded border border-gray-200">
+                  {numberToWords(Math.floor(selectedVoucherTx.total_amount))}
+                </p>
+              </div>
+
+              <div className="py-4 text-xs border-b border-gray-800 space-y-2">
+                <p><span className="font-bold">Narration / Remarks:</span></p>
+                <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">
+                  {selectedVoucherTx.description || "No description provided."}
+                </p>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4 pt-16 text-[10px] text-center font-bold">
+                <div className="space-y-1">
+                  <div className="border-t border-gray-400 mx-2 pt-1.5">Prepared By</div>
+                </div>
+                <div className="space-y-1">
+                  <div className="border-t border-gray-400 mx-2 pt-1.5">Approved By</div>
+                </div>
+                <div className="space-y-1">
+                  <div className="border-t border-gray-400 mx-2 pt-1.5">Receiver's Sign</div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        )}
+
+        <style dangerouslySetInnerHTML={{__html: `
+          @media print {
+            body * {
+              visibility: hidden;
+            }
+            .print-voucher-area, .print-voucher-area * {
+              visibility: visible;
+            }
+            .print-voucher-area {
+              position: absolute;
+              left: 0;
+              top: 0;
+              width: 100%;
+              background: white !important;
+              color: black !important;
+              padding: 20px !important;
+              box-shadow: none !important;
+              border: none !important;
+            }
+            .no-print {
+              display: none !important;
+            }
+          }
+        `}} />
 
       </div>
     </DashboardLayout>

@@ -2513,7 +2513,7 @@ const CheckInModal = ({
     const fetchFoodItems = async () => {
       try {
         const token = localStorage.getItem("token");
-        const res = await API.get("/food-items", { headers: { Authorization: `Bearer ${token}` } });
+        const res = await API.get("/food-items?limit=10000", { headers: { Authorization: `Bearer ${token}` } });
         const data = Array.isArray(res.data) ? res.data : (res.data?.data || []);
         setFoodItems(data);
       } catch (err) {
@@ -3090,17 +3090,63 @@ const CheckInModal = ({
                                       className="flex gap-3 items-center group"
                                     >
                                       <div className="flex-1 relative">
-                                        <select
-                                          value={item.foodItemId}
-                                          onChange={(e) => handleUpdateMenuItem(featureName, idx, "foodItemId", e.target.value)}
-                                          className="w-full px-5 py-3.5 bg-slate-50 border-2 border-transparent rounded-xl font-bold text-slate-700 text-[11px] outline-none focus:bg-white focus:border-indigo-500 transition-all appearance-none"
-                                        >
-                                          <option value="">Choose Delicacy...</option>
-                                          {foodItems.map(f => (
-                                            <option key={f.id} value={f.id}>{f.name}</option>
-                                          ))}
-                                        </select>
-                                        <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400 pointer-events-none" />
+                                        <div className="relative w-full">
+                                          <input
+                                            type="text"
+                                            placeholder="Choose Delicacy..."
+                                            value={item.searchQuery !== undefined ? item.searchQuery : (foodItems.find(f => String(f.id) === String(item.foodItemId))?.name || "")}
+                                            onChange={(e) => {
+                                              handleUpdateMenuItem(featureName, idx, "searchQuery", e.target.value);
+                                              handleUpdateMenuItem(featureName, idx, "isOpen", true);
+                                            }}
+                                            onFocus={() => {
+                                              const currentFood = foodItems.find(f => String(f.id) === String(item.foodItemId));
+                                              handleUpdateMenuItem(featureName, idx, "searchQuery", currentFood ? currentFood.name : "");
+                                              handleUpdateMenuItem(featureName, idx, "isOpen", true);
+                                            }}
+                                            onBlur={() => {
+                                              setTimeout(() => {
+                                                handleUpdateMenuItem(featureName, idx, "isOpen", false);
+                                                const currentFood = foodItems.find(f => String(f.id) === String(item.foodItemId));
+                                                handleUpdateMenuItem(featureName, idx, "searchQuery", currentFood ? currentFood.name : "");
+                                              }, 200);
+                                            }}
+                                            className="w-full px-5 py-3.5 bg-slate-50 border-2 border-transparent rounded-xl font-bold text-slate-700 text-[11px] outline-none focus:bg-white focus:border-indigo-500 transition-all"
+                                          />
+                                          {item.isOpen && (
+                                            <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-60 overflow-y-auto">
+                                              {foodItems
+                                                .filter(f => {
+                                                  const q = (item.searchQuery || "").toLowerCase();
+                                                  return f.name.toLowerCase().includes(q);
+                                                })
+                                                .map(f => (
+                                                  <div
+                                                    key={f.id}
+                                                    onMouseDown={() => {
+                                                      setFeatureMenuSelections(prev => {
+                                                        const current = [...(prev[featureName] || [])];
+                                                        current[idx] = { 
+                                                          ...current[idx], 
+                                                          foodItemId: String(f.id), 
+                                                          name: f.name, 
+                                                          searchQuery: f.name,
+                                                          isOpen: false 
+                                                        };
+                                                        return { ...prev, [featureName]: current };
+                                                      });
+                                                    }}
+                                                    className="px-4 py-2 hover:bg-slate-100 cursor-pointer text-slate-700 font-bold text-[10px] text-left border-b border-slate-50 last:border-0"
+                                                  >
+                                                    {f.name}
+                                                  </div>
+                                                ))}
+                                              {foodItems.filter(f => f.name.toLowerCase().includes((item.searchQuery || "").toLowerCase())).length === 0 && (
+                                                <div className="px-4 py-3 text-[10px] text-slate-400 italic text-center font-bold">No delicacies found</div>
+                                              )}
+                                            </div>
+                                          )}
+                                        </div>
                                       </div>
                                       <input
                                         type="number"
@@ -3279,16 +3325,20 @@ const BookingFormModal = ({
       let taxRate = 0.18; // Default
       
       if (gstSettings) {
-        const r1 = parseFloat(gstSettings.gst_slab_rate_1 || 5) / 100;
-        const r2 = parseFloat(gstSettings.gst_slab_rate_2 || 12) / 100;
-        const r3 = parseFloat(gstSettings.gst_slab_rate_3 || 18) / 100;
-
-        if (dailyRatePerRoom < 5000) {
-          taxRate = r1;
-        } else if (dailyRatePerRoom < 7500) {
-          taxRate = r2;
+        if (gstSettings.gst_room_type === "MANUAL") {
+          taxRate = parseFloat(gstSettings.room_gst_rate || 12) / 100;
         } else {
-          taxRate = r3;
+          const r1 = parseFloat(gstSettings.gst_slab_rate_1 || 5) / 100;
+          const r2 = parseFloat(gstSettings.gst_slab_rate_2 || 12) / 100;
+          const r3 = parseFloat(gstSettings.gst_slab_rate_3 || 18) / 100;
+
+          if (dailyRatePerRoom < 5000) {
+            taxRate = r1;
+          } else if (dailyRatePerRoom < 7500) {
+            taxRate = r2;
+          } else {
+            taxRate = r3;
+          }
         }
       } else {
         // Fallback to legacy hardcoded logic if settings aren't loaded
@@ -4178,6 +4228,7 @@ const Bookings = () => {
           ...prev,
           gst_enabled: settingsMap.gst_enabled?.toLowerCase() === "true",
           gst_room_type: settingsMap.gst_room_type?.toUpperCase() || "SLAB",
+          room_gst_rate: settingsMap.room_gst_rate || "12",
           gst_slab_rate_1: settingsMap.gst_slab_rate_1 || "5",
           gst_slab_rate_2: settingsMap.gst_slab_rate_2 || "12",
           gst_slab_rate_3: settingsMap.gst_slab_rate_3 || "18"

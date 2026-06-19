@@ -3821,6 +3821,10 @@ def _calculate_bill_for_entire_booking(db: Session, room_number: str, branch_id:
     room_processed_ids = set() 
     seen_item_keys = set() # (room_number, cleaned_name)
     
+    # Initialize GST rate breakdowns
+    consumables_gst_breakdown = {}
+    inventory_gst_breakdown = {}
+    
     for checkout_request in checkout_requests:
         r_num = checkout_request.room_number
         if not checkout_request.inventory_data:
@@ -3909,7 +3913,7 @@ def _calculate_bill_for_entire_booking(db: Session, room_number: str, branch_id:
             
             consumable_keywords = ["food", "drink", "beverage", "amenity", "toiletries", "mini bar", "consumable", "provision"]
             is_consumable_category = any(kw in (inv_item.category.name if inv_item.category else "").lower() for kw in consumable_keywords) or is_amenity
-
+ 
             is_rentable = is_rentable_audit or "rental" in (inv_item.category.name if inv_item.category else "").lower()
             if is_asset_category and not ("rental" in (inv_item.category.name if inv_item.category else "").lower() or is_rentable_audit):
                 is_rentable = False
@@ -3998,6 +4002,8 @@ def _calculate_bill_for_entire_booking(db: Session, room_number: str, branch_id:
                 })
                 if usage_charge > 0:
                     charges.inventory_charges = (charges.inventory_charges or 0) + usage_charge
+                    item_gst = float(inv_item.category.default_gst_rate if (inv_item and inv_item.category) else 0.0)
+                    inventory_gst_breakdown[item_gst] = inventory_gst_breakdown.get(item_gst, 0.0) + usage_charge
             
             # CHANGE: Changed from 'elif' to 'if' for multiple room checkout too
             if is_fixed_asset:
@@ -4030,6 +4036,8 @@ def _calculate_bill_for_entire_booking(db: Session, room_number: str, branch_id:
                         label += f" ({int(damage_qty)} Damaged)"
                     
                     charges.consumables_charges = (charges.consumables_charges or 0) + total_item_charge
+                    item_gst = float(inv_item.category.default_gst_rate if (inv_item and inv_item.category) else 0.0)
+                    consumables_gst_breakdown[item_gst] = consumables_gst_breakdown.get(item_gst, 0.0) + total_item_charge
                     charges.consumables_items.append({
                         "date": checkout_request.completed_at or get_ist_now(),
                         "item_id": item_id,
@@ -4169,6 +4177,7 @@ def _calculate_bill_for_entire_booking(db: Session, room_number: str, branch_id:
 
     # Calculate GST using dynamic helper
     total_room_nights = stay_days * len(all_rooms) if not is_package else stay_days
+    is_inclusive = getattr(booking, 'rate_plan_code', None) == 'TAX_INCLUSIVE'
     gst_breakdown = calculate_gst_breakdown(
         db=db,
         branch_id=branch_id,

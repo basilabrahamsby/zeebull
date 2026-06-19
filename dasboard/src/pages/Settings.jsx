@@ -55,6 +55,9 @@ export default function Settings() {
             if (settingsMap.timezone) {
                 localStorage.setItem("SYSTEM_TIMEZONE", settingsMap.timezone);
             }
+            if (settingsMap.gst_room_type === "FLAT") {
+                settingsMap.gst_room_type = "MANUAL";
+            }
             setSettings(prev => ({ ...prev, ...settingsMap }));
         } catch (error) {
             console.error("Error fetching settings:", error);
@@ -379,7 +382,7 @@ export default function Settings() {
                                                     <button 
                                                         type="button"
                                                         onClick={() => setSettings({ ...settings, gst_room_type: "SLAB" })}
-                                                        className={`px-3 py-1 text-[10px] font-bold rounded-md transition-all ${settings.gst_room_type !== "MANUAL" ? "bg-white shadow-sm text-indigo-600" : "text-gray-500 hover:text-gray-700"}`}
+                                                        className={`px-3 py-1 text-[10px] font-bold rounded-md transition-all ${settings.gst_room_type === "SLAB" ? "bg-white shadow-sm text-indigo-600" : "text-gray-500 hover:text-gray-700"}`}
                                                     >
                                                         SLAB
                                                     </button>

@@ -1343,7 +1343,7 @@ const Inventory = () => {
         setWasteLogs(res.data || []);
         // Also fetch food items for waste form
         try {
-          const foodRes = await API.get("/food-items");
+          const foodRes = await API.get("/food-items?limit=10000");
           setFoodItems(foodRes.data || []);
         } catch (err) {
           console.error("Failed to fetch food items:", err);
@@ -1418,7 +1418,7 @@ const Inventory = () => {
         }
         // Also fetch food items for the recipe form
         try {
-          const foodRes = await API.get("/food-items");
+          const foodRes = await API.get("/food-items?limit=10000");
           setFoodItems(foodRes.data || []);
         } catch (err) {
           console.error("Failed to fetch food items:", err);

@@ -439,10 +439,8 @@ def calculate_gst_breakdown(
                 room_gst_rate = 0.0
     
     if room_gst == 0.0 and room_charges > 0:
-        gst_type = gst_settings.get("gst_room_type", "FLAT")
-        if gst_type != "SLAB":
-            room_gst_rate = float(gst_settings.get("room_gst_rate", 12)) / 100.0
-        else:
+        gst_type = gst_settings.get("gst_room_type", "SLAB")
+        if gst_type == "SLAB":
             # Slab-based Logic
             daily_rate = (room_charges + package_charges) / max(1, nights)
             
@@ -455,6 +453,8 @@ def calculate_gst_breakdown(
                 room_gst_rate = r1
             elif daily_rate < 7500:
                 room_gst_rate = r2
+        else:
+            room_gst_rate = float(gst_settings.get("room_gst_rate", 12)) / 100.0
             
         if is_inclusive:
             # Formula: GST = Total - (Total / (1 + Rate))

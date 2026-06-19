@@ -353,9 +353,7 @@ def close_day(
         # Determine GST slab
         if not gst_settings.get("gst_enabled"):
             gst_rate_pct = 0.0
-        elif gst_settings.get("gst_room_type") == "MANUAL":
-            gst_rate_pct = float(gst_settings.get("room_gst_rate", 0))
-        else:
+        elif gst_settings.get("gst_room_type") == "SLAB":
             # Slab-based
             r1 = float(gst_settings.get("gst_slab_rate_1", 5))
             r2 = float(gst_settings.get("gst_slab_rate_2", 12))
@@ -366,6 +364,9 @@ def close_day(
                 gst_rate_pct = r2
             else:
                 gst_rate_pct = r3
+        else:
+            # MANUAL / FLAT
+            gst_rate_pct = float(gst_settings.get("room_gst_rate", 12))
 
         gst_amount = round(room_rate * gst_rate_pct / 100, 2)
         total_charge = round(room_rate + gst_amount, 2)

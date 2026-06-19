@@ -249,7 +249,7 @@ export default function FoodOrders() {
           console.error("Error fetching orders:", err);
           return { data: [] };
         }),
-        api.get("/food-items").catch(err => {
+        api.get("/food-items?limit=10000").catch(err => {
           console.error("Error fetching food items:", err);
           return { data: [] };
         }),
@@ -1102,7 +1102,7 @@ export default function FoodOrders() {
           console.error("Error fetching employees:", err);
           return { data: [] };
         }),
-        api.get("/food-items").catch(err => {
+        api.get("/food-items?limit=10000").catch(err => {
           console.error("Error fetching food items:", err);
           return { data: [] };
         }),
@@ -2575,18 +2575,57 @@ export default function FoodOrders() {
                         {selectedItems.map((item, index) => (
                           <div key={index} className="flex gap-3 items-center bg-white p-3 rounded-xl shadow-sm border border-gray-100 animate-in fade-in slide-in-from-left-2 duration-200">
                             <div className="flex-1">
-                              <select
-                                value={item.food_item_id}
-                                onChange={(e) => handleItemChange(index, "food_item_id", e.target.value)}
-                                className="w-full border border-gray-200 rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500 text-black font-medium"
-                              >
-                                <option value="">Select food item...</option>
-                                {foodItems.map((f) => (
-                                  <option key={f.id} value={f.id}>
-                                    {f.name} - ₹{f.price}
-                                  </option>
-                                ))}
-                              </select>
+                              <div className="relative">
+                                <input
+                                  type="text"
+                                  placeholder="Type to search food item..."
+                                  value={item.searchQuery !== undefined ? item.searchQuery : (foodItems.find(f => String(f.id) === String(item.food_item_id))?.name || "")}
+                                  onChange={(e) => {
+                                    handleItemChange(index, "searchQuery", e.target.value);
+                                    handleItemChange(index, "isOpen", true);
+                                  }}
+                                  onFocus={() => {
+                                    const currentItem = foodItems.find(f => String(f.id) === String(item.food_item_id));
+                                    handleItemChange(index, "searchQuery", currentItem ? currentItem.name : "");
+                                    handleItemChange(index, "isOpen", true);
+                                  }}
+                                  onBlur={() => {
+                                    // Use a short timeout to allow onMouseDown to fire first
+                                    setTimeout(() => {
+                                      handleItemChange(index, "isOpen", false);
+                                      const currentItem = foodItems.find(f => String(f.id) === String(item.food_item_id));
+                                      handleItemChange(index, "searchQuery", currentItem ? currentItem.name : "");
+                                    }, 200);
+                                  }}
+                                  className="w-full border border-gray-200 rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500 text-black font-medium outline-none"
+                                />
+                                {item.isOpen && (
+                                  <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-60 overflow-y-auto">
+                                    {foodItems
+                                      .filter((f) => {
+                                        const q = (item.searchQuery || "").toLowerCase();
+                                        return f.name.toLowerCase().includes(q);
+                                      })
+                                      .map((f) => (
+                                        <div
+                                          key={f.id}
+                                          onMouseDown={() => {
+                                            handleItemChange(index, "food_item_id", String(f.id));
+                                            handleItemChange(index, "searchQuery", f.name);
+                                            handleItemChange(index, "isOpen", false);
+                                          }}
+                                          className="px-4 py-2.5 hover:bg-indigo-50 cursor-pointer text-sm text-gray-700 flex justify-between items-center transition-colors border-b border-gray-50 last:border-b-0"
+                                        >
+                                          <span className="font-semibold text-gray-800">{f.name}</span>
+                                          <span className="text-indigo-600 font-bold">₹{f.price}</span>
+                                        </div>
+                                      ))}
+                                    {foodItems.filter((f) => f.name.toLowerCase().includes((item.searchQuery || "").toLowerCase())).length === 0 && (
+                                      <div className="px-4 py-3 text-sm text-gray-500 italic text-center">No matching food items</div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
                             </div>
                             <div className="w-24">
                               <input
