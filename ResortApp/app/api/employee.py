@@ -720,4 +720,23 @@ def create_salary_payment(
     db.add(new_payment)
     db.commit()
     db.refresh(new_payment)
+    
+    # Create Journal Entry for the new payment
+    try:
+        from app.utils.accounting_helpers import create_salary_journal_entry
+        employee_name = f"{emp.first_name} {emp.last_name}".strip() if emp else "Employee"
+        create_salary_journal_entry(
+            db=db,
+            payment_id=new_payment.id,
+            net_salary=new_payment.net_salary,
+            employee_name=employee_name,
+            payment_method=new_payment.payment_method,
+            branch_id=branch_id,
+            created_by=current_user.id if current_user else None
+        )
+        db.commit()
+    except Exception as e:
+        print(f"Failed to create journal entry for salary payment: {e}")
+        db.rollback()
+
     return new_payment

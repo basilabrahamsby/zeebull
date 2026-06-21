@@ -711,3 +711,73 @@ def create_expense_journal_entry(
 
     je = create_journal_entry(db, entry, branch_id=branch_id, created_by=created_by)
     return je.id
+
+def create_salary_journal_entry(
+    db: Session,
+    payment_id: int,
+    net_salary: float,
+    employee_name: str,
+    payment_method: str,
+    branch_id: int,
+    created_by: Optional[int] = None
+) -> int:
+    """
+    Create journal entry for Salary Payment.
+    Debit: Salaries & Wages
+    Credit: Cash / Bank
+    """
+    # 1. Determine Credit Ledger (Payment Method)
+    if is_bank_ledger_method(payment_method):
+        credit_ledger = find_ledger_by_name(db, "Bank Account - Main", branch_id=branch_id, module="General")
+    else:
+        credit_ledger = find_ledger_by_name(db, "Cash in Hand", branch_id=branch_id, module="General")
+        
+    if not credit_ledger:
+        credit_ledger = find_ledger_by_name(db, "Cash in Hand", branch_id=branch_id) or                         find_ledger_by_name(db, "Bank Account - Main", branch_id=branch_id)
+
+    # 2. Determine Debit Ledger (Salaries & Wages)
+    debit_ledger = find_ledger_by_name(db, "Salaries & Wages", branch_id=branch_id) or                    find_ledger_by_name(db, "Salary Expense", branch_id=branch_id) or                    find_ledger_by_name(db, "Salaries", branch_id=branch_id)
+    
+    if not debit_ledger or not credit_ledger:
+        return 0
+
+    description = f"Salary payment for {employee_name}"
+
+    # Create Journal Entry
+    from app.models.account import JournalEntry, JournalEntryLine
+    journal_entry = JournalEntry(
+        date=datetime.utcnow(),
+        reference_type="salary_payment",
+        reference_id=payment_id,
+        description=description,
+        total_debit=net_salary,
+        total_credit=net_salary,
+        branch_id=branch_id,
+        created_by_id=created_by
+    )
+    db.add(journal_entry)
+    db.flush()
+
+    # Debit Line
+    debit_line = JournalEntryLine(
+        journal_entry_id=journal_entry.id,
+        debit_ledger_id=debit_ledger.id,
+        amount=net_salary,
+        is_debit=True,
+        description=description,
+        branch_id=branch_id
+    )
+    db.add(debit_line)
+
+    # Credit Line
+    credit_line = JournalEntryLine(
+        journal_entry_id=journal_entry.id,
+        credit_ledger_id=credit_ledger.id,
+        amount=net_salary,
+        is_debit=False,
+        description=description,
+        branch_id=branch_id
+    )
+    db.add(credit_line)
+
+    return journal_entry.id
