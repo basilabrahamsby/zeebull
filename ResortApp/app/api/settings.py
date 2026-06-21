@@ -30,7 +30,18 @@ def get_settings(
     current_user: dict = Depends(get_current_user)
 ):
     print(f"Fetching settings for branch: {branch_id}")
-    return db.query(SystemSetting).filter(SystemSetting.branch_id == branch_id).all()
+    settings = db.query(SystemSetting).filter(SystemSetting.branch_id == branch_id).all()
+    
+    # Inject branch details as virtual settings
+    from app.models.branch import Branch
+    branch = db.query(Branch).filter(Branch.id == branch_id).first()
+    if branch:
+        settings.append(SystemSetting(id=-1, key="branch_address", value=branch.address or ""))
+        settings.append(SystemSetting(id=-2, key="gst_number", value=branch.gst_number or ""))
+        settings.append(SystemSetting(id=-3, key="branch_phone", value=branch.phone or ""))
+        settings.append(SystemSetting(id=-4, key="branch_name", value=branch.name or ""))
+        
+    return settings
 
 @router.post("", response_model=SettingOut)
 @router.post("/", response_model=SettingOut, include_in_schema=False)

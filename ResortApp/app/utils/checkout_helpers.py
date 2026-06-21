@@ -391,7 +391,8 @@ def calculate_gst_breakdown(
     booking_id: int = None,
     is_inclusive: bool = False,
     consumables_breakdown: Dict[float, float] = None,
-    inventory_breakdown: Dict[float, float] = None
+    inventory_breakdown: Dict[float, float] = None,
+    discount_amount: float = 0.0
 ) -> Dict:
     """
     Calculate GST breakdown with dynamic rates from branch settings.
@@ -419,6 +420,18 @@ def calculate_gst_breakdown(
             "total_gst": 0.0
         }
     
+    # Apply discount to room/package charges BEFORE GST calculation
+    if discount_amount > 0:
+        if room_charges > 0:
+            room_discount = min(discount_amount, room_charges)
+            room_charges -= room_discount
+            discount_amount -= room_discount
+        if discount_amount > 0 and package_charges > 0:
+            pkg_discount = min(discount_amount, package_charges)
+            package_charges -= pkg_discount
+            discount_amount -= pkg_discount
+        use_night_charges = False
+
     # Room GST Logic
     room_gst = 0.0
     room_gst_rate = 0.0

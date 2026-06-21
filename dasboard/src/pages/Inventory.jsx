@@ -58,9 +58,7 @@ import LaundryManagementTab from "./inventory/components/LaundryManagementTab";
 import UnitFormModal from "./inventory/modals/UnitFormModal";
 import ItemHistoryModal from "./inventory/modals/ItemHistoryModal";
 import { useBranch } from "../contexts/BranchContext";
-
-
-
+import Select from "react-select";
 // Location Stock Details Modal  
 function LocationStockDetailsModal({ locationData, onClose }) {
   const [itemFilter, setItemFilter] = useState("all");
@@ -7215,19 +7213,36 @@ function PurchaseFormModal({
                           {index + 1}
                         </td>
                         <td className="px-4 py-4">
-                          <select
-                            value={detail.item_id}
-                            onChange={(e) => handleItemSelect(index, e.target.value)}
-                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                            required
-                          >
-                            <option value="">-- Choose Item --</option>
-                            {filteredItems.map((item) => (
-                              <option key={item.id} value={item.id}>
-                                {item.name} ({item.current_stock} {item.unit} available)
-                              </option>
-                            ))}
-                          </select>
+                          <Select
+                            value={detail.item_id ? {
+                              value: detail.item_id,
+                              label: (() => {
+                                const i = items.find(itm => String(itm.id) === String(detail.item_id));
+                                return i ? `${i.name} (${i.current_stock} ${i.unit} available)` : '';
+                              })()
+                            } : null}
+                            onChange={(selected) => handleItemSelect(index, selected ? selected.value : "")}
+                            options={filteredItems.map(item => ({
+                              value: item.id,
+                              label: `${item.name} (${item.current_stock} ${item.unit} available)`
+                            }))}
+                            isSearchable
+                            isClearable
+                            placeholder="-- Choose Item --"
+                            className="text-sm react-select-container"
+                            classNamePrefix="react-select"
+                            styles={{
+                              control: (base) => ({
+                                ...base,
+                                borderRadius: '0.5rem',
+                                borderColor: '#d1d5db',
+                                '&:hover': { borderColor: '#6366f1' },
+                                minHeight: '42px',
+                              }),
+                              menuPortal: base => ({ ...base, zIndex: 99999 })
+                            }}
+                            menuPortalTarget={document.body}
+                          />
                         </td>
                         <td className="px-4 py-4">
                           <input
@@ -9599,21 +9614,31 @@ function AssetMappingFormModal({
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Target Location *
             </label>
-            <select
-              value={form.location_id || ""}
-              onChange={(e) =>
-                setForm({ ...form, location_id: e.target.value })
-              }
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+            <Select
+              value={form.location_id ? { value: form.location_id, label: locations.find(l => l.id == form.location_id)?.name || locations.find(l => l.id == form.location_id)?.building + ' - ' + locations.find(l => l.id == form.location_id)?.room_area } : null}
+              onChange={(option) => setForm({ ...form, location_id: option ? option.value : "" })}
+              options={locations.map(loc => ({
+                value: loc.id,
+                label: loc.name || `${loc.building} - ${loc.room_area}${loc.floor ? ` (${loc.floor})` : ""}`
+              }))}
+              placeholder="Select Target Location"
+              isClearable
               required
-            >
-              <option value="">Select Target</option>
-              {locations.map((loc) => (
-                <option key={loc.id} value={loc.id}>
-                  {loc.name || `${loc.building} - ${loc.room_area}${loc.floor ? ` (${loc.floor})` : ""}`}
-                </option>
-              ))}
-            </select>
+              styles={{
+                control: (base) => ({
+                  ...base,
+                  minHeight: '42px',
+                  borderColor: '#d1d5db',
+                  borderRadius: '0.5rem',
+                  boxShadow: 'none',
+                  '&:hover': {
+                    borderColor: '#9ca3af'
+                  }
+                }),
+                menuPortal: base => ({ ...base, zIndex: 99999 })
+              }}
+              menuPortalTarget={document.body}
+            />
           </div>
 
           <div className="border-t pt-4">
@@ -9645,29 +9670,44 @@ function AssetMappingFormModal({
                     <label className="block text-xs font-semibold text-gray-600 mb-1.5">
                       Asset Item *
                     </label>
-                    <select
-                      value={asset.item_id}
-                      onChange={(e) =>
-                        updateAssetRow(index, "item_id", e.target.value)
-                      }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-sm"
-                      required
-                      disabled={isEditing}
-                    >
-                      <option value="">Select Asset</option>
-                      {fixedAssets.map((item) => {
+                    <Select
+                      value={asset.item_id ? {
+                        value: asset.item_id,
+                        label: (() => {
+                          const item = fixedAssets.find(i => i.id == asset.item_id);
+                          const stock = getStockForLocation(asset.item_id, asset.source_location_id);
+                          return item ? `${item.name} ${asset.source_location_id ? `(${parseFloat(stock).toFixed(2)})` : ""}` : "";
+                        })()
+                      } : null}
+                      onChange={(option) => updateAssetRow(index, "item_id", option ? option.value : "")}
+                      options={fixedAssets.map(item => {
                         const stock = getStockForLocation(item.id, asset.source_location_id);
-                        // Only disable if a specific source is selected and it has no stock
-                        // If no source is selected (global), allow selection even if stock is 0 (for initial setup)
                         const isDisabled = asset.source_location_id ? stock <= 0 : false;
-
-                        return (
-                          <option key={item.id} value={item.id} disabled={isDisabled}>
-                            {item.name} {asset.source_location_id ? `(${parseFloat(stock).toFixed(2)})` : ""}
-                          </option>
-                        );
+                        return {
+                          value: item.id,
+                          label: `${item.name} ${asset.source_location_id ? `(${parseFloat(stock).toFixed(2)})` : ""}`,
+                          isDisabled: isDisabled
+                        };
                       })}
-                    </select>
+                      placeholder="Select Asset"
+                      isClearable
+                      isDisabled={isEditing}
+                      styles={{
+                        control: (base) => ({
+                          ...base,
+                          minHeight: '38px',
+                          borderColor: '#d1d5db',
+                          borderRadius: '0.5rem',
+                          boxShadow: 'none',
+                          fontSize: '0.875rem',
+                          '&:hover': {
+                            borderColor: '#9ca3af'
+                          }
+                        }),
+                        menuPortal: base => ({ ...base, zIndex: 99999 })
+                      }}
+                      menuPortalTarget={document.body}
+                    />
                   </div>
 
                   <div className="w-full sm:w-48">

@@ -1437,12 +1437,48 @@ def update_purchase_payment_status(
     if payment_status_lower not in valid_statuses:
         raise HTTPException(status_code=400, detail=f"Invalid payment status. Must be one of: {', '.join(valid_statuses)}")
     
+    old_status = purchase.payment_status
+
     # Update payment status
     purchase.payment_status = payment_status_lower
     
     # Update payment method if provided (handle None and empty strings)
     if payment_method and payment_method.strip():
         purchase.payment_method = payment_method.strip().lower()
+
+    # Manage journal entries based on status change
+    if old_status != payment_status_lower:
+        from app.models.account import JournalEntry
+        if payment_status_lower == "pending":
+            # Delete any existing payment journal entries since it is now unpaid
+            jes = db.query(JournalEntry).filter(
+                JournalEntry.reference_type == "purchase_payment",
+                JournalEntry.reference_id == purchase_id
+            ).all()
+            for je in jes:
+                db.delete(je)
+        elif payment_status_lower == "paid" and old_status != "paid":
+            # Check if one already exists to avoid duplicates
+            existing_je = db.query(JournalEntry).filter(
+                JournalEntry.reference_type == "purchase_payment",
+                JournalEntry.reference_id == purchase_id
+            ).first()
+            if not existing_je:
+                from app.utils.accounting_helpers import create_purchase_payment_journal_entry
+                vendor = purchase.vendor
+                vendor_name = (vendor.legal_name or vendor.name) if vendor else "Unknown"
+                try:
+                    create_purchase_payment_journal_entry(
+                        db=db,
+                        purchase_id=purchase.id,
+                        amount=float(purchase.total_amount or 0),
+                        payment_method=purchase.payment_method or "Cash",
+                        vendor_name=vendor_name,
+                        branch_id=branch_id,
+                        created_by=current_user.id
+                    )
+                except Exception as e:
+                    print(f"Warning: Could not create payment JE: {e}")
     
     try:
         db.commit()

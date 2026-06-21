@@ -153,6 +153,8 @@ def update_account_ledger(
     current_user: User = Depends(get_current_user)
 ):
     """Update account ledger"""
+    if branch_id is None:
+        raise HTTPException(status_code=400, detail="Please select a branch id")
     ledger = account_crud.update_account_ledger(db, ledger_id, ledger_update, branch_id=branch_id)
     if not ledger:
         raise HTTPException(status_code=404, detail="Account ledger not found")
@@ -168,6 +170,8 @@ def delete_account_ledger(
     current_user: User = Depends(get_current_user)
 ):
     """Delete account ledger (soft delete)"""
+    if branch_id is None:
+        raise HTTPException(status_code=400, detail="Please select a branch id")
     success = account_crud.delete_account_ledger(db, ledger_id, branch_id=branch_id)
     if not success:
         raise HTTPException(status_code=404, detail="Account ledger not found")
@@ -253,6 +257,7 @@ def get_journal_entry(
 def get_trial_balance(
     as_on_date: Optional[datetime] = Query(None),
     automatic: bool = Query(False, description="Automatically calculate from all business transactions"),
+    detailed: bool = Query(False, description="Include detailed item breakdown for ledgers"),
     db: Session = Depends(get_db),
     branch_id: Optional[int] = Depends(get_branch_id),
     current_user: User = Depends(get_current_user)
@@ -274,7 +279,10 @@ def get_trial_balance(
     If automatic=False, only calculates from journal entries.
     """
     try:
-        return account_crud.get_trial_balance(db, branch_id=branch_id, as_on_date=as_on_date, automatic=automatic)
+        if as_on_date and as_on_date.hour == 0 and as_on_date.minute == 0 and as_on_date.second == 0:
+            as_on_date = as_on_date.replace(hour=23, minute=59, second=59, microsecond=999999)
+            
+        return account_crud.get_trial_balance(db, branch_id=branch_id, as_on_date=as_on_date, automatic=automatic, detailed=detailed)
     except Exception as e:
         import traceback
         error_msg = f"Error in get_trial_balance endpoint: {str(e)}\n{traceback.format_exc()}"
@@ -374,6 +382,264 @@ def fix_missing_journal_entries(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error fixing journal entries: {str(e)}")
+
+@router.get("/day-book")
+def get_day_book(
+    start_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
+    db: Session = Depends(get_db),
+    branch_id: Optional[int] = Depends(get_branch_id),
+    current_user: User = Depends(get_current_user)
+):
+    """Fetch day book report for a given date range"""
+    from datetime import datetime, time
+    from app.models.account import JournalEntry, JournalEntryLine, AccountLedger
+    from sqlalchemy import and_
+
+    if branch_id is None:
+        return []
+
+    query = db.query(JournalEntry).filter(JournalEntry.branch_id == branch_id)
+
+    if start_date:
+        try:
+            start_dt = datetime.combine(datetime.strptime(start_date, "%Y-%m-%d").date(), time.min)
+            query = query.filter(JournalEntry.entry_date >= start_dt)
+        except ValueError:
+            pass
+    if end_date:
+        try:
+            end_dt = datetime.combine(datetime.strptime(end_date, "%Y-%m-%d").date(), time.max)
+            query = query.filter(JournalEntry.entry_date <= end_dt)
+        except ValueError:
+            pass
+
+    entries = query.order_by(JournalEntry.entry_date.asc(), JournalEntry.entry_number.asc()).all()
+
+    rows = []
+    for entry in entries:
+        vch_type = entry.reference_type or "Journal"
+        vch_type_lower = vch_type.lower()
+        if vch_type_lower in ["checkout", "sales"]:
+            vch_type = "Sales"
+        elif vch_type_lower in ["payment", "expense", "purchase_payment", "vendor_payment"]:
+            vch_type = "Payment"
+        elif vch_type_lower in ["receipt", "advance_payment"]:
+            vch_type = "Receipt"
+        elif vch_type_lower == "purchase":
+            vch_type = "Purchase"
+        elif vch_type_lower == "contra":
+            vch_type = "Contra"
+        else:
+            vch_type = vch_type.capitalize()
+
+        vch_no = entry.entry_number
+        import re
+        match = re.search(r'\d+$', entry.entry_number)
+        if match:
+            vch_no = match.group(0)
+
+        formatted_date = entry.entry_date.strftime("%d-%b-%y")
+
+        debits = []
+        credits = []
+        for line in entry.lines:
+            if line.debit_ledger:
+                debits.append({"ledger": line.debit_ledger.name.upper()})
+            if line.credit_ledger:
+                credits.append({"ledger": line.credit_ledger.name.upper()})
+        
+        particulars = "Unknown"
+        debit_amount = None
+        credit_amount = None
+        total_amt = float(entry.total_amount) if entry.total_amount else 0.0
+        
+        if vch_type == "Sales":
+            if debits:
+                particulars = debits[0]["ledger"]
+                debit_amount = total_amt
+        elif vch_type == "Receipt":
+            if credits:
+                particulars = credits[0]["ledger"]
+                credit_amount = total_amt
+        elif vch_type == "Payment":
+            if debits:
+                particulars = debits[0]["ledger"]
+                debit_amount = total_amt
+        elif vch_type == "Purchase":
+            if credits:
+                particulars = credits[0]["ledger"]
+                credit_amount = total_amt
+        else:
+            if debits:
+                particulars = debits[0]["ledger"]
+                debit_amount = total_amt
+            elif credits:
+                particulars = credits[0]["ledger"]
+                credit_amount = total_amt
+
+        # In Tally, if there are multiple, it might say "As per details", but the first ledger is fine for a simple view
+        if vch_type == "Contra" and credits:
+            particulars = credits[0]["ledger"]
+            credit_amount = total_amt
+            debit_amount = None
+
+        rows.append({
+            "date": formatted_date,
+            "particulars": particulars,
+            "vch_type": vch_type,
+            "vch_no": vch_no,
+            "debit_amount": debit_amount,
+            "credit_amount": credit_amount,
+            "inwards_qty": None,
+            "outwards_qty": None
+        })
+
+    return rows
+
+@router.get("/ledgers/{ledger_id}/statement")
+def get_ledger_statement(
+    ledger_id: int,
+    start_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
+    db: Session = Depends(get_db),
+    branch_id: Optional[int] = Depends(get_branch_id),
+    current_user: User = Depends(get_current_user)
+):
+    """Fetch ledger account statement for a given date range"""
+    from datetime import datetime, time
+    from app.models.account import JournalEntry, JournalEntryLine, AccountLedger
+    from sqlalchemy import and_, or_
+
+    if branch_id is None:
+        raise HTTPException(status_code=400, detail="Branch ID is required")
+
+    # Verify ledger exists
+    ledger = db.query(AccountLedger).filter(
+        AccountLedger.id == ledger_id,
+        or_(AccountLedger.branch_id == branch_id, AccountLedger.branch_id == None)
+    ).first()
+    if not ledger:
+        raise HTTPException(status_code=404, detail="Ledger not found")
+
+    # Fetch all lines for this ledger
+    query = db.query(JournalEntryLine).join(JournalEntry).filter(
+        JournalEntry.branch_id == branch_id,
+        or_(JournalEntryLine.debit_ledger_id == ledger_id, JournalEntryLine.credit_ledger_id == ledger_id)
+    )
+
+    if start_date:
+        try:
+            start_dt = datetime.combine(datetime.strptime(start_date, "%Y-%m-%d").date(), time.min)
+            query = query.filter(JournalEntry.entry_date >= start_dt)
+        except ValueError:
+            pass
+    if end_date:
+        try:
+            end_dt = datetime.combine(datetime.strptime(end_date, "%Y-%m-%d").date(), time.max)
+            query = query.filter(JournalEntry.entry_date <= end_dt)
+        except ValueError:
+            pass
+
+    lines = query.order_by(JournalEntry.entry_date.asc(), JournalEntry.entry_number.asc()).all()
+
+    # Calculate Opening Balance up to start_date
+    opening_balance = float(ledger.opening_balance or 0)
+    is_debit_normal = ledger.balance_type == "debit"
+
+    if start_date:
+        try:
+            start_dt = datetime.combine(datetime.strptime(start_date, "%Y-%m-%d").date(), time.min)
+            op_query = db.query(JournalEntryLine).join(JournalEntry).filter(
+                JournalEntry.branch_id == branch_id,
+                JournalEntry.entry_date < start_dt,
+                or_(JournalEntryLine.debit_ledger_id == ledger_id, JournalEntryLine.credit_ledger_id == ledger_id)
+            ).all()
+
+            for line in op_query:
+                amt = float(line.amount)
+                if line.debit_ledger_id == ledger_id:
+                    opening_balance += amt if is_debit_normal else -amt
+                else:
+                    opening_balance += -amt if is_debit_normal else amt
+        except ValueError:
+            pass
+
+    rows = []
+    current_running_balance = opening_balance
+
+    for line in lines:
+        entry = line.entry
+        vch_type = entry.reference_type or "Journal"
+        vch_type_lower = vch_type.lower()
+        if vch_type_lower in ["checkout", "sales"]:
+            vch_type = "Sales"
+        elif vch_type_lower in ["payment", "expense", "purchase_payment", "vendor_payment"]:
+            vch_type = "Payment"
+        elif vch_type_lower in ["receipt", "advance_payment"]:
+            vch_type = "Receipt"
+        elif vch_type_lower == "purchase":
+            vch_type = "Purchase"
+        elif vch_type_lower == "contra":
+            vch_type = "Contra"
+        else:
+            vch_type = vch_type.capitalize()
+
+        vch_no = entry.entry_number
+        import re
+        match = re.search(r'\d+$', entry.entry_number)
+        if match:
+            vch_no = match.group(0)
+
+        formatted_date = entry.entry_date.strftime("%d-%b-%y")
+
+        particulars = ""
+        is_debit = line.debit_ledger_id == ledger_id
+        amount = float(line.amount)
+
+        if is_debit:
+            credits = [l for l in entry.lines if l.credit_ledger_id]
+            if len(credits) == 1:
+                particulars = f"To {credits[0].credit_ledger.name.upper()}"
+            elif len(credits) > 1:
+                particulars = "To (as per details)"
+            else:
+                particulars = "To GENERAL LEDGER"
+            
+            debit_amount = amount
+            credit_amount = None
+            current_running_balance += amount if is_debit_normal else -amount
+        else:
+            debits = [l for l in entry.lines if l.debit_ledger_id]
+            if len(debits) == 1:
+                particulars = f"By {debits[0].debit_ledger.name.upper()}"
+            elif len(debits) > 1:
+                particulars = "By (as per details)"
+            else:
+                particulars = "By GENERAL LEDGER"
+
+            debit_amount = None
+            credit_amount = amount
+            current_running_balance += -amount if is_debit_normal else amount
+
+        rows.append({
+            "date": formatted_date,
+            "particulars": particulars,
+            "vch_type": vch_type,
+            "vch_no": vch_no,
+            "debit_amount": debit_amount,
+            "credit_amount": credit_amount,
+            "running_balance": current_running_balance
+        })
+
+    return {
+        "ledger_name": ledger.name,
+        "ledger_code": ledger.code,
+        "balance_type": ledger.balance_type,
+        "opening_balance": opening_balance,
+        "closing_balance": current_running_balance,
+        "postings": rows
+    }
 
 @router.get("/comprehensive-report")
 def get_comprehensive_report(
@@ -1370,7 +1636,7 @@ def seed_chart_of_accounts(
         {"name": "Petty Cash",                      "code": "1003", "group_id": gid("Cash & Bank"),          "module": "General",   "balance_type": "debit",  "opening_balance": 0},
         # Current Assets
         {"name": "Accounts Receivable",             "code": "1101", "group_id": gid("Current Assets"),      "module": "Booking",   "balance_type": "debit",  "opening_balance": 0},
-        {"name": "Advance Deposits - Guests",       "code": "1102", "group_id": gid("Current Assets"),      "module": "Booking",   "balance_type": "debit",  "opening_balance": 0},
+
         {"name": "Inventory Stock",                 "code": "1103", "group_id": gid("Current Assets"),      "module": "Inventory", "balance_type": "debit",  "opening_balance": 0},
         {"name": "Prepaid Expenses",                "code": "1104", "group_id": gid("Current Assets"),      "module": "General",   "balance_type": "debit",  "opening_balance": 0},
         # Fixed Assets

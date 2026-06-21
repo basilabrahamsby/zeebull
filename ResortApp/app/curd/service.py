@@ -921,14 +921,38 @@ def update_assigned_service_status(db: Session, assigned_id: int, update_data: A
                                 item.current_stock += quantity_used
                             else:
                                 # REGULAR USAGE
-                                db.add(InventoryTransaction(
+                                consumption_amount = quantity_used * (item.unit_price or 0.0)
+                                inv_txn = InventoryTransaction(
                                     item_id=item.id, transaction_type="out", quantity=quantity_used,
-                                    unit_price=item.unit_price, total_amount=quantity_used * (item.unit_price or 0.0),
+                                    unit_price=item.unit_price, total_amount=consumption_amount,
                                     reference_number=f"SVC-USAGE-{assigned_id}",
                                     department=item.category.name if item.category else "Housekeeping",
                                     notes=f"Actual Consumption during Service: {assigned.service.name}",
                                     created_by=updated_by, branch_id=assigned.branch_id, created_at=datetime.now(timezone.utc)
-                                ))
+                                )
+                                db.add(inv_txn)
+                                db.flush() # To get inv_txn.id
+                                
+                                if consumption_amount > 0:
+                                    from app.utils.accounting_helpers import create_consumption_journal_entry
+                                    # Try to debit a department specific ledger, e.g., Housekeeping Supplies
+                                    dept_name = item.category.name if item.category else "Housekeeping"
+                                    # Fallback to general Direct Expenses if specific dept not found
+                                    debit_ledger = f"{dept_name} Supplies" if dept_name.lower() == "housekeeping" else dept_name
+                                    
+                                    try:
+                                        create_consumption_journal_entry(
+                                            db=db,
+                                            consumption_id=inv_txn.id,
+                                            cogs_amount=consumption_amount,
+                                            inventory_item_name=item.name,
+                                            branch_id=assigned.branch_id,
+                                            created_by=updated_by,
+                                            reference_type="inventory_consumption",
+                                            debit_ledger_name=debit_ledger
+                                        )
+                                    except Exception as je_err:
+                                        print(f"[WARNING] Failed to create consumption journal entry: {je_err}")
 
                         # 4. Handle Clean Returns (Back to Store)
                         if quantity_returned > 0:

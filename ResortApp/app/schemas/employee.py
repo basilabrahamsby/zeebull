@@ -12,6 +12,7 @@ class EmployeeCreate(BaseModel):
     email: str
     phone: Optional[str] = None
     password: str
+    gst_number: Optional[str] = None
     daily_tasks: Optional[str] = None
 
 # This schema is used for the API response body. It defines the data
@@ -26,6 +27,7 @@ class Employee(BaseModel):
     image_url: Optional[str] = None
     # ✅ It must include 'user_id' to match the database model.
     user_id: Optional[int] = None
+    gst_number: Optional[str] = None
     daily_tasks: Optional[str] = None
     
     # Status fields

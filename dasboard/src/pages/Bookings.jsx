@@ -13,6 +13,7 @@ import { useInfiniteScroll } from "./useInfiniteScroll";
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from "chart.js";
 import BannerMessage from "../components/BannerMessage";
 import { getImageUrl } from "../utils/imageUtils";
+import Select from "react-select";
 import Packages from "./Package";
 import Rooms from "./CreateRooms";
 import BookingCalendar from "../components/BookingCalendar";
@@ -1787,29 +1788,43 @@ const AddExtraAllocationModal = ({
                       <div className="md:col-span-5 space-y-2">
                         <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1">Resource Selection</label>
                         <div className="relative">
-                          <select
-                            value={item.item_id}
-                            onChange={(e) => updateAllocationItem(index, "item_id", e.target.value)}
-                            className="w-full px-5 py-4 bg-slate-50 border-2 border-transparent rounded-[1.25rem] font-bold text-slate-700 text-xs focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 focus:bg-white transition-all outline-none appearance-none"
-                          >
-                            <option value="">Select an item</option>
-                            {inventoryItems
+                          <Select
+                            value={item.item_id ? {
+                              value: item.item_id,
+                              label: (() => {
+                                const invItem = inventoryItems.find((it) => it.id == item.item_id);
+                                return invItem ? `${invItem.name} ${invItem.item_code ? `(${invItem.item_code})` : ""}` : "";
+                              })()
+                            } : null}
+                            onChange={(option) => updateAllocationItem(index, "item_id", option ? option.value : "")}
+                            options={inventoryItems
                               .filter((it) => it.is_active !== false)
-                              .map((invItem) => (
-
-
-
-
-
-
-
-
-                                <option key={invItem.id} value={invItem.id}>
-                                  {invItem.name} {invItem.item_code ? `(${invItem.item_code})` : ""}
-                                </option>
-                              ))}
-                          </select>
-                          <div className="absolute right-5 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                              .map((invItem) => ({
+                                value: invItem.id,
+                                label: `${invItem.name} ${invItem.item_code ? `(${invItem.item_code})` : ""}`
+                              }))}
+                            placeholder="Select an item"
+                            isClearable
+                            styles={{
+                              control: (base) => ({
+                                ...base,
+                                padding: '0.25rem 0.5rem',
+                                backgroundColor: '#f8fafc',
+                                border: '2px solid transparent',
+                                borderRadius: '1.25rem',
+                                fontWeight: '700',
+                                color: '#334155',
+                                fontSize: '0.75rem',
+                                boxShadow: 'none',
+                                '&:hover': {
+                                  borderColor: 'transparent',
+                                },
+                              }),
+                              menuPortal: base => ({ ...base, zIndex: 99999 })
+                            }}
+                            menuPortalTarget={document.body}
+                          />
+                          <div className="absolute right-12 top-1/2 -translate-y-1/2 flex items-center gap-2">
                             {item.item_id && (
                               <button
                                 type="button"
@@ -1817,13 +1832,12 @@ const AddExtraAllocationModal = ({
                                   const selectedItem = inventoryItems.find(i => i.id == item.item_id);
                                   if (selectedItem) fetchItemStocks(selectedItem);
                                 }}
-                                className="p-1.5 bg-indigo-50 text-indigo-500 rounded-lg hover:bg-indigo-100 transition-colors"
+                                className="p-1.5 bg-indigo-50 text-indigo-500 rounded-lg hover:bg-indigo-100 transition-colors z-10 relative"
                                 title="Visual Stock Map"
                               >
                                 <ExternalLink className="w-4 h-4" />
                               </button>
                             )}
-                            <ChevronDown className="w-4 h-4 text-slate-300" />
                           </div>
                         </div>
 
@@ -3505,6 +3519,19 @@ const BookingFormModal = ({
                         </div>
                       </div>
                       <div className="md:col-span-1 space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">GST Number (Optional)</label>
+                        <div className="group relative">
+                          <input
+                            type="text"
+                            name="gstNumber"
+                            value={formData.gstNumber}
+                            onChange={handleChange}
+                            placeholder="Enter Guest GST Number"
+                            className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 focus:bg-white transition-all outline-none font-bold text-slate-700 text-sm"
+                          />
+                        </div>
+                      </div>
+                      <div className="md:col-span-1 space-y-1">
                         <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Booking Source</label>
                         <div className="group relative">
                           <ExternalLink className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
@@ -4006,6 +4033,7 @@ const Bookings = () => {
     guestName: "",
     guestMobile: "",
     guestEmail: "",
+    gstNumber: "",
     room_type_id: "", // Added for Soft Allocation
     roomNumbers: [],
     checkIn: "",
@@ -4097,6 +4125,7 @@ const Bookings = () => {
       guestName: "",
       guestMobile: "",
       guestEmail: "",
+      gstNumber: "",
       room_type_id: rtObj ? String(rtObj.id) : "",
       roomNumbers: [],
       checkIn: formattedCheckIn,
@@ -5524,6 +5553,7 @@ const Bookings = () => {
             guest_name: formData.guestName,
             guest_mobile: formData.guestMobile,
             guest_email: formData.guestEmail,
+            gst_number: formData.gstNumber,
             check_in: formData.checkIn,
             check_out: formData.checkOut,
             adults: parseInt(item.adults),
@@ -5545,6 +5575,7 @@ const Bookings = () => {
         guestName: "",
         guestMobile: "",
         guestEmail: "",
+        gstNumber: "",
         room_type_id: "",
         roomNumbers: [],
         checkIn: "",

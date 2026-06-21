@@ -67,6 +67,11 @@ function formatCurrency(n) {
   return `₹${Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}`;
 }
 
+function formatReportSum(val) {
+  if (!val || val === 0) return "₹ -";
+  return `₹ ${Number(val).toLocaleString("en-IN", { minimumFractionDigits: 2 })}`;
+}
+
 function todayISO() {
   const d = new Date();
   const year = d.getFullYear();
@@ -225,6 +230,7 @@ export default function DayAudit() {
   const [selectedAudit, setSelectedAudit] = useState(null);
   const [historicalTransactions, setHistoricalTransactions] = useState([]);
   const [reportLoading, setReportLoading] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
 
   // Open Day form
   const [openForm, setOpenForm] = useState({ 
@@ -325,6 +331,22 @@ export default function DayAudit() {
       } else {
         setChecklist(null);
         setTransactions([]);
+        
+        // Auto-fill opening balance from previous day's closing balance
+        if (historyRes.data && historyRes.data.length > 0) {
+          const lastAudit = historyRes.data[0];
+          setOpenForm(prev => ({
+            ...prev,
+            opening_cash_balance: lastAudit.closing_cash_balance !== null ? lastAudit.closing_cash_balance : "",
+            opening_account_balance: lastAudit.closing_account_balance !== null ? lastAudit.closing_account_balance : ""
+          }));
+        } else {
+          setOpenForm(prev => ({
+            ...prev,
+            opening_cash_balance: "",
+            opening_account_balance: ""
+          }));
+        }
       }
     } catch (err) {
       console.error("Day audit fetch error:", err);
@@ -434,9 +456,10 @@ export default function DayAudit() {
     setReportLoading(true);
     try {
       const txRes = await API.get(`/day-audit/${audit.id}/transactions`);
+      console.log("VIEWING REPORT FOR:", audit);
       setSelectedAudit(audit);
       setHistoricalTransactions(txRes.data || []);
-      setActiveTab("report");
+      setShowReportModal(true);
     } catch (err) {
       toast.error("Failed to load audit transactions");
     } finally {
@@ -583,7 +606,7 @@ export default function DayAudit() {
           }
         `}
       </style>
-      <div id="print-root" className={`max-w-6xl mx-auto space-y-6 pb-10 ${showVoucherSlip ? "print-voucher-active" : ""} ${activeTab === "report" ? "print-report-active" : ""}`}>
+      <div id="print-root" className={`max-w-6xl mx-auto space-y-6 pb-10 ${showVoucherSlip ? "print-voucher-active" : ""} ${showReportModal ? "print-report-active" : ""}`}>
 
         {/* ── Header ── */}
         <div className="flex items-start justify-between">
@@ -627,18 +650,7 @@ export default function DayAudit() {
           >
             Audit History
           </button>
-          {selectedAudit && (
-            <button
-              onClick={() => setActiveTab("report")}
-              className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${
-                activeTab === "report" 
-                  ? "bg-white text-indigo-600 shadow-sm" 
-                  : "text-gray-500 hover:text-gray-700"
-              }`}
-            >
-              Detailed Report
-            </button>
-          )}
+
         </div>
 
         {/* ── Tab: Today's Audit ── */}
@@ -905,18 +917,6 @@ export default function DayAudit() {
                   </div>
 
                   <div className="flex items-center gap-6 text-sm">
-                    <div className="text-center hidden md:block">
-                      <p className="text-xs text-gray-400">Room Revenue</p>
-                      <p className="font-semibold text-gray-700">{formatCurrency(audit.total_room_revenue)}</p>
-                    </div>
-                    <div className="text-center hidden md:block">
-                      <p className="text-xs text-gray-400">Food Revenue</p>
-                      <p className="font-semibold text-gray-700">{formatCurrency(audit.total_food_revenue)}</p>
-                    </div>
-                    <div className="text-center hidden md:block">
-                      <p className="text-xs text-gray-400">GST Collected</p>
-                      <p className="font-semibold text-indigo-600">{formatCurrency(audit.total_gst_collected)}</p>
-                    </div>
                     <div className="text-center">
                       <p className="text-xs text-gray-400">Rooms</p>
                       <p className="font-semibold text-gray-700">{audit.rooms_occupied}</p>
@@ -940,239 +940,619 @@ export default function DayAudit() {
       </div>
     )}
 
-        {/* ── Tab: Detailed Report ── */}
-        {activeTab === "report" && selectedAudit && (
-          <div className="space-y-6 animate-in fade-in duration-500 print-area">
-            {/* Report Header */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 flex items-center justify-between">
-              <div>
-                <h3 className="text-2xl font-black text-gray-800 tracking-tight flex items-center gap-3">
-                  <History className="text-indigo-600" size={28} />
-                  Audit Report: {formatDate(selectedAudit.business_date)}
-                  {selectedAudit.status === "open" && (
-                    <span className="ml-2 px-2 py-0.5 bg-emerald-500 text-white text-[10px] font-black uppercase rounded-md animate-pulse">
-                      LIVE
-                    </span>
-                  )}
-                </h3>
-                <div className="flex items-center gap-4 mt-1">
-                  <span className="text-xs font-bold px-2 py-0.5 bg-gray-100 text-gray-600 rounded uppercase">ID: #{selectedAudit.id}</span>
-                  <span className="text-xs text-gray-400">Opened: {formatTime(selectedAudit.opened_at)}</span>
-                  {selectedAudit.closed_at && <span className="text-xs text-gray-400">Closed: {formatTime(selectedAudit.closed_at)}</span>}
+        {/* ── MODAL: Detailed Report ── */}
+        {showReportModal && selectedAudit && (() => {
+          const processedTxList = [...historicalTransactions]
+            .sort((a, b) => new Date(a.entry_date) - new Date(b.entry_date))
+            .map(tx => {
+              let bankInflow = 0;
+              let cashInflow = 0;
+              let bankOutflow = 0;
+              let cashOutflow = 0;
+
+              tx.lines?.forEach(line => {
+                const debitName = line.debit?.toLowerCase() || "";
+                const creditName = line.credit?.toLowerCase() || "";
+
+                if (debitName.includes("cash") && !debitName.includes("bank")) {
+                  cashInflow += line.amount;
+                } else if (debitName.includes("bank") || debitName.includes("upi") || debitName.includes("online")) {
+                  bankInflow += line.amount;
+                }
+
+                if (creditName.includes("cash") && !creditName.includes("bank")) {
+                  cashOutflow += line.amount;
+                } else if (creditName.includes("bank") || creditName.includes("upi") || creditName.includes("online")) {
+                  bankOutflow += line.amount;
+                }
+              });
+
+              let particulars = tx.description || "General Transaction";
+              const debitLedger = tx.lines?.[0]?.debit;
+              const creditLedger = tx.lines?.[0]?.credit;
+              
+              const type = tx.reference_type?.toLowerCase() || "";
+              if (type === "expense" || type === "purchase_payment" || type === "vendor_payment") {
+                particulars = debitLedger || tx.description || "Expense Account";
+              } else if (type === "purchase") {
+                particulars = debitLedger || tx.description || "Purchase Account";
+              } else if (type === "checkout") {
+                particulars = creditLedger || tx.description || "Sales/Room Billing";
+              } else if (type === "payment") {
+                particulars = creditLedger || tx.description || "Receipt Account";
+              } else {
+                particulars = tx.description || "Journal Entry";
+              }
+
+              return {
+                id: tx.id,
+                rawDate: tx.entry_date,
+                date: formatDayBookDate(tx.entry_date),
+                particulars: particulars.toUpperCase(),
+                reference_type: tx.reference_type,
+                entry_number: tx.entry_number,
+                bankInflow,
+                cashInflow,
+                bankOutflow,
+                cashOutflow,
+                totalInflow: bankInflow + cashInflow,
+                totalOutflow: bankOutflow + cashOutflow,
+                isContra: tx.reference_type?.toLowerCase() === "contra",
+                rawTx: tx
+              };
+            });
+
+          const incomeTransactions = processedTxList.filter(tx => tx.totalInflow > 0);
+          const totalInflowSum = incomeTransactions.reduce((sum, tx) => sum + tx.totalInflow, 0);
+
+          const expenseTransactions = processedTxList.filter(tx => tx.totalOutflow > 0);
+          const totalOutflowSum = expenseTransactions.reduce((sum, tx) => sum + tx.totalOutflow, 0);
+
+          return (
+            <>
+              {/* Modal Dialog */}
+              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 no-print overflow-y-auto">
+                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl overflow-hidden flex flex-col max-h-[90vh]">
+                  {/* Modal Header */}
+                  <div className="p-6 border-b border-slate-200 flex items-center justify-between bg-slate-900 text-white no-print">
+                    <div>
+                      <h3 className="text-xl font-bold flex items-center gap-2">
+                        <History size={22} className="text-slate-300" />
+                        Audit Report: {formatDate(selectedAudit.business_date)}
+                        {selectedAudit.status === "open" && (
+                          <span className="ml-2 px-2 py-0.5 bg-emerald-500 text-white text-[10px] font-black uppercase rounded-md animate-pulse">
+                            LIVE
+                          </span>
+                        )}
+                      </h3>
+                      <p className="text-[10px] text-slate-400 mt-1 uppercase font-semibold">
+                        Branch Code: {activeBranchId} | ID: #{selectedAudit.id}
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button 
+                        onClick={() => window.print()}
+                        className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all border border-slate-700 flex items-center gap-1.5 shadow-sm"
+                      >
+                        <Printer size={14} /> Print Report
+                      </button>
+                      <button 
+                        onClick={() => setShowReportModal(false)} 
+                        className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all border border-slate-700 shadow-sm"
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Modal Body */}
+                  <div className="p-6 overflow-y-auto space-y-6 bg-slate-50/30 flex-1">
+                    {/* 1. Summary Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 no-print">
+                      {/* Revenue Breakdown */}
+                      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm text-xs">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2.5">Revenue Breakdown</p>
+                        <div className="space-y-2">
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">Room Revenue</span>
+                            <span className="font-bold text-slate-800">{formatCurrency(selectedAudit.total_room_revenue)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">Food Revenue</span>
+                            <span className="font-bold text-slate-800">{formatCurrency(selectedAudit.total_food_revenue)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">Service Revenue</span>
+                            <span className="font-bold text-slate-800">{formatCurrency(selectedAudit.total_service_revenue)}</span>
+                          </div>
+                          <div className="pt-2 border-t border-dashed border-slate-200 flex justify-between font-bold text-slate-900">
+                            <span>Total Revenue</span>
+                            <span>{formatCurrency((selectedAudit.total_room_revenue || 0) + (selectedAudit.total_food_revenue || 0) + (selectedAudit.total_service_revenue || 0))}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Balance Reconciliation */}
+                      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm text-xs">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2.5">Balance Reconciliation</p>
+                        <div className="space-y-2">
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">Total Opening</span>
+                            <span className="font-bold text-slate-800">
+                              {formatCurrency((selectedAudit.opening_cash_balance || 0) + (selectedAudit.opening_account_balance || 0))}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">Expected Closing</span>
+                            <span className="font-bold text-slate-800">
+                              {formatCurrency((selectedAudit.system_expected_cash || 0) + (selectedAudit.system_expected_account || 0))}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">Actual Closing</span>
+                            <span className={`font-bold ${selectedAudit.status === 'open' ? 'text-slate-400 italic' : 'text-emerald-600'}`}>
+                              {selectedAudit.status === 'open' ? 'In Progress' : formatCurrency((selectedAudit.closing_cash_balance || 0) + (selectedAudit.closing_account_balance || 0))}
+                            </span>
+                          </div>
+                          <div className="pt-2 border-t border-dashed border-slate-200 flex justify-between font-bold text-slate-900">
+                            <span>Difference</span>
+                            {selectedAudit.status === 'open' ? (
+                              <span className="text-slate-400 italic font-normal">N/A</span>
+                            ) : (
+                              (() => {
+                                const diff = ((selectedAudit.closing_cash_balance || 0) + (selectedAudit.closing_account_balance || 0)) - 
+                                             ((selectedAudit.system_expected_cash || 0) + (selectedAudit.system_expected_account || 0));
+                                return (
+                                  <span className={diff === 0 ? "text-emerald-600" : "text-rose-600"}>
+                                    {formatCurrency(diff)}
+                                  </span>
+                                );
+                              })()
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Other Metrics */}
+                      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm text-xs">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2.5">Other Metrics</p>
+                        <div className="space-y-2">
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">GST Collected</span>
+                            <span className="font-bold text-slate-800">{formatCurrency(selectedAudit.total_gst_collected)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">Inv. Purchases</span>
+                            <span className="font-bold text-rose-500">{formatCurrency(selectedAudit.total_purchases)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">Daily Expenses</span>
+                            <span className="font-bold text-rose-500">{formatCurrency(selectedAudit.total_expenses)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {selectedAudit.override_reason && (
+                      <div className="p-3 bg-amber-50 rounded-lg text-xs text-amber-800 border border-amber-100 no-print">
+                        <strong>Balance Override Reason:</strong> {selectedAudit.override_reason}
+                      </div>
+                    )}
+
+                    {/* CASH BOOK BANNER */}
+                    <div className="bg-[#1b365d] text-white p-5 rounded-xl relative overflow-hidden no-print mb-6 border border-[#1b365d] shadow-sm">
+                      <div className="absolute right-4 top-2 text-3xl font-black opacity-10 select-none pointer-events-none tracking-widest font-mono">
+                        CASH BOOK
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 relative z-10">
+                        {/* INFLOWS SUMMARY */}
+                        <div>
+                          <h4 className="text-[10px] font-black tracking-widest text-slate-300 uppercase mb-3 border-b border-blue-900/50 pb-1">Inflows Summary</h4>
+                          <div className="space-y-2 text-xs">
+                            <div className="flex justify-between border-b border-blue-900/30 pb-1">
+                              <span className="text-slate-200 font-medium">A/C RECEIVED</span>
+                              <span className="font-mono font-bold">
+                                {formatReportSum(incomeTransactions.reduce((sum, tx) => sum + tx.bankInflow, 0))}
+                              </span>
+                            </div>
+                            <div className="flex justify-between border-b border-blue-900/30 pb-1">
+                              <span className="text-slate-200 font-medium">CASH RECEIVABLES</span>
+                              <span className="font-mono font-bold">
+                                {formatReportSum(incomeTransactions.reduce((sum, tx) => sum + tx.cashInflow, 0))}
+                              </span>
+                            </div>
+                            <div className="flex justify-between pt-1.5 font-black text-sm">
+                              <span className="text-white">TOTAL COLLECTION AMOUNT</span>
+                              <span className="font-mono text-emerald-400">
+                                {formatReportSum(totalInflowSum)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* OUTFLOWS SUMMARY */}
+                        <div>
+                          <h4 className="text-[10px] font-black tracking-widest text-slate-300 uppercase mb-3 border-b border-blue-900/50 pb-1">Outflows Summary</h4>
+                          <div className="space-y-2 text-xs">
+                            <div className="flex justify-between border-b border-blue-900/30 pb-1">
+                              <span className="text-slate-200 font-medium">A/C PAID</span>
+                              <span className="font-mono font-bold">
+                                {formatReportSum(expenseTransactions.reduce((sum, tx) => sum + tx.bankOutflow, 0))}
+                              </span>
+                            </div>
+                            <div className="flex justify-between border-b border-blue-900/30 pb-1">
+                              <span className="text-slate-200 font-medium">CASH PAID</span>
+                              <span className="font-mono font-bold">
+                                {formatReportSum(expenseTransactions.reduce((sum, tx) => sum + tx.cashOutflow, 0))}
+                              </span>
+                            </div>
+                            <div className="flex justify-between pt-1.5 font-black text-sm">
+                              <span className="text-white">TOTAL EXPENSE AMOUNT</span>
+                              <span className="font-mono text-rose-400">
+                                {formatReportSum(totalOutflowSum)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* INCOMES Section */}
+                    <div className="border border-slate-200 rounded-xl overflow-hidden no-print">
+                      <div className="bg-slate-100 text-slate-800 font-bold text-center py-2 uppercase tracking-widest text-xs border-b border-slate-200">
+                        INCOMES
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs text-slate-900">
+                          <thead>
+                            <tr className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
+                              <th className="px-4 py-2.5 w-[15%] text-left uppercase font-bold border-r border-slate-200">Date</th>
+                              <th className="px-4 py-2.5 w-[40%] text-left uppercase font-bold border-r border-slate-200">Discription</th>
+                              <th className="px-4 py-2.5 w-[14%] text-right uppercase font-bold border-r border-slate-200">A/C Received</th>
+                              <th className="px-4 py-2.5 w-[14%] text-right uppercase font-bold border-r border-slate-200">Cash Received</th>
+                              <th className="px-4 py-2.5 w-[13%] text-right uppercase font-bold border-r border-slate-200">Total Amount</th>
+                              <th className="px-4 py-2.5 w-[4%] text-center uppercase font-bold no-print">Vch</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 bg-white">
+                            {incomeTransactions.map(tx => (
+                              <tr key={tx.id} className="hover:bg-slate-50/50 transition-colors">
+                                <td className="px-4 py-3 whitespace-nowrap font-mono text-[11px] border-r border-slate-200 text-slate-600">{tx.date}</td>
+                                <td className="px-4 py-3 font-semibold text-slate-800 border-r border-slate-200 uppercase">{tx.particulars}</td>
+                                <td className="px-4 py-3 text-right font-mono text-[11px] border-r border-slate-200 text-slate-600">
+                                  {tx.bankInflow > 0 ? `₹ ${tx.bankInflow.toLocaleString("en-IN", { minimumFractionDigits: 2 })}` : "₹ -"}
+                                </td>
+                                <td className="px-4 py-3 text-right font-mono text-[11px] border-r border-slate-200 text-slate-600">
+                                  {tx.cashInflow > 0 ? `₹ ${tx.cashInflow.toLocaleString("en-IN", { minimumFractionDigits: 2 })}` : "₹ -"}
+                                </td>
+                                <td className="px-4 py-3 text-right font-mono text-[11px] border-r border-slate-200 font-bold text-slate-900">
+                                  ₹ {tx.totalInflow.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                                </td>
+                                <td className="px-4 py-3 text-center no-print">
+                                  <button
+                                    onClick={() => {
+                                      setSelectedVoucherTx(tx.rawTx);
+                                      setShowVoucherSlip(true);
+                                    }}
+                                    className="text-indigo-600 hover:text-indigo-800 p-1 rounded hover:bg-indigo-50 transition-colors"
+                                    title="View Voucher"
+                                  >
+                                    <Printer size={12} />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                            {incomeTransactions.length === 0 && (
+                              <tr>
+                                <td colSpan="6" className="px-4 py-8 text-center text-slate-400 italic bg-slate-50/5">No income transactions recorded on this day.</td>
+                              </tr>
+                            )}
+                          </tbody>
+                          <tfoot>
+                            <tr className="bg-slate-50 font-black border-t-2 border-slate-300">
+                              <td colSpan="2" className="px-4 py-3 text-right uppercase tracking-wider text-slate-700 border-r border-slate-200">Total Incomes:</td>
+                              <td className="px-4 py-3 text-right font-mono text-[11px] font-black text-slate-900 border-r border-slate-200">
+                                ₹ {incomeTransactions.reduce((sum, tx) => sum + tx.bankInflow, 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                              </td>
+                              <td className="px-4 py-3 text-right font-mono text-[11px] font-black text-slate-900 border-r border-slate-200">
+                                ₹ {incomeTransactions.reduce((sum, tx) => sum + tx.cashInflow, 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                              </td>
+                              <td className="px-4 py-3 text-right font-mono text-[12px] font-black text-emerald-700 border-r border-slate-200">
+                                ₹ {totalInflowSum.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                              </td>
+                              <td className="no-print"></td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* EXPENSES Section */}
+                    <div className="border border-slate-200 rounded-xl overflow-hidden no-print">
+                      <div className="bg-slate-100 text-slate-800 font-bold text-center py-2 uppercase tracking-widest text-xs border-b border-slate-200">
+                        EXPENSES
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs text-slate-900">
+                          <thead>
+                            <tr className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
+                              <th className="px-4 py-2.5 w-[15%] text-left uppercase font-bold border-r border-slate-200">Date</th>
+                              <th className="px-4 py-2.5 w-[40%] text-left uppercase font-bold border-r border-slate-200">Discription</th>
+                              <th className="px-4 py-2.5 w-[14%] text-right uppercase font-bold border-r border-slate-200">A/C Paid</th>
+                              <th className="px-4 py-2.5 w-[14%] text-right uppercase font-bold border-r border-slate-200">Cash Paid</th>
+                              <th className="px-4 py-2.5 w-[13%] text-right uppercase font-bold border-r border-slate-200">Total Amount</th>
+                              <th className="px-4 py-2.5 w-[4%] text-center uppercase font-bold no-print">Vch</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 bg-white">
+                            {expenseTransactions.map(tx => (
+                              <tr key={tx.id} className="hover:bg-slate-50/50 transition-colors">
+                                <td className="px-4 py-3 whitespace-nowrap font-mono text-[11px] border-r border-slate-200 text-slate-600">{tx.date}</td>
+                                <td className="px-4 py-3 font-semibold text-slate-800 border-r border-slate-200 uppercase">{tx.particulars}</td>
+                                <td className="px-4 py-3 text-right font-mono text-[11px] border-r border-slate-200 text-slate-600">
+                                  {tx.bankOutflow > 0 ? `₹ ${tx.bankOutflow.toLocaleString("en-IN", { minimumFractionDigits: 2 })}` : "₹ -"}
+                                </td>
+                                <td className="px-4 py-3 text-right font-mono text-[11px] border-r border-slate-200 text-slate-600">
+                                  {tx.cashOutflow > 0 ? `₹ ${tx.cashOutflow.toLocaleString("en-IN", { minimumFractionDigits: 2 })}` : "₹ -"}
+                                </td>
+                                <td className="px-4 py-3 text-right font-mono text-[11px] border-r border-slate-200 font-bold text-slate-900">
+                                  ₹ {tx.totalOutflow.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                                </td>
+                                <td className="px-4 py-3 text-center no-print">
+                                  <button
+                                    onClick={() => {
+                                      setSelectedVoucherTx(tx.rawTx);
+                                      setShowVoucherSlip(true);
+                                    }}
+                                    className="text-indigo-600 hover:text-indigo-855 p-1 rounded hover:bg-indigo-50 transition-colors"
+                                    title="View Voucher"
+                                  >
+                                    <Printer size={12} />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                            {expenseTransactions.length === 0 && (
+                              <tr>
+                                <td colSpan="6" className="px-4 py-8 text-center text-slate-400 italic bg-slate-50/5">No expense transactions recorded on this day.</td>
+                              </tr>
+                            )}
+                          </tbody>
+                          <tfoot>
+                            <tr className="bg-slate-50 font-black border-t-2 border-slate-300">
+                              <td colSpan="2" className="px-4 py-3 text-right uppercase tracking-wider text-slate-700 border-r border-slate-200">Total Expenses:</td>
+                              <td className="px-4 py-3 text-right font-mono text-[11px] font-black text-slate-900 border-r border-slate-200">
+                                ₹ {expenseTransactions.reduce((sum, tx) => sum + tx.bankOutflow, 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                              </td>
+                              <td className="px-4 py-3 text-right font-mono text-[11px] font-black text-slate-900 border-r border-slate-200">
+                                ₹ {expenseTransactions.reduce((sum, tx) => sum + tx.cashOutflow, 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                              </td>
+                              <td className="px-4 py-3 text-right font-mono text-[12px] font-black text-rose-700 border-r border-slate-200">
+                                ₹ {totalOutflowSum.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                              </td>
+                              <td className="no-print"></td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* NET SUMMARY Section */}
+                    <div className="bg-slate-900 text-white p-4 rounded-xl border border-slate-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 text-xs no-print">
+                      <div className="font-black uppercase tracking-wider text-slate-300">Net Day Summary</div>
+                      <div className="flex flex-wrap gap-6 w-full sm:w-auto justify-between sm:justify-end">
+                        <div className="flex flex-col items-end">
+                          <span className="text-[9px] uppercase text-slate-400 font-bold">Total Collection</span>
+                          <span className="font-mono text-sm font-black text-emerald-400">
+                            ₹ {totalInflowSum.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                        <div className="flex flex-col items-end">
+                          <span className="text-[9px] uppercase text-slate-400 font-bold">Total Expenses</span>
+                          <span className="font-mono text-sm font-black text-rose-400">
+                            ₹ {totalOutflowSum.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                        <div className="flex flex-col items-end border-l border-slate-800 pl-6 sm:pl-8">
+                          <span className="text-[9px] uppercase text-slate-200 font-black">Net Change</span>
+                          <span className={`font-mono text-sm font-black ${(totalInflowSum - totalOutflowSum) >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                            ₹ {(totalInflowSum - totalOutflowSum).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3 no-print">
+                    <button
+                      onClick={() => setShowReportModal(false)}
+                      className="px-5 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold rounded-xl text-xs transition-colors"
+                    >
+                      Close
+                    </button>
+                  </div>
                 </div>
               </div>
-              <div className="flex gap-3 no-print">
-                <button 
-                  onClick={() => window.print()}
-                  className="px-6 py-2.5 border border-gray-200 rounded-xl text-gray-600 font-bold hover:bg-gray-50 transition-all flex items-center gap-2"
-                >
-                  Print Report
-                </button>
-                <button 
-                  onClick={() => setActiveTab("history")}
-                  className="px-6 py-2.5 bg-gray-100 text-gray-600 font-bold rounded-xl hover:bg-gray-200 transition-all"
-                >
-                  Back to History
-                </button>
-              </div>
-            </div>
 
-            <div className="space-y-8">
-              {/* 1. Summary Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
-                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">Revenue Breakdown</p>
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="text-gray-500">Room Revenue</span>
-                      <span className="font-bold text-gray-800">{formatCurrency(selectedAudit.total_room_revenue)}</span>
-                    </div>
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="text-gray-500">Food Revenue</span>
-                      <span className="font-bold text-gray-800">{formatCurrency(selectedAudit.total_food_revenue)}</span>
-                    </div>
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="text-gray-500">Service Revenue</span>
-                      <span className="font-bold text-gray-800">{formatCurrency(selectedAudit.total_service_revenue)}</span>
-                    </div>
-                    <div className="pt-3 border-t border-dashed flex justify-between items-center text-base">
-                      <span className="font-bold text-gray-700">Total Revenue</span>
-                      <span className="font-black text-indigo-600">{formatCurrency(selectedAudit.total_room_revenue + selectedAudit.total_food_revenue + selectedAudit.total_service_revenue)}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
-                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">Cash Reconciliation</p>
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="text-gray-500">Opening Cash</span>
-                      <span className="font-bold text-gray-800">{formatCurrency(selectedAudit.opening_cash_balance)}</span>
-                    </div>
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="text-gray-500">Expected Closing</span>
-                      <span className="font-bold text-gray-800">{formatCurrency(selectedAudit.system_expected_cash)}</span>
-                    </div>
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="text-gray-500">Actual Closing</span>
-                      <span className={`font-bold ${selectedAudit.status === 'open' ? 'text-gray-400 italic' : 'text-emerald-600'}`}>
-                        {selectedAudit.status === 'open' ? 'In Progress' : formatCurrency(selectedAudit.closing_cash_balance)}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
-                  <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-4">Account Reconciliation</p>
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="text-gray-500">Opening Account</span>
-                      <span className="font-bold text-gray-800">{formatCurrency(selectedAudit.opening_account_balance)}</span>
-                    </div>
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="text-gray-500">Expected Closing</span>
-                      <span className="font-bold text-gray-800">{formatCurrency(selectedAudit.system_expected_account)}</span>
-                    </div>
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="text-gray-500">Actual Closing</span>
-                      <span className={`font-bold ${selectedAudit.status === 'open' ? 'text-gray-400 italic' : 'text-indigo-600'}`}>
-                        {selectedAudit.status === 'open' ? 'In Progress' : formatCurrency(selectedAudit.closing_account_balance)}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
-                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">Other Metrics</p>
-                  <div className="space-y-3 text-sm">
-                    <div className="flex justify-between items-center">
-                      <span className="text-gray-500">GST Collected</span>
-                      <span className="font-bold text-indigo-500">{formatCurrency(selectedAudit.total_gst_collected)}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-gray-500">Inv. Purchases</span>
-                      <span className="font-bold text-rose-500">{formatCurrency(selectedAudit.total_purchases)}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-gray-500">Daily Expenses</span>
-                      <span className="font-bold text-rose-500">{formatCurrency(selectedAudit.total_expenses)}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-gray-500">Rooms Occupied</span>
-                      <span className="font-bold text-gray-800">{selectedAudit.rooms_occupied}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {selectedAudit.override_reason && (
-                <div className="p-4 bg-amber-50 rounded-xl text-sm text-amber-800 leading-relaxed border border-amber-100 no-print">
-                  <strong>Balance Override Reason:</strong> {selectedAudit.override_reason}
-                </div>
-              )}
-
-              {/* 2. Unified Day Book Ledger Table */}
-              <div className="bg-white p-8 md:p-12 rounded-2xl border border-gray-100 shadow-sm print-daybook-area text-black font-sans">
-                {/* Traditional Ledger Header */}
-                <div className="text-center pb-6 border-b-2 border-gray-800">
-                  <h2 className="text-2xl font-black uppercase tracking-wider text-gray-900">{activeBranch?.name || "ORCHID RESORT"}</h2>
-                  <p className="text-xs font-bold text-gray-700 mt-1 uppercase">{activeBranch?.location || "Resort Premises"}</p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Contact: {activeBranch?.contact_number || "9345589917"} | E-Mail: {activeBranch?.email || "orchidresort@gmail.com"}
+              {/* Hidden Printable Report for window.print() */}
+              <div className="hidden print:block absolute inset-0 bg-white print-daybook-area text-black p-4">
+                <div className="text-center py-4 border-b border-slate-200 text-slate-900">
+                  <h2 className="text-lg font-black uppercase tracking-wider">{activeBranch?.name || "ORCHID RESORT"}</h2>
+                  <p className="text-xs font-bold text-slate-500 uppercase">{activeBranch?.location || "Resort Premises"}</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">
+                    For business date: <span className="font-bold text-slate-700">{formatDayBookDate(selectedAudit.business_date)}</span>
                   </p>
-                  
-                  <h3 className="text-xl font-extrabold mt-4 tracking-wider text-gray-800">Day Book</h3>
-                  <p className="text-xs font-bold text-gray-600 mt-1">For {formatDayBookDate(selectedAudit.business_date)}</p>
                 </div>
 
-                <div className="flex justify-between items-center text-[10px] font-bold text-gray-500 py-3 uppercase tracking-wider">
-                  <span>Branch Code: {activeBranchId}</span>
-                  <span>Page 1</span>
+                {/* Printable CASH BOOK BANNER */}
+                <div className="bg-[#1b365d] text-white p-5 rounded-xl relative overflow-hidden border border-[#1b365d] my-4 shadow-sm">
+                  <div className="absolute right-4 top-2 text-3xl font-black opacity-10 select-none pointer-events-none tracking-widest font-mono">
+                    CASH BOOK
+                  </div>
+                  <div className="grid grid-cols-2 gap-8 relative z-10">
+                    {/* INFLOWS SUMMARY */}
+                    <div>
+                      <h4 className="text-[10px] font-black tracking-widest text-slate-300 uppercase mb-3 border-b border-blue-900/50 pb-1">Inflows Summary</h4>
+                      <div className="space-y-2 text-xs">
+                        <div className="flex justify-between border-b border-blue-900/30 pb-1">
+                          <span className="text-slate-200 font-medium">A/C RECEIVED</span>
+                          <span className="font-mono font-bold">
+                            {formatReportSum(incomeTransactions.reduce((sum, tx) => sum + tx.bankInflow, 0))}
+                          </span>
+                        </div>
+                        <div className="flex justify-between border-b border-blue-900/30 pb-1">
+                          <span className="text-slate-200 font-medium">CASH RECEIVABLES</span>
+                          <span className="font-mono font-bold">
+                            {formatReportSum(incomeTransactions.reduce((sum, tx) => sum + tx.cashInflow, 0))}
+                          </span>
+                        </div>
+                        <div className="flex justify-between pt-1.5 font-black text-sm">
+                          <span className="text-white">TOTAL COLLECTION AMOUNT</span>
+                          <span className="font-mono text-emerald-400">
+                            {formatReportSum(totalInflowSum)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* OUTFLOWS SUMMARY */}
+                    <div>
+                      <h4 className="text-[10px] font-black tracking-widest text-slate-300 uppercase mb-3 border-b border-blue-900/50 pb-1">Outflows Summary</h4>
+                      <div className="space-y-2 text-xs">
+                        <div className="flex justify-between border-b border-blue-900/30 pb-1">
+                          <span className="text-slate-200 font-medium">A/C PAID</span>
+                          <span className="font-mono font-bold">
+                            {formatReportSum(expenseTransactions.reduce((sum, tx) => sum + tx.bankOutflow, 0))}
+                          </span>
+                        </div>
+                        <div className="flex justify-between border-b border-blue-900/30 pb-1">
+                          <span className="text-slate-200 font-medium">CASH PAID</span>
+                          <span className="font-mono font-bold">
+                            {formatReportSum(expenseTransactions.reduce((sum, tx) => sum + tx.cashOutflow, 0))}
+                          </span>
+                        </div>
+                        <div className="flex justify-between pt-1.5 font-black text-sm">
+                          <span className="text-white">TOTAL EXPENSE AMOUNT</span>
+                          <span className="font-mono text-rose-400">
+                            {formatReportSum(totalOutflowSum)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
-                {/* Day Book Table View */}
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs font-sans">
+                {/* INCOMES Section */}
+                <div className="border border-slate-200 rounded-xl overflow-hidden mt-6">
+                  <div className="bg-slate-100 text-slate-800 font-bold text-center py-1.5 uppercase tracking-widest text-[10px] border-b border-slate-200">
+                    INCOMES
+                  </div>
+                  <table className="w-full text-left text-xs text-slate-900">
                     <thead>
-                      <tr className="border-t-2 border-b-2 border-black font-extrabold text-gray-900">
-                        <th className="px-4 py-3 text-left">Date</th>
-                        <th className="px-4 py-3 text-left">Particulars</th>
-                        <th className="px-4 py-3 text-left">Vch Type</th>
-                        <th className="px-4 py-3 text-left">Vch No.</th>
-                        <th className="px-4 py-3 text-right">
-                          Debit Amount
-                          <span className="block text-[9px] font-normal text-gray-500 lowercase mt-0.5">inwards qty</span>
-                        </th>
-                        <th className="px-4 py-3 text-right">
-                          Credit Amount
-                          <span className="block text-[9px] font-normal text-gray-500 lowercase mt-0.5">outwards qty</span>
-                        </th>
-                        <th className="px-4 py-3 text-right no-print">Actions</th>
+                      <tr className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
+                        <th className="px-4 py-2 w-[15%] text-left uppercase font-bold border-r border-slate-200">Date</th>
+                        <th className="px-4 py-2 w-[45%] text-left uppercase font-bold border-r border-slate-200">Discription</th>
+                        <th className="px-4 py-2 w-[14%] text-right uppercase font-bold border-r border-slate-200">A/C Received</th>
+                        <th className="px-4 py-2 w-[14%] text-right uppercase font-bold border-r border-slate-200">Cash Received</th>
+                        <th className="px-4 py-2 w-[12%] text-right uppercase font-bold border-r border-slate-200">Total Amount</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-200">
-                      {[...historicalTransactions]
-                        .sort((a, b) => new Date(a.entry_date) - new Date(b.entry_date))
-                        .map(tx => {
-                          const row = mapTransactionToDayBook(tx);
-                          return (
-                            <tr key={tx.id} className="hover:bg-gray-50/50">
-                              <td className="px-4 py-3 whitespace-nowrap text-gray-600 font-mono text-[11px]">{row.date}</td>
-                              <td className="px-4 py-3 font-bold text-gray-900">{row.particulars}</td>
-                              <td className="px-4 py-3 font-semibold text-gray-700">{row.vchType}</td>
-                              <td className="px-4 py-3 text-gray-600 font-mono text-[11px]">{row.vchNo}</td>
-                              <td className="px-4 py-3 text-right font-bold text-gray-900 font-mono text-[11px]">
-                                {row.debitAmount > 0 ? Number(row.debitAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 }) : ""}
-                              </td>
-                              <td className="px-4 py-3 text-right font-bold text-gray-900 font-mono text-[11px]">
-                                {row.creditAmount > 0 ? Number(row.creditAmount).toLocaleString("en-IN", { minimumFractionDigits: 2 }) : ""}
-                              </td>
-                              <td className="px-4 py-3 text-right whitespace-nowrap text-sm no-print">
-                                <button
-                                  onClick={() => {
-                                    setSelectedVoucherTx(tx);
-                                    setShowVoucherSlip(true);
-                                  }}
-                                  className="inline-flex items-center gap-1.5 text-indigo-600 hover:text-indigo-800 font-semibold text-xs border border-indigo-100 hover:border-indigo-200 px-2 py-1 rounded-lg transition-colors bg-indigo-50/50"
-                                >
-                                  <Printer size={12} /> Voucher
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      {historicalTransactions.length === 0 && (
+                    <tbody className="divide-y divide-slate-100">
+                      {incomeTransactions.map(tx => (
+                        <tr key={tx.id}>
+                          <td className="px-4 py-2 whitespace-nowrap font-mono text-[11px] border-r border-slate-200 text-slate-600">{tx.date}</td>
+                          <td className="px-4 py-2 font-semibold text-slate-800 border-r border-slate-200 uppercase">{tx.particulars}</td>
+                          <td className="px-4 py-2 text-right font-mono text-[11px] border-r border-slate-200 text-slate-600">
+                            {tx.bankInflow > 0 ? `₹ ${tx.bankInflow.toLocaleString("en-IN", { minimumFractionDigits: 2 })}` : "₹ -"}
+                          </td>
+                          <td className="px-4 py-2 text-right font-mono text-[11px] border-r border-slate-200 text-slate-600">
+                            {tx.cashInflow > 0 ? `₹ ${tx.cashInflow.toLocaleString("en-IN", { minimumFractionDigits: 2 })}` : "₹ -"}
+                          </td>
+                          <td className="px-4 py-2 text-right font-mono text-[11px] border-r border-slate-200 font-bold text-slate-900">
+                            ₹ {tx.totalInflow.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                      ))}
+                      {incomeTransactions.length === 0 && (
                         <tr>
-                          <td colSpan="7" className="px-4 py-8 text-center text-gray-400 italic">No transactions recorded on this day.</td>
+                          <td colSpan="5" className="px-4 py-6 text-center text-slate-400 italic">No income transactions recorded on this day.</td>
                         </tr>
                       )}
                     </tbody>
                     <tfoot>
-                      <tr className="border-t-2 border-b-4 border-double border-black font-extrabold text-gray-900 bg-gray-50/30">
-                        <td colSpan="4" className="px-4 py-3 text-right uppercase tracking-wider text-xs">Total:</td>
-                        <td className="px-4 py-3 text-right font-black font-mono text-[12px]">
-                          {formatCurrency(
-                            [...historicalTransactions]
-                              .map(mapTransactionToDayBook)
-                              .reduce((sum, r) => sum + r.debitAmount, 0)
-                          )}
+                      <tr className="bg-slate-50 font-black border-t border-slate-300">
+                        <td colSpan="2" className="px-4 py-2 text-right uppercase tracking-wider text-xs border-r border-slate-200">Total Incomes:</td>
+                        <td className="px-4 py-2 text-right font-mono text-[11px] font-black text-slate-900 border-r border-slate-200">
+                          ₹ {incomeTransactions.reduce((sum, tx) => sum + tx.bankInflow, 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                         </td>
-                        <td className="px-4 py-3 text-right font-black font-mono text-[12px]">
-                          {formatCurrency(
-                            [...historicalTransactions]
-                              .map(mapTransactionToDayBook)
-                              .reduce((sum, r) => sum + r.creditAmount, 0)
-                          )}
+                        <td className="px-4 py-2 text-right font-mono text-[11px] font-black text-slate-900 border-r border-slate-200">
+                          ₹ {incomeTransactions.reduce((sum, tx) => sum + tx.cashInflow, 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                         </td>
-                        <td className="no-print"></td>
+                        <td className="px-4 py-2 text-right font-mono text-[11px] font-black text-slate-900">
+                          ₹ {totalInflowSum.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+
+                {/* EXPENSES Section */}
+                <div className="border border-slate-200 rounded-xl overflow-hidden mt-6">
+                  <div className="bg-slate-100 text-slate-800 font-bold text-center py-1.5 uppercase tracking-widest text-[10px] border-b border-slate-200">
+                    EXPENSES
+                  </div>
+                  <table className="w-full text-left text-xs text-slate-900">
+                    <thead>
+                      <tr className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
+                        <th className="px-4 py-2 w-[15%] text-left uppercase font-bold border-r border-slate-200">Date</th>
+                        <th className="px-4 py-2 w-[45%] text-left uppercase font-bold border-r border-slate-200">Discription</th>
+                        <th className="px-4 py-2 w-[14%] text-right uppercase font-bold border-r border-slate-200">A/C Paid</th>
+                        <th className="px-4 py-2 w-[14%] text-right uppercase font-bold border-r border-slate-200">Cash Paid</th>
+                        <th className="px-4 py-2 w-[12%] text-right uppercase font-bold border-r border-slate-200">Total Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {expenseTransactions.map(tx => (
+                        <tr key={tx.id}>
+                          <td className="px-4 py-2 whitespace-nowrap font-mono text-[11px] border-r border-slate-200 text-slate-600">{tx.date}</td>
+                          <td className="px-4 py-2 font-semibold text-slate-800 border-r border-slate-200 uppercase">{tx.particulars}</td>
+                          <td className="px-4 py-2 text-right font-mono text-[11px] border-r border-slate-200 text-slate-600">
+                            {tx.bankOutflow > 0 ? `₹ ${tx.bankOutflow.toLocaleString("en-IN", { minimumFractionDigits: 2 })}` : "₹ -"}
+                          </td>
+                          <td className="px-4 py-2 text-right font-mono text-[11px] border-r border-slate-200 text-slate-600">
+                            {tx.cashOutflow > 0 ? `₹ ${tx.cashOutflow.toLocaleString("en-IN", { minimumFractionDigits: 2 })}` : "₹ -"}
+                          </td>
+                          <td className="px-4 py-2 text-right font-mono text-[11px] border-r border-slate-200 font-bold text-slate-900">
+                            ₹ {tx.totalOutflow.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                      ))}
+                      {expenseTransactions.length === 0 && (
+                        <tr>
+                          <td colSpan="5" className="px-4 py-6 text-center text-slate-400 italic">No expense transactions recorded on this day.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                    <tfoot>
+                      <tr className="bg-slate-50 font-black border-t border-slate-300">
+                        <td colSpan="2" className="px-4 py-2 text-right uppercase tracking-wider text-xs border-r border-slate-200">Total Expenses:</td>
+                        <td className="px-4 py-2 text-right font-mono text-[11px] font-black text-slate-900 border-r border-slate-200">
+                          ₹ {expenseTransactions.reduce((sum, tx) => sum + tx.bankOutflow, 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="px-4 py-2 text-right font-mono text-[11px] font-black text-slate-900 border-r border-slate-200">
+                          ₹ {expenseTransactions.reduce((sum, tx) => sum + tx.cashOutflow, 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="px-4 py-2 text-right font-mono text-[11px] font-black text-slate-900">
+                          ₹ {totalOutflowSum.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                        </td>
                       </tr>
                     </tfoot>
                   </table>
                 </div>
               </div>
-            </div>
-          </div>
-        )}
+            </>
+          );
+        })()}
 
 
         {/* ── MODAL: Open Day ── */}
@@ -1398,17 +1778,14 @@ export default function DayAudit() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Category *</label>
-                    <select
+                    <input
+                      type="text"
+                      placeholder="Enter Category"
                       value={voucherForm.category}
                       onChange={e => setVoucherForm({ ...voucherForm, category: e.target.value })}
                       className="w-full border-2 border-gray-100 rounded-xl px-4 py-3 focus:border-indigo-400 outline-none transition-all text-sm"
                       required
-                    >
-                      <option value="">Select Category</option>
-                      {BUDGET_CATEGORIES.map(cat => (
-                        <option key={cat} value={cat}>{cat}</option>
-                      ))}
-                    </select>
+                    />
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Department</label>
@@ -1643,30 +2020,7 @@ export default function DayAudit() {
           </div>
         )}
 
-        <style dangerouslySetInnerHTML={{__html: `
-          @media print {
-            body * {
-              visibility: hidden;
-            }
-            .print-voucher-area, .print-voucher-area * {
-              visibility: visible;
-            }
-            .print-voucher-area {
-              position: absolute;
-              left: 0;
-              top: 0;
-              width: 100%;
-              background: white !important;
-              color: black !important;
-              padding: 20px !important;
-              box-shadow: none !important;
-              border: none !important;
-            }
-            .no-print {
-              display: none !important;
-            }
-          }
-        `}} />
+
 
       </div>
     </DashboardLayout>

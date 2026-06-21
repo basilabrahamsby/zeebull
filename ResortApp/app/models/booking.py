@@ -46,6 +46,7 @@ class Booking(Base):
     source = Column(String, default="Direct")  # Direct, OTA, Walk-in
     package_name = Column(String, nullable=True)  # Name of package if any
     pan_number = Column(String, nullable=True)  # Optional PAN for GST verification
+    gst_number = Column(String, nullable=True)  # Guest/Company GST Number
     
     is_id_verified = Column(Boolean, default=False)
     digital_signature_url = Column(String, nullable=True)

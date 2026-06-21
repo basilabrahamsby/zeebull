@@ -46,6 +46,7 @@ class BookingCreate(BaseModel):
     branch_id: Optional[int] = None
     custom_room_rate: Optional[float] = None
     pan_number: Optional[str] = None  # Optional PAN for GST verification
+    gst_number: Optional[str] = None  # Guest GST Number
 
 
     @validator('pan_number')
@@ -91,6 +92,7 @@ class BookingOut(BaseModel):
     id_card_image_url: Optional[str] = None
     guest_photo_url: Optional[str] = None
     pan_number: Optional[str] = None
+    gst_number: Optional[str] = None
     user: Optional[UserOut] = None
     is_package: bool = False
     total_amount: float = 0.0

@@ -37,7 +37,6 @@ import os
 import tempfile
 
 router = APIRouter(prefix="/bill", tags=["checkout"])
-
 # IMPORTANT: To support this new logic, you must update your BillSummary schema.
 # In `app/schemas/checkout.py`, please change the `room_number: str` field to:
 # room_numbers: List[str]
@@ -1747,6 +1746,8 @@ def generate_invoice(checkout_id: int, db: Session = Depends(get_db), current_us
         "guest_mobile": booking.guest_mobile if booking else None,
         "guest_email": booking.guest_email if booking else None,
         "guest_gstin": checkout.guest_gstin,
+        "gst_number": checkout.gst_number,
+        "pan_number": checkout.pan_number,
         "is_b2b": checkout.is_b2b,
         "room_number": checkout.room_number,
         "check_in": str(booking.check_in) if booking else None,
@@ -1894,6 +1895,11 @@ def update_checkout(
         booking = db.query(Booking).filter(Booking.id == checkout.booking_id).first()
         if booking:
             booking.pan_number = update_data["pan_number"]
+
+    if "gst_number" in update_data and update_data["gst_number"] and checkout.booking_id:
+        booking = db.query(Booking).filter(Booking.id == checkout.booking_id).first()
+        if booking:
+            booking.gst_number = update_data["gst_number"]
     
     # Clear old PDF path as it's now invalid
     checkout.invoice_pdf_path = None
@@ -1901,6 +1907,48 @@ def update_checkout(
     try:
         db.commit()
         db.refresh(checkout)
+        
+        # Sync Journal Entries
+        try:
+            from app.models.account import JournalEntry
+            from app.utils.accounting_helpers import create_complete_checkout_journal_entry
+            import traceback
+
+            # 1. Delete old journal entry
+            old_journal = db.query(JournalEntry).filter(
+                JournalEntry.reference_type.ilike("checkout"),
+                JournalEntry.reference_id == checkout.id
+            ).first()
+            if old_journal:
+                db.delete(old_journal)
+                db.flush()
+
+            # 2. Re-create new journal entry
+            payment_method = checkout.payment_method.lower() if checkout.payment_method else "cash"
+            create_complete_checkout_journal_entry(
+                db=db,
+                checkout_id=checkout.id,
+                room_total=checkout.room_total or 0.0,
+                food_total=checkout.food_total or 0.0,
+                service_total=checkout.service_total or 0.0,
+                package_total=checkout.package_total or 0.0,
+                tax_amount=checkout.tax_amount or 0.0,
+                discount_amount=checkout.discount_amount or 0.0,
+                grand_total=checkout.grand_total or 0.0,
+                guest_name=checkout.guest_name or "Guest",
+                room_number=checkout.room_number or "",
+                branch_id=checkout.branch_id,
+                payment_method=payment_method,
+                created_by=current_user.id if current_user else None,
+                advance_amount=checkout.advance_deposit or 0.0,
+                refund_amount=checkout.refund_amount or 0.0
+            )
+            db.commit()
+        except Exception as journal_error:
+            print(f"[WARNING] Failed to recreate journal entry for updated checkout {checkout.id}: {str(journal_error)}\n{traceback.format_exc()}")
+            checkout.notes = (checkout.notes or "") + f"\nJournal update failed: {str(journal_error)}"
+            db.commit()
+
         return checkout
     except Exception as e:
         db.rollback()
@@ -2137,7 +2185,11 @@ def get_checkout_details(checkout_id: int, db: Session = Depends(get_db), curren
     # Get room numbers using a set to avoid duplicates
     room_numbers_set = set()
     if checkout.room_number:
-        room_numbers_set.add(checkout.room_number)
+        # Split by comma if it's a multiple room checkout to prevent duplicate display strings
+        if "," in checkout.room_number:
+            room_numbers_set.update([r.strip() for r in checkout.room_number.split(",")])
+        else:
+            room_numbers_set.add(checkout.room_number)
         
     booking_details = None
     check_in = None
@@ -2157,7 +2209,12 @@ def get_checkout_details(checkout_id: int, db: Session = Depends(get_db), curren
                 "check_out": str(booking.check_out),
                 "adults": booking.adults,
                 "children": booking.children,
-                "status": booking.status
+                "status": booking.status,
+                "guest_mobile": booking.guest_mobile,
+                "guest_email": booking.guest_email,
+                "source": booking.source,
+                "num_rooms": booking.num_rooms,
+                "room_rate": booking.room_rate
             }
     elif checkout.package_booking_id:
         package_booking = db.query(PackageBooking).options(
@@ -2175,66 +2232,97 @@ def get_checkout_details(checkout_id: int, db: Session = Depends(get_db), curren
                 "adults": package_booking.adults,
                 "children": package_booking.children,
                 "status": package_booking.status,
-                "package_name": package_booking.package.title if package_booking.package else None
+                "package_name": package_booking.package.title if package_booking.package else None,
+                "guest_mobile": package_booking.guest_mobile,
+                "guest_email": package_booking.guest_email,
+                "source": package_booking.source,
+                "num_rooms": package_booking.num_rooms,
+                "room_rate": getattr(package_booking, 'package_price', None)
             }
             
     room_numbers = list(room_numbers_set)
     
-    # Get food orders for these rooms
+    # Get food orders based on booking_id instead of dates
     food_orders = []
-    if room_numbers:
-        rooms = db.query(Room).filter(Room.number.in_(room_numbers)).all()
+    rooms = db.query(Room).filter(Room.number.in_(room_numbers)).all() if room_numbers else []
+    
+    fo_query = db.query(FoodOrder).options(
+        joinedload(FoodOrder.items).joinedload(FoodOrderItem.food_item)
+    )
+    
+    has_fo_query = False
+    if checkout.package_booking_id:
+        fo_query = fo_query.filter(FoodOrder.package_booking_id == checkout.package_booking_id)
+        has_fo_query = True
+    elif checkout.booking_id:
+        fo_query = fo_query.filter(FoodOrder.booking_id == checkout.booking_id)
+        has_fo_query = True
+    elif rooms:
         room_ids = [r.id for r in rooms]
         if room_ids:
-            fo_query = db.query(FoodOrder).options(
-                joinedload(FoodOrder.items).joinedload(FoodOrderItem.food_item)
-            ).filter(FoodOrder.room_id.in_(room_ids))
-            
+            fo_query = fo_query.filter(FoodOrder.room_id.in_(room_ids))
             if check_in:
                 fo_query = fo_query.filter(FoodOrder.created_at >= check_in)
-                
-            orders = fo_query.all()
-            for order in orders:
-                food_orders.append({
-                    "id": order.id,
-                    "room_number": next((r.number for r in rooms if r.id == order.room_id), None),
-                    "amount": order.amount,
-                    "status": order.status,
-                    "created_at": order.created_at.isoformat() + "Z" if order.created_at else None,
-                    "items": [
-                        {
-                            "item_name": item.food_item.name if item.food_item else "Unknown",
-                            "quantity": item.quantity,
-                            "price": item.food_item.price if item.food_item else 0,
-                            "total": item.quantity * (item.food_item.price if item.food_item else 0)
-                        }
-                        for item in order.items
-                    ]
-                })
+            checkout_time = checkout.checkout_date or checkout.created_at
+            if checkout_time:
+                fo_query = fo_query.filter(FoodOrder.created_at <= checkout_time)
+            has_fo_query = True
+            
+    if has_fo_query:
+        orders = fo_query.all()
+        for order in orders:
+            food_orders.append({
+                "id": order.id,
+                "room_number": next((r.number for r in rooms if r.id == order.room_id), None),
+                "amount": order.amount,
+                "status": order.status,
+                "created_at": order.created_at.isoformat() + "Z" if order.created_at else None,
+                "items": [
+                    {
+                        "item_name": item.food_item.name if item.food_item else "Unknown",
+                        "quantity": item.quantity,
+                        "price": item.food_item.price if item.food_item else 0,
+                        "total": item.quantity * (item.food_item.price if item.food_item else 0)
+                    }
+                    for item in order.items
+                ]
+            })
     
-    # Get services for these rooms
+    # Get services based on booking_id instead of dates
     services = []
-    if room_numbers:
-        rooms = db.query(Room).filter(Room.number.in_(room_numbers)).all()
+    svc_query = db.query(AssignedService).options(
+        joinedload(AssignedService.service)
+    )
+    
+    has_svc_query = False
+    if checkout.package_booking_id:
+        svc_query = svc_query.filter(AssignedService.package_booking_id == checkout.package_booking_id)
+        has_svc_query = True
+    elif checkout.booking_id:
+        svc_query = svc_query.filter(AssignedService.booking_id == checkout.booking_id)
+        has_svc_query = True
+    elif rooms:
         room_ids = [r.id for r in rooms]
         if room_ids:
-            svc_query = db.query(AssignedService).options(
-                joinedload(AssignedService.service)
-            ).filter(AssignedService.room_id.in_(room_ids))
-            
+            svc_query = svc_query.filter(AssignedService.room_id.in_(room_ids))
             if check_in:
                 svc_query = svc_query.filter(AssignedService.assigned_at >= check_in)
-                
-            assigned_services = svc_query.all()
-            for ass in assigned_services:
-                services.append({
-                    "id": ass.id,
-                    "room_number": next((r.number for r in rooms if r.id == ass.room_id), None),
-                    "service_name": ass.service.name if ass.service else "Unknown",
-                    "charges": ass.service.charges if ass.service else 0,
-                    "status": ass.status,
-                    "created_at": ass.assigned_at.isoformat() + "Z" if ass.assigned_at else None
-                })
+            checkout_time = checkout.checkout_date or checkout.created_at
+            if checkout_time:
+                svc_query = svc_query.filter(AssignedService.assigned_at <= checkout_time)
+            has_svc_query = True
+            
+    if has_svc_query:
+        assigned_services = svc_query.all()
+        for ass in assigned_services:
+            services.append({
+                "id": ass.id,
+                "room_number": next((r.number for r in rooms if r.id == ass.room_id), None),
+                "service_name": ass.service.name if ass.service else "Unknown",
+                "charges": ass.service.charges if ass.service else 0,
+                "status": ass.status,
+                "created_at": ass.assigned_at.isoformat() + "Z" if ass.assigned_at else None
+            })
     
     # Reconstruct bill_details if missing
     bill_details = checkout.bill_details
@@ -2361,7 +2449,8 @@ def get_checkout_details(checkout_id: int, db: Session = Depends(get_db), curren
         "invoice_pdf_path": checkout.invoice_pdf_path,
         "advance_deposit": checkout.advance_deposit,
         "refund_amount": checkout.refund_amount,
-        "pan_number": checkout.pan_number or (booking.pan_number if ('booking' in locals() and booking) else None)
+        "pan_number": checkout.pan_number or (booking.pan_number if ('booking' in locals() and booking) else None),
+        "gst_number": checkout.gst_number or (booking.gst_number if ('booking' in locals() and booking) else None)
     }
 
 @router.get("/active-rooms", response_model=List[dict])
@@ -2669,50 +2758,30 @@ def _calculate_bill_for_single_room(db: Session, room_number: str, branch_id: in
     last_checkout = last_checkout_query.order_by(Checkout.checkout_date.desc()).first()
     
     if last_checkout and last_checkout.checkout_date:
-        # If last checkout was after the calculated start time, use it as the new start time
-        # This handles cases where previous guest checked out on the same day as new guest check-in
+        # If the last checkout was AFTER the 00:00:00 of check-in day,
+        # we must start billing AFTER the previous checkout to avoid cross-guest billing
         if last_checkout.checkout_date > check_in_datetime:
             check_in_datetime = last_checkout.checkout_date
             print(f"[DEBUG] Adjusted check-in datetime based on previous checkout: {check_in_datetime}")
-            
+        else:
+            check_in_datetime = check_in_datetime - timedelta(hours=1)
+    else:
+        check_in_datetime = check_in_datetime - timedelta(hours=1)
+        
     print(f"[DEBUG] Using billing start time: {check_in_datetime}")
 
     # Get food and service charges for THIS ROOM ONLY, filtered by check-in datetime
     # Include ALL food orders (both billed and unbilled) - show paid ones with zero amount
-    # Get food and service charges for THIS ROOM ONLY, filtered by check-in datetime
-    # Include ALL food orders (both billed and unbilled) - show paid ones with zero amount
     if is_package:
-         # For packages, prioritize the package_booking_id. 
-         # We include ALL food orders for this package, across ANY room in the package.
          food_query = db.query(FoodOrderItem)\
                                 .join(FoodOrder)\
                                 .options(joinedload(FoodOrderItem.food_item), joinedload(FoodOrderItem.order))\
-                                .filter(
-                                    or_(
-                                        FoodOrder.package_booking_id == booking.id,
-                                        and_(
-                                            FoodOrder.room_id == room.id, # Fallback for room-specific unlinked orders
-                                            FoodOrder.package_booking_id == None,
-                                            FoodOrder.booking_id == None,
-                                            FoodOrder.created_at >= check_in_datetime
-                                        )
-                                    )
-                                )
+                                .filter(FoodOrder.package_booking_id == booking.id)
     else:
          food_query = db.query(FoodOrderItem)\
                                 .join(FoodOrder)\
                                 .options(joinedload(FoodOrderItem.food_item), joinedload(FoodOrderItem.order))\
-                                .filter(
-             or_(
-                 FoodOrder.booking_id == booking.id,
-                 and_(
-                     FoodOrder.room_id == room.id,
-                     FoodOrder.booking_id == None,
-                     FoodOrder.package_booking_id == None,
-                     FoodOrder.created_at >= check_in_datetime
-                 )
-             )
-         )
+                                .filter(FoodOrder.booking_id == booking.id)
     all_food_order_items = food_query.all()
     
     # Separate food orders by billing status:
@@ -2736,30 +2805,11 @@ def _calculate_bill_for_single_room(db: Session, room_number: str, branch_id: in
     if is_package:
          # For packages, include ALL services linked to this package booking across ALL rooms
          svc_query = db.query(AssignedService).options(joinedload(AssignedService.service)).filter(
-             or_(
-                 AssignedService.package_booking_id == booking.id,
-                 and_(
-                     AssignedService.room_id == room.id,
-                     AssignedService.package_booking_id == None,
-                     AssignedService.booking_id == None,
-                     AssignedService.assigned_at >= booking_check_in_datetime,
-                     AssignedService.assigned_at <= booking_check_out_datetime
-                 )
-             )
+             AssignedService.package_booking_id == booking.id
          )
     else:
          svc_query = db.query(AssignedService).options(joinedload(AssignedService.service)).filter(
-             AssignedService.room_id == room.id
-         ).filter(
-             or_(
-                 AssignedService.booking_id == booking.id,
-                 and_(
-                     AssignedService.booking_id == None,
-                     AssignedService.package_booking_id == None,
-                     AssignedService.assigned_at >= booking_check_in_datetime,
-                     AssignedService.assigned_at <= booking_check_out_datetime
-                 )
-             )
+             AssignedService.booking_id == booking.id
          )
          
     all_assigned_services = svc_query.all()
@@ -3513,7 +3563,7 @@ def _calculate_bill_for_entire_booking(db: Session, room_number: str, branch_id:
     all_rooms = []
     if is_package:
         # Use explicit query for reliability instead of relying on lazy relations
-        from app.models.Package import PackageBookingRoom # Ensure correct model name 'app.models.Package'
+
         all_rooms = db.query(Room).join(PackageBookingRoom).filter(PackageBookingRoom.package_booking_id == booking.id).all()
         # Fallback to relationship if query returned nothing (e.g. freshly created objects in session)
         if not all_rooms:
@@ -3599,47 +3649,32 @@ def _calculate_bill_for_entire_booking(db: Session, room_number: str, branch_id:
         
     last_checkout = last_checkout_query.order_by(Checkout.checkout_date.desc()).first()
     
-    # Relax start time slightly to catch orders made at/before formal check-in on the first day
-    check_in_datetime = check_in_datetime - timedelta(hours=1)
+    if last_checkout:
+        if last_checkout.checkout_date > check_in_datetime:
+            check_in_datetime = last_checkout.checkout_date
+            print(f"[DEBUG] Adjusted check-in datetime based on previous checkout: {check_in_datetime}")
+        else:
+            check_in_datetime = check_in_datetime - timedelta(hours=1)
+    else:
+        check_in_datetime = check_in_datetime - timedelta(hours=1)
     
-    print(f"[DEBUG] Using billing start time (relaxed): {check_in_datetime}")
+    print(f"[DEBUG] Using billing start time: {check_in_datetime}")
 
     # Sum up additional food and service charges from all rooms
     # Scope to the CURRENT booking only to avoid cross-booking pollution.
     # Include orders explicitly linked to this booking, OR orders with no booking link
     # (legacy/walk-in orders) that were created during the current stay period.
     if is_package:
-        # Prioritize package_booking_id across ALL rooms
         all_food_order_items = (db.query(FoodOrderItem)
                                .join(FoodOrder)
                                .options(joinedload(FoodOrderItem.food_item), joinedload(FoodOrderItem.order))
-                               .filter(
-                                   or_(
-                                       FoodOrder.package_booking_id == booking.id,
-                                       and_(
-                                           FoodOrder.room_id.in_(room_ids),
-                                           FoodOrder.package_booking_id == None,
-                                           FoodOrder.booking_id == None,
-                                           FoodOrder.created_at >= check_in_datetime
-                                       )
-                                   )
-                               )
+                               .filter(FoodOrder.package_booking_id == booking.id)
                                .all())
     else:
         all_food_order_items = (db.query(FoodOrderItem)
                                .join(FoodOrder)
                                .options(joinedload(FoodOrderItem.food_item), joinedload(FoodOrderItem.order))
-                               .filter(
-                                   FoodOrder.room_id.in_(room_ids),
-                                   or_(
-                                       FoodOrder.booking_id == booking.id,
-                                       and_(
-                                           FoodOrder.booking_id == None,
-                                           FoodOrder.package_booking_id == None,
-                                           FoodOrder.created_at >= check_in_datetime
-                                       )
-                                   )
-                               )
+                               .filter(FoodOrder.booking_id == booking.id)
                                .all())
 
     # Separate billed and unbilled items
@@ -4264,7 +4299,15 @@ def get_bill_for_booking(room_number: str, checkout_mode: str = "multiple", db: 
             check_out=effective_checkout,  # Use effective checkout date (today if late, booking.check_out if early)
             charges=bill_data["charges"],
             pan_number=getattr(bill_data["booking"], "pan_number", None),
-            booking_id=bill_data["booking"].id
+            gst_number=getattr(bill_data["booking"], "gst_number", None),
+            booking_id=bill_data["booking"].id,
+            guest_mobile=getattr(bill_data["booking"], "guest_mobile", None),
+            guest_email=getattr(bill_data["booking"], "guest_email", None),
+            source=getattr(bill_data["booking"], "source", None),
+            adults=getattr(bill_data["booking"], "adults", None),
+            children=getattr(bill_data["booking"], "children", None),
+            num_rooms=getattr(bill_data["booking"], "num_rooms", None),
+            room_rate=getattr(bill_data["booking"], "room_rate", None)
         )
     else:
         bill_data = _calculate_bill_for_entire_booking(db, room_number, branch_id)
@@ -4278,7 +4321,15 @@ def get_bill_for_booking(room_number: str, checkout_mode: str = "multiple", db: 
             check_out=effective_checkout,  # Use effective checkout date (today if late, booking.check_out if early)
             charges=bill_data["charges"],
             pan_number=getattr(bill_data["booking"], "pan_number", None),
-            booking_id=bill_data["booking"].id
+            gst_number=getattr(bill_data["booking"], "gst_number", None),
+            booking_id=bill_data["booking"].id,
+            guest_mobile=getattr(bill_data["booking"], "guest_mobile", None),
+            guest_email=getattr(bill_data["booking"], "guest_email", None),
+            source=getattr(bill_data["booking"], "source", None),
+            adults=getattr(bill_data["booking"], "adults", None),
+            children=getattr(bill_data["booking"], "children", None),
+            num_rooms=getattr(bill_data["booking"], "num_rooms", None),
+            room_rate=getattr(bill_data["booking"], "room_rate", None)
         )
 
 
@@ -4544,16 +4595,41 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, backgro
 
             subtotal = base_total + consumables_charges + asset_damage_charges + key_card_fee + late_checkout_fee
             
-            # Recalculate GST with new charges (consumables and asset damages may have GST)
-            # For simplicity, apply same GST rate to consumables as food (5%)
-            consumables_gst = consumables_charges * 0.05
             asset_damage_gst = 0.0 # No GST on asset damages as per request
-            
-            # Use the calculated GST from charges (already includes room, food, and package GST)
-            tax_amount = base_gst + consumables_gst + asset_damage_gst
             
             discount_amount = max(0, request.discount_amount or 0)
             tips_gratuity = max(0, request.tips_gratuity or 0.0)
+            
+            if discount_amount > 0:
+                is_inclusive = getattr(booking, 'rate_plan_code', None) == 'TAX_INCLUSIVE'
+                new_gst_breakdown = calculate_gst_breakdown(
+                    db=db,
+                    branch_id=effective_branch_id,
+                    room_charges=charges.room_charges or 0,
+                    food_charges=charges.food_charges or 0,
+                    package_charges=charges.package_charges or 0,
+                    service_charges=charges.service_charges or 0,
+                    consumables_charges=consumables_charges,
+                    inventory_charges=charges.inventory_charges or 0,
+                    nights=bill_data.get("stay_nights", 1),
+                    use_night_charges=False,
+                    booking_id=booking.id,
+                    is_inclusive=is_inclusive,
+                    discount_amount=discount_amount
+                )
+                tax_amount = new_gst_breakdown["total_gst"] + asset_damage_gst
+                
+                # Update charges object so the stored checkout details show correct GST
+                charges.room_gst = new_gst_breakdown["room_gst"]
+                charges.food_gst = new_gst_breakdown["food_gst"]
+                charges.package_gst = new_gst_breakdown["package_gst"]
+                charges.service_gst = new_gst_breakdown["service_gst"]
+                charges.consumables_gst = new_gst_breakdown["consumables_gst"]
+                charges.inventory_gst = new_gst_breakdown["inventory_gst"]
+                charges.total_gst = new_gst_breakdown["total_gst"]
+            else:
+                consumables_gst = consumables_charges * 0.05
+                tax_amount = base_gst + consumables_gst + asset_damage_gst
             
             # Grand total before advance deposit deduction
             grand_total_before_advance = subtotal + tax_amount - discount_amount + tips_gratuity
@@ -4702,11 +4778,14 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, backgro
                 invoice_number=invoice_number,
                 bill_details=bill_details_data,  # Store the detailed bill
                 branch_id=effective_branch_id,
-                pan_number=request.pan_number
+                pan_number=request.pan_number or (booking.pan_number if booking else None),
+                gst_number=request.gst_number or (booking.gst_number if booking else None)
             )
             # Sync PAN number back to associated booking if provided
             if not is_package and booking and request.pan_number:
                 booking.pan_number = request.pan_number
+            if not is_package and booking and request.gst_number:
+                booking.gst_number = request.gst_number
             # Add checkout to session first, then set invoice_number if needed
             db.add(new_checkout)
             db.flush()  # Flush to get checkout ID
@@ -5341,14 +5420,40 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, backgro
             
             subtotal = base_total + total_consumables_charges + total_asset_damage_charges + total_key_card_fee + late_checkout_fee
             
-            # Recalculate GST
-            consumables_gst = total_consumables_charges * 0.05
             asset_damage_gst = 0.0 # No GST on asset damages as per request
-            
-            tax_amount = base_gst + consumables_gst + asset_damage_gst
             
             discount_amount = max(0, request.discount_amount or 0)
             tips_gratuity = max(0, request.tips_gratuity or 0.0)
+            
+            if discount_amount > 0:
+                is_inclusive = getattr(booking, 'rate_plan_code', None) == 'TAX_INCLUSIVE'
+                new_gst_breakdown = calculate_gst_breakdown(
+                    db=db,
+                    branch_id=effective_branch_id,
+                    room_charges=charges.room_charges or 0,
+                    food_charges=charges.food_charges or 0,
+                    package_charges=charges.package_charges or 0,
+                    service_charges=charges.service_charges or 0,
+                    consumables_charges=total_consumables_charges,
+                    inventory_charges=charges.inventory_charges or 0,
+                    nights=bill_data.get("stay_nights", 1),
+                    use_night_charges=False,
+                    booking_id=booking.id,
+                    is_inclusive=is_inclusive,
+                    discount_amount=discount_amount
+                )
+                tax_amount = new_gst_breakdown["total_gst"] + asset_damage_gst
+                
+                charges.room_gst = new_gst_breakdown["room_gst"]
+                charges.food_gst = new_gst_breakdown["food_gst"]
+                charges.package_gst = new_gst_breakdown["package_gst"]
+                charges.service_gst = new_gst_breakdown["service_gst"]
+                charges.consumables_gst = new_gst_breakdown["consumables_gst"]
+                charges.inventory_gst = new_gst_breakdown["inventory_gst"]
+                charges.total_gst = new_gst_breakdown["total_gst"]
+            else:
+                consumables_gst = total_consumables_charges * 0.05
+                tax_amount = base_gst + consumables_gst + asset_damage_gst
             
             grand_total_before_advance = subtotal + tax_amount - discount_amount + tips_gratuity
             grand_total = grand_total_before_advance - advance_deposit
@@ -5426,7 +5531,8 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, backgro
                 invoice_number=invoice_number,
                 bill_details=bill_details_data,
                 branch_id=effective_branch_id,
-                pan_number=request.pan_number
+                pan_number=request.pan_number or (booking.pan_number if booking else None),
+                gst_number=request.gst_number or (booking.gst_number if booking else None)
             )
             # Sync PAN number back to associated booking if provided
             if not is_package and booking and request.pan_number:

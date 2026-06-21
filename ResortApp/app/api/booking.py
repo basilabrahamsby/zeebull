@@ -1070,7 +1070,9 @@ def create_booking(
             status="Booked",
             num_rooms=num_rooms_val,
             room_rate=stored_room_rate,
-            total_amount=booking.custom_room_rate if booking.custom_room_rate else 0.0
+            total_amount=booking.custom_room_rate if booking.custom_room_rate else 0.0,
+            pan_number=booking.pan_number,
+            gst_number=booking.gst_number
         )
         
         db.add(db_booking)
@@ -1134,7 +1136,9 @@ def create_booking(
             branch_id=branch_id,
             status="Booked",
             num_rooms=num_rooms_val,
-            room_rate=stored_room_rate
+            room_rate=stored_room_rate,
+            pan_number=booking.pan_number,
+            gst_number=booking.gst_number
         )
         # Use first room's type as primary type if none provided
         if not db_booking.room_type_id and selected_rooms:

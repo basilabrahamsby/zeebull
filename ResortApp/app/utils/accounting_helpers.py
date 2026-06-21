@@ -25,9 +25,9 @@ def is_bank_ledger_method(method: str) -> bool:
 
 def find_ledger_by_name(db: Session, name: str, branch_id: int, module: Optional[str] = None) -> Optional[AccountLedger]:
     """Find ledger by name and branch (including global ledgers), optionally filtered by module"""
-    from sqlalchemy import or_
+    from sqlalchemy import or_, func
     query = db.query(AccountLedger).filter(
-        AccountLedger.name == name,
+        func.lower(AccountLedger.name) == name.lower(),
         or_(AccountLedger.branch_id == branch_id, AccountLedger.branch_id == None),
         AccountLedger.is_active == True
     )
@@ -56,7 +56,7 @@ def create_advance_payment_journal_entry(
     else:
         payment_ledger = find_ledger_by_name(db, "Cash in Hand", branch_id=branch_id, module="General")
         
-    advance_ledger = find_ledger_by_name(db, "Advance Deposits - Guests", branch_id=branch_id, module="Booking")
+    advance_ledger = find_ledger_by_name(db, "Advance from Guests", branch_id=branch_id, module="Booking")
     
     if not all([payment_ledger, advance_ledger]):
         print(f"[WARNING] Advance ledgers not found for booking {booking_id}. Skipping accounting entry.")
@@ -167,39 +167,60 @@ def create_purchase_journal_entry(
     db: Session,
     purchase_id: int,
     vendor_id: int,
-    inventory_amount: float,
+    inventory_amount: float = 0.0,
     cgst_amount: float = 0.0,
     sgst_amount: float = 0.0,
     igst_amount: float = 0.0,
     vendor_name: str = "Unknown",
     is_interstate: bool = False,
     branch_id: int = 1,
-    created_by: Optional[int] = None
+    created_by: Optional[int] = None,
+    equipment_amount: float = 0.0,
+    furniture_amount: float = 0.0
 ) -> int:
     """
     Create journal entry for inventory purchase (Stock In)
-    Debit: Inventory Stock
+    Debit: Inventory Stock / Equipment / Furniture & Fixtures
     Debit: CGST Input Credit, SGST Input Credit
     Credit: Accounts Payable
     """
     inventory_stock = find_ledger_by_name(db, "Inventory Stock", branch_id=branch_id, module="Inventory")
+    equipment_asset = find_ledger_by_name(db, "Equipment", branch_id=branch_id, module="General")
+    furniture_asset = find_ledger_by_name(db, "Furniture & Fixtures", branch_id=branch_id, module="General")
     vendor_payable = find_ledger_by_name(db, "Accounts Payable", branch_id=branch_id, module="Purchase")
     input_cgst = find_ledger_by_name(db, "CGST Input Credit", branch_id=branch_id, module="GST")
     input_sgst = find_ledger_by_name(db, "SGST Input Credit", branch_id=branch_id, module="GST")
     input_igst = find_ledger_by_name(db, "IGST Input Credit", branch_id=branch_id, module="GST")
 
-    if not all([inventory_stock, vendor_payable]):
+    if not all([inventory_stock, vendor_payable, equipment_asset, furniture_asset]):
         raise ValueError("Required ledgers not found for purchase recording.")
     
-    total_amount = inventory_amount + cgst_amount + sgst_amount + igst_amount
-    lines = [
-        JournalEntryLineCreateInEntry(
+    total_amount = inventory_amount + equipment_amount + furniture_amount + cgst_amount + sgst_amount + igst_amount
+    lines = []
+    
+    if inventory_amount > 0:
+        lines.append(JournalEntryLineCreateInEntry(
             debit_ledger_id=inventory_stock.id,
             credit_ledger_id=None,
             amount=inventory_amount,
             description=f"Purchase #{purchase_id} - Inventory received"
-        )
-    ]
+        ))
+        
+    if equipment_amount > 0:
+        lines.append(JournalEntryLineCreateInEntry(
+            debit_ledger_id=equipment_asset.id,
+            credit_ledger_id=None,
+            amount=equipment_amount,
+            description=f"Purchase #{purchase_id} - Fixed Asset (Equipment)"
+        ))
+        
+    if furniture_amount > 0:
+        lines.append(JournalEntryLineCreateInEntry(
+            debit_ledger_id=furniture_asset.id,
+            credit_ledger_id=None,
+            amount=furniture_amount,
+            description=f"Purchase #{purchase_id} - Fixed Asset (Furniture & Fixtures)"
+        ))
     
     if is_interstate and igst_amount > 0 and input_igst:
         lines.append(JournalEntryLineCreateInEntry(debit_ledger_id=input_igst.id, credit_ledger_id=None, amount=igst_amount, description=f"Input IGST - Purchase #{purchase_id}"))
@@ -282,15 +303,20 @@ def create_consumption_journal_entry(
     inventory_item_name: str,
     branch_id: int,
     created_by: Optional[int] = None,
-    reference_type: str = "consumption"
+    reference_type: str = "consumption",
+    debit_ledger_name: Optional[str] = None
 ) -> int:
     """
-    Create journal entry for inventory consumption (COGS)
-    Debit: Restaurant Revenue / Expense (Correction: COGS)
+    Create journal entry for inventory consumption (COGS or Expense)
+    Debit: Specific Expense / Cost of Goods Sold
     Credit: Inventory Stock
     """
-    # Assuming we have a COGS ledger or using Restaurant Cost
-    cogs = find_ledger_by_name(db, "Cost of Goods Sold", branch_id=branch_id, module="Purchase")
+    cogs = None
+    if debit_ledger_name:
+        cogs = find_ledger_by_name(db, debit_ledger_name, branch_id=branch_id)
+        
+    if not cogs:
+        cogs = find_ledger_by_name(db, "Cost of Goods Sold", branch_id=branch_id, module="Purchase")
     if not cogs:
         cogs = find_ledger_by_name(db, "Direct Expenses", branch_id=branch_id, module="Expense")
         
@@ -469,7 +495,7 @@ def create_complete_checkout_journal_entry(
     output_cgst = find_ledger_by_name(db, "CGST Payable", branch_id=branch_id, module="GST")
     output_sgst = find_ledger_by_name(db, "SGST Payable", branch_id=branch_id, module="GST")
     discount_ledger = find_ledger_by_name(db, "Discount Allowed", branch_id=branch_id, module="Expense")
-    advance_ledger = find_ledger_by_name(db, "Advance Deposits - Guests", branch_id=branch_id, module="Booking")
+    advance_ledger = find_ledger_by_name(db, "Advance from Guests", branch_id=branch_id, module="Booking")
 
     if not payment_ledger_id:
         if is_bank_ledger_method(payment_method):
@@ -613,12 +639,47 @@ def create_expense_journal_entry(
         credit_ledger = find_ledger_by_name(db, "Bank Account - Main", branch_id=branch_id, module="General")
     else:
         credit_ledger = find_ledger_by_name(db, "Cash in Hand", branch_id=branch_id, module="General")
+        
+    if not credit_ledger:
+        credit_ledger = find_ledger_by_name(db, "Cash in Hand", branch_id=branch_id) or \
+                        find_ledger_by_name(db, "Bank Account - Main", branch_id=branch_id)
 
     # 2. Determine Debit Ledger (Expense Category)
-    # Try to find a specific ledger for this category, or fallback to "Direct Expenses"
-    debit_ledger = find_ledger_by_name(db, category, branch_id=branch_id, module="Expense")
+    category_mapping = {
+        "utilities": ("Electricity", "Expense"),
+        "maintenance": ("Building Maintenance", "Expense"),
+        "salary": ("Salaries & Wages", "Employee"),
+        "food & beverage": ("Food & Beverage Purchases", "Purchase"),
+        "marketing": ("Advertising", "Expense"),
+        "supplies": ("Housekeeping Supplies", "Inventory"),
+        "internet": ("Internet & Communications", "Expense"),
+        "wifi": ("Internet & Communications", "Expense"),
+        "phone": ("Internet & Communications", "Expense"),
+        "water": ("Water", "Expense"),
+        "house keeping": ("Housekeeping Supplies", "Inventory"),
+        "housekeeping": ("Housekeeping Supplies", "Inventory"),
+        "laundry": ("Laundry Costs", "Service"),
+    }
+    
+    debit_ledger = None
+    cat_key = category.lower().strip()
+    if cat_key in category_mapping:
+        ledger_name, ledger_module = category_mapping[cat_key]
+        debit_ledger = find_ledger_by_name(db, ledger_name, branch_id=branch_id, module=ledger_module)
+        
+    if not debit_ledger:
+        debit_ledger = find_ledger_by_name(db, category, branch_id=branch_id, module="Expense")
+    if not debit_ledger:
+        debit_ledger = find_ledger_by_name(db, category, branch_id=branch_id)
     if not debit_ledger:
         debit_ledger = find_ledger_by_name(db, "Direct Expenses", branch_id=branch_id, module="Expense")
+    if not debit_ledger:
+        from app.models.account import AccountLedger
+        debit_ledger = db.query(AccountLedger).filter(
+            AccountLedger.branch_id == branch_id,
+            AccountLedger.module == "Expense",
+            AccountLedger.is_active == True
+        ).first()
 
     if not all([credit_ledger, debit_ledger]):
         print(f"[WARNING] Ledgers not found for expense {expense_id} (Category: {category}, Mode: {payment_mode}). Skipping entry.")

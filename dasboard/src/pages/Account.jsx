@@ -66,6 +66,35 @@ const SECTION_INFO = {
     use: 'Export or copy values directly into the GST Portal for monthly/quarterly filing.',
     tip: 'Ensure all guest GSTINs are correctly entered in bookings for B2B reporting.',
   },
+  'day-book': {
+    title: 'Day Book',
+    color: 'blue',
+    description: 'A chronological record of all financial transactions showing individual debit and credit postings, voucher types, and voucher numbers.',
+    includes: [
+      'Chronological listing of transactions',
+      'Account Names (Particulars) with Debit/Credit columns',
+      'Voucher Numbers and Voucher Types (e.g. Sales, Payment, Contra)',
+      'Date filters for custom report generation',
+    ],
+    calculation: 'Postings are extracted from all journal entry lines. Payment and Purchase transactions list debit accounts, while Receipt and Sales list credit accounts, corresponding to traditional day book accounting standard formats.',
+    use: 'Verify daily transaction postings and export data for accounting audit verification.',
+    tip: 'Filter by date range and use the Print report feature to get a clean Day Book report.',
+  },
+  'ledger-report': {
+    title: 'Ledger Account Statement',
+    color: 'emerald',
+    description: 'A detailed statement of transactions for a selected ledger account showing opening balance, daily debit/credit movements, running balance, and closing balance.',
+    includes: [
+      'Dropdown selector for any account ledger (e.g. Debtors, Cash, Banks)',
+      'Opening Balance computation at the start date',
+      'Transaction postings with "To" and "By" prefixes indicating opposite accounts',
+      'Running Balance tracked transaction-by-transaction',
+      'Date filters and print-friendly export features',
+    ],
+    calculation: 'Opening balance is calculated by summing all previous debit/credit postings. Transaction running balance dynamically updates based on the balance type (Asset/Expense ledgers increase with Debits; Liability/Equity/Revenue ledgers increase with Credits).',
+    use: 'Verify account statement transactions, cross-check client ledger books, and print debtor ledger books.',
+    tip: 'Ensure the correct ledger is selected in the dropdown before generating the statement.',
+  },
   'auto-report': {
     title: 'Automatic Financial Reports',
     color: 'orange',
@@ -274,6 +303,8 @@ export default function ReportsDashboard() {
     { id: "chart-of-accounts", label: "Chart of Accounts", permission: "account_chart:view", icon: <BookOpen className="inline mr-2" size={18} /> },
     { id: "journal-entries", label: "Journal Entries", permission: "account_journal:view", icon: <FileText className="inline mr-2" size={18} /> },
     { id: "trial-balance", label: "Trial Balance", permission: "account_trial:view", icon: <Calculator className="inline mr-2" size={18} /> },
+    { id: "day-book", label: "Day Book", permission: "account_journal:view", icon: <History className="inline mr-2" size={18} /> },
+    { id: "ledger-report", label: "Ledger Report", permission: "account_journal:view", icon: <BookOpen className="inline mr-2" size={18} /> },
     { id: "gst-reports", label: "GST Reports", permission: "account_gst_reports:view", icon: <Receipt className="inline mr-2" size={18} /> },
     { id: "auto-report", label: "Auto Report", permission: "account_auto_report:view", icon: <Database className="inline mr-2" size={18} /> },
     { id: "comprehensive-report", label: "Comprehensive Report", permission: "account_comprehensive_report:view", icon: <Activity className="inline mr-2" size={18} /> }
@@ -341,6 +372,29 @@ export default function ReportsDashboard() {
   const [gstStartDate, setGstStartDate] = useState("");
   const [gstEndDate, setGstEndDate] = useState("");
   const [selectedSectionInfo, setSelectedSectionInfo] = useState(null);
+
+  // Day Book States
+  const [dayBookData, setDayBookData] = useState([]);
+  const [dayBookLoading, setDayBookLoading] = useState(false);
+  const [dayBookStartDate, setDayBookStartDate] = useState(getCurrentDateIST());
+  const [dayBookEndDate, setDayBookEndDate] = useState(getCurrentDateIST());
+
+  // Ledger Statement States
+  const [ledgerStatementData, setLedgerStatementData] = useState(null);
+  const [selectedLedgerId, setSelectedLedgerId] = useState("all");
+  const [statementStartDate, setStatementStartDate] = useState(getCurrentDateIST());
+  const [statementEndDate, setStatementEndDate] = useState(getCurrentDateIST());
+  const [statementLoading, setStatementLoading] = useState(false);
+
+  // Trial Balance States
+  const getFinancialYearStartDate = () => {
+    const today = new Date();
+    const year = today.getMonth() < 3 ? today.getFullYear() - 1 : today.getFullYear();
+    return `${year}-04-01`;
+  };
+  const [trialBalanceStartDate, setTrialBalanceStartDate] = useState(getFinancialYearStartDate());
+  const [trialBalanceEndDate, setTrialBalanceEndDate] = useState(getCurrentDateIST());
+  const [trialBalanceDetailed, setTrialBalanceDetailed] = useState(false);
 
   const handleSeedChartOfAccounts = async () => {
     if (!window.confirm("This will create a standard Chart of Accounts for a Resort/Hotel. Existing account groups and ledgers will remain. Continue?")) return;
@@ -767,9 +821,20 @@ export default function ReportsDashboard() {
         fetchComprehensiveReport();
       } else if (activeAccountingTab === "gst-reports") {
         fetchGSTReport();
+      } else if (activeAccountingTab === "day-book") {
+        fetchDayBookReport();
+      } else if (activeAccountingTab === "ledger-report") {
+        fetchLedgerStatement();
       }
     }
   }, [activeMainTab, activeAccountingTab]);
+
+  // Fetch ledger statement when selected ledger changes
+  useEffect(() => {
+    if (activeAccountingTab === "ledger-report" && selectedLedgerId) {
+      fetchLedgerStatement();
+    }
+  }, [selectedLedgerId, activeAccountingTab]);
 
   // Fetch GST report when report type changes (e.g., switching between Master Summary, B2B Sales, etc.)
   useEffect(() => {
@@ -810,6 +875,128 @@ export default function ReportsDashboard() {
     } finally {
       setComprehensiveReportLoading(false);
     }
+  };
+
+  const fetchDayBookReport = async () => {
+    try {
+      setDayBookLoading(true);
+      const params = new URLSearchParams();
+      if (dayBookStartDate) params.append("start_date", dayBookStartDate);
+      if (dayBookEndDate) params.append("end_date", dayBookEndDate);
+      const response = await API.get(`/accounts/day-book?${params.toString()}`);
+      setDayBookData(response.data || []);
+    } catch (error) {
+      console.error("Failed to fetch day book report:", error);
+      if (error.response?.status !== 401) {
+        alert("Failed to load Day Book report");
+      }
+    } finally {
+      setDayBookLoading(false);
+    }
+  };
+
+  const handlePrintDayBook = () => {
+    const printWindow = window.open('', '_blank');
+    const tableHTML = document.getElementById('day-book-table-print-area').innerHTML;
+    
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Day Book Report</title>
+          <style>
+            body { font-family: monospace; padding: 20px; color: black; }
+            h2, h3 { text-align: center; margin: 5px 0; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 12px; }
+            th, td { border: 1px solid #000; padding: 8px; text-align: left; }
+            th { background-color: #f2f2f2; }
+            .text-right { text-align: right; }
+            .text-center { text-align: center; }
+            .font-bold { font-weight: bold; }
+          </style>
+        </head>
+        <body>
+          <h2>ORCHID RESORT</h2>
+          <h3>DAY BOOK</h3>
+          <p style="text-align: center; font-size: 11px;">Period: ${dayBookStartDate || 'All'} to ${dayBookEndDate || 'All'}</p>
+          <table>
+            ${tableHTML}
+          </table>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.print();
+  };
+
+  const fetchLedgerStatement = async () => {
+    if (!selectedLedgerId) {
+      setLedgerStatementData(null);
+      return;
+    }
+    try {
+      setStatementLoading(true);
+      const params = new URLSearchParams();
+      if (statementStartDate) params.append("start_date", statementStartDate);
+      if (statementEndDate) params.append("end_date", statementEndDate);
+      
+      if (selectedLedgerId === "all") {
+        const response = await api.get(`/accounts/day-book?${params.toString()}`);
+        setLedgerStatementData({
+          ledger_name: "All Ledgers",
+          ledger_code: "",
+          balance_type: "debit",
+          opening_balance: 0,
+          closing_balance: 0,
+          postings: response.data || []
+        });
+      } else {
+        const response = await api.get(`/accounts/ledgers/${selectedLedgerId}/statement?${params.toString()}`);
+        setLedgerStatementData(response.data || null);
+      }
+    } catch (error) {
+      console.error("Failed to fetch ledger statement:", error);
+      if (error.response?.status !== 401) {
+        alert("Failed to load ledger statement");
+      }
+    } finally {
+      setStatementLoading(false);
+    }
+  };
+
+  const handlePrintLedgerStatement = () => {
+    if (!ledgerStatementData) return;
+    const printWindow = window.open('', '_blank');
+    const tableHTML = document.getElementById('ledger-statement-table-print-area').innerHTML;
+    
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Ledger Statement: ${ledgerStatementData.ledger_name}</title>
+          <style>
+            body { font-family: monospace; padding: 20px; color: black; }
+            h2, h3 { text-align: center; margin: 5px 0; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 12px; }
+            th, td { border: 1px solid #000; padding: 8px; text-align: left; }
+            th { background-color: #f2f2f2; }
+            .text-right { text-align: right; }
+            .text-center { text-align: center; }
+            .font-bold { font-weight: bold; }
+            .whitespace-nowrap { white-space: nowrap; }
+          </style>
+        </head>
+        <body>
+          <h2>ORCHID RESORT</h2>
+          <h3>Ledger Account Statement</h3>
+          <p style="text-align: center; font-size: 12px; font-weight: bold;">${ledgerStatementData.ledger_name.toUpperCase()}</p>
+          <p style="text-align: center; font-size: 11px;">Period: ${statementStartDate || 'All'} to ${statementEndDate || 'All'}</p>
+          <table>
+            ${tableHTML}
+          </table>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.print();
   };
 
   const fetchGSTReport = async () => {
@@ -889,10 +1076,10 @@ export default function ReportsDashboard() {
   const fetchTrialBalance = async () => {
     try {
       setLoading(true);
+      const params = { automatic: trialBalanceMode === "automatic", detailed: trialBalanceDetailed };
+      if (trialBalanceEndDate) params.as_on_date = trialBalanceEndDate;
       // Fetch based on selected mode
-      const res = await api.get("/accounts/trial-balance", {
-        params: { automatic: trialBalanceMode === "automatic" }
-      });
+      const res = await api.get("/accounts/trial-balance", { params });
       setTrialBalance(res.data);
     } catch (error) {
       console.error("Failed to fetch trial balance:", error);
@@ -904,12 +1091,49 @@ export default function ReportsDashboard() {
     }
   };
 
-  // Re-fetch when mode changes
+  const handlePrintTrialBalance = () => {
+    if (!trialBalance) return;
+    const printWindow = window.open('', '_blank');
+    const tableHTML = document.getElementById('trial-balance-table-print-area').innerHTML;
+    
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Trial Balance</title>
+          <style>
+            body { font-family: monospace; padding: 20px; color: black; }
+            h2, h3 { text-align: center; margin: 5px 0; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 12px; }
+            th, td { border: 1px solid #000; padding: 8px; text-align: left; }
+            th { background-color: #f2f2f2; }
+            .text-right { text-align: right; }
+            .text-center { text-align: center; }
+            .font-bold { font-weight: bold; }
+            .whitespace-nowrap { white-space: nowrap; }
+            .pl-6 { padding-left: 24px; }
+            .bg-gray-50 { background-color: #f9fafb; }
+          </style>
+        </head>
+        <body>
+          <h2>ORCHID RESORT</h2>
+          <h3>Trial Balance Statement</h3>
+          <p style="text-align: center; font-size: 11px;">Period: ${trialBalanceStartDate || 'All'} to ${trialBalanceEndDate || 'All'}</p>
+          <table>
+            ${tableHTML}
+          </table>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.print();
+  };
+
+  // Re-fetch when mode or date changes
   useEffect(() => {
     if (activeAccountingTab === "trial-balance") {
       fetchTrialBalance();
     }
-  }, [trialBalanceMode]);
+  }, [trialBalanceMode, trialBalanceStartDate, trialBalanceEndDate, activeAccountingTab]);
 
   const handleCreateGroup = async (e) => {
     e.preventDefault();
@@ -1757,7 +1981,7 @@ export default function ReportsDashboard() {
             {/* Trial Balance Tab */}
             {activeAccountingTab === "trial-balance" && (
               <div className="bg-white rounded-lg shadow p-6">
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
                   <div className="flex items-center gap-2">
                     <h2 className="text-xl font-bold">Trial Balance</h2>
                     <button
@@ -1767,63 +1991,547 @@ export default function ReportsDashboard() {
                       <Info size={18} />
                     </button>
                   </div>
-                  <button
-                    onClick={fetchTrialBalance}
-                    className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700"
-                  >
-                    Refresh
-                  </button>
+                  <div className="flex flex-wrap items-center gap-4">
+                    <div className="flex items-center space-x-2">
+                      <label className="text-sm font-medium">Type:</label>
+                      <select
+                        value={trialBalanceMode}
+                        onChange={(e) => setTrialBalanceMode(e.target.value)}
+                        className="border rounded px-3 py-1 text-sm bg-white"
+                      >
+                        <option value="manual">Journal-Based (Tally Format)</option>
+                        <option value="automatic">Automatic (Operational)</option>
+                      </select>
+                    </div>
+                    {trialBalanceMode === "manual" && (
+                      <div className="flex items-center space-x-2 bg-gray-100 px-3 py-1.5 rounded border border-gray-200">
+                        <input
+                          type="checkbox"
+                          id="tb-detailed"
+                          checked={trialBalanceDetailed}
+                          onChange={(e) => setTrialBalanceDetailed(e.target.checked)}
+                          className="rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                        />
+                        <label htmlFor="tb-detailed" className="text-sm font-medium cursor-pointer text-gray-700">
+                          Detailed View
+                        </label>
+                      </div>
+                    )}
+                    <div className="flex items-center space-x-2">
+                      <label className="text-sm font-medium">From Date:</label>
+                      <input
+                        type="date"
+                        value={trialBalanceStartDate}
+                        onChange={(e) => setTrialBalanceStartDate(e.target.value)}
+                        className="border rounded px-3 py-1 text-sm bg-white"
+                      />
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <label className="text-sm font-medium">To Date:</label>
+                      <input
+                        type="date"
+                        value={trialBalanceEndDate}
+                        onChange={(e) => setTrialBalanceEndDate(e.target.value)}
+                        className="border rounded px-3 py-1 text-sm bg-white"
+                      />
+                    </div>
+                    <button
+                      onClick={fetchTrialBalance}
+                      className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 text-sm font-medium"
+                    >
+                      Generate Report
+                    </button>
+                    {trialBalance && trialBalance.ledgers && (
+                      <button
+                        onClick={handlePrintTrialBalance}
+                        className="px-4 py-2 bg-slate-800 text-white rounded hover:bg-slate-700 text-sm font-medium"
+                      >
+                        Print Trial Balance
+                      </button>
+                    )}
+                  </div>
                 </div>
+
                 {loading ? (
-                  <div className="text-center py-8">Loading...</div>
+                  <div className="text-center py-8">Loading Trial Balance...</div>
                 ) : trialBalance ? (
                   <div>
-                    <div className="mb-4 flex items-center space-x-4">
-                      <div className="flex items-center space-x-2">
-                        {trialBalance.is_balanced ? (
-                          <CheckCircleIcon className="text-green-600" size={20} />
-                        ) : (
-                          <XCircle className="text-red-600" size={20} />
-                        )}
-                        <span className={`font-semibold ${trialBalance.is_balanced ? "text-green-600" : "text-red-600"}`}>
-                          {trialBalance.is_balanced ? "Balanced" : "Not Balanced"}
-                        </span>
-                      </div>
-                      <div className="text-gray-600">
-                        Total Debits: ₹{trialBalance.total_debits.toFixed(2)} |
-                        Total Credits: ₹{trialBalance.total_credits.toFixed(2)}
-                      </div>
-                    </div>
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full">
-                        <thead className="bg-gray-100">
-                          <tr>
-                            <th className="px-4 py-2 text-left">Ledger Name</th>
-                            <th className="px-4 py-2 text-right">Debit Total</th>
-                            <th className="px-4 py-2 text-right">Credit Total</th>
-                            <th className="px-4 py-2 text-right">Balance</th>
-                            <th className="px-4 py-2 text-left">Type</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {trialBalance.ledgers.map((ledger) => (
-                            <tr key={ledger.ledger_id} className="border-b">
-                              <td className="px-4 py-2">{ledger.ledger_name}</td>
-                              <td className="px-4 py-2 text-right">₹{ledger.debit_total.toFixed(2)}</td>
-                              <td className="px-4 py-2 text-right">₹{ledger.credit_total.toFixed(2)}</td>
-                              <td className="px-4 py-2 text-right">
-                                ₹{Math.abs(ledger.balance).toFixed(2)}
-                                {ledger.balance < 0 && " (Cr)"}
-                              </td>
-                              <td className="px-4 py-2">{ledger.balance_type}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                    {(() => {
+                      // Helper function for individual ledger debit/credit balances
+                      const getLedgerClosingBalances = (ledger) => {
+                        const balance = ledger.balance;
+                        const balanceType = ledger.balance_type;
+                        let debit = 0;
+                        let credit = 0;
+                        if (balanceType === "debit") {
+                          if (balance >= 0) {
+                            debit = balance;
+                          } else {
+                            credit = Math.abs(balance);
+                          }
+                        } else { // credit normal
+                          if (balance >= 0) {
+                            credit = balance;
+                          } else {
+                            debit = Math.abs(balance);
+                          }
+                        }
+                        return { debit, credit };
+                      };
+
+                      // Helper function to group ledgers by their group_name
+                      const groupLedgers = (ledgers) => {
+                        const groups = {};
+                        ledgers.forEach(ledger => {
+                          const gName = ledger.group_name || "General Ledger";
+                          if (!groups[gName]) {
+                            groups[gName] = {
+                              name: gName,
+                              debit: 0,
+                              credit: 0,
+                              ledgers: []
+                            };
+                          }
+                          const { debit, credit } = getLedgerClosingBalances(ledger);
+                          groups[gName].ledgers.push({
+                            ...ledger,
+                            debit,
+                            credit
+                          });
+                          groups[gName].debit += debit;
+                          groups[gName].credit += credit;
+                        });
+                        return Object.values(groups);
+                      };
+
+                      const groupedData = groupLedgers(trialBalance.ledgers);
+                      
+                      const totalDebits = trialBalance.total_debits;
+                      const totalCredits = trialBalance.total_credits;
+                      const diff = Math.abs(totalDebits - totalCredits);
+                      const isBalanced = diff < 0.01;
+                      const lowerSide = totalDebits < totalCredits ? "debit" : "credit";
+                      const grandTotal = Math.max(totalDebits, totalCredits);
+
+                      return (
+                        <div>
+                          <div className="mb-4 flex flex-wrap items-center gap-4 text-sm bg-gray-50 p-3 rounded-lg border">
+                            <div className="flex items-center space-x-2">
+                              {isBalanced ? (
+                                <CheckCircleIcon className="text-green-600 animate-pulse" size={20} />
+                              ) : (
+                                <XCircle className="text-rose-500 animate-pulse" size={20} />
+                              )}
+                              <span className={`font-bold ${isBalanced ? "text-green-600" : "text-rose-600"}`}>
+                                {isBalanced ? "Balanced" : "Trial Balance Not Balanced"}
+                              </span>
+                            </div>
+                            <div className="text-gray-500 font-mono">
+                              Debits: <span className="font-bold text-gray-800">₹{totalDebits.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span> |
+                              Credits: <span className="font-bold text-gray-800">₹{totalCredits.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+                              {!isBalanced && (
+                                <span className="text-rose-500 ml-2 font-semibold font-sans">
+                                  (Diff: ₹{diff.toLocaleString("en-IN", { minimumFractionDigits: 2 })})
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="overflow-x-auto">
+                            <table className="min-w-full text-xs border border-gray-200" id="trial-balance-table-print-area">
+                              <thead className="bg-gray-100 font-bold border-b border-gray-200 text-gray-700">
+                                <tr>
+                                  <th className="px-4 py-2.5 border-r border-gray-200 text-left">Particulars</th>
+                                  <th className="px-4 py-2.5 border-r border-gray-200 text-right">Debit</th>
+                                  <th className="px-4 py-2.5 text-right">Credit</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-100 bg-white">
+                                {groupedData.map((group, gIdx) => (
+                                  <React.Fragment key={gIdx}>
+                                    {/* Group Row */}
+                                    <tr className="bg-gray-50/50 font-bold text-gray-800">
+                                      <td className="px-4 py-2 border-r border-gray-200 font-bold text-sm text-gray-900">{group.name}</td>
+                                      <td className="px-4 py-2 border-r border-gray-200 text-right font-mono font-bold text-gray-800">
+                                        {group.debit > 0 ? `₹${group.debit.toLocaleString("en-IN", { minimumFractionDigits: 2 })}` : "—"}
+                                      </td>
+                                      <td className="px-4 py-2 text-right font-mono font-bold text-gray-800">
+                                        {group.credit > 0 ? `₹${group.credit.toLocaleString("en-IN", { minimumFractionDigits: 2 })}` : "—"}
+                                      </td>
+                                    </tr>
+                                    {/* Ledger Rows */}
+                                    {group.ledgers.map((ledger, lIdx) => (
+                                      <React.Fragment key={lIdx}>
+                                        <tr className="hover:bg-gray-50/20 transition-colors">
+                                          <td className="px-4 py-2 pl-8 border-r border-gray-200 font-semibold text-gray-800">{ledger.ledger_name}</td>
+                                          <td className="px-4 py-2 border-r border-gray-200 text-right font-mono text-gray-700">
+                                            {ledger.debit > 0 ? `₹${ledger.debit.toLocaleString("en-IN", { minimumFractionDigits: 2 })}` : "—"}
+                                          </td>
+                                          <td className="px-4 py-2 text-right font-mono text-gray-700">
+                                            {ledger.credit > 0 ? `₹${ledger.credit.toLocaleString("en-IN", { minimumFractionDigits: 2 })}` : "—"}
+                                          </td>
+                                        </tr>
+                                        {/* Details Rows */}
+                                        {trialBalanceDetailed && ledger.details && ledger.details.length > 0 && ledger.details.map((detail, dIdx) => (
+                                          <tr key={`detail-${lIdx}-${dIdx}`} className="bg-white hover:bg-gray-50/40 text-gray-500 italic">
+                                            <td className="px-4 py-1.5 pl-14 border-r border-gray-200 text-sm">↳ {detail.item_name}</td>
+                                            <td className="px-4 py-1.5 border-r border-gray-200 text-right font-mono text-xs">
+                                              {detail.type === "debit" && detail.amount > 0 ? `₹${detail.amount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}` : ""}
+                                            </td>
+                                            <td className="px-4 py-1.5 text-right font-mono text-xs">
+                                              {detail.type === "credit" && detail.amount > 0 ? `₹${detail.amount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}` : ""}
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </React.Fragment>
+                                    ))}
+                                  </React.Fragment>
+                                ))}
+                                
+                                {/* Difference Row if not balanced */}
+                                {!isBalanced && (
+                                  <tr className="bg-rose-50/50 font-bold text-rose-700 italic border-t border-rose-200">
+                                    <td className="px-4 py-2 border-r border-gray-200 font-bold">Difference in opening balances</td>
+                                    <td className="px-4 py-2 border-r border-gray-200 text-right font-mono font-bold">
+                                      {lowerSide === "debit" ? `₹${diff.toLocaleString("en-IN", { minimumFractionDigits: 2 })}` : "—"}
+                                    </td>
+                                    <td className="px-4 py-2 text-right font-mono font-bold">
+                                      {lowerSide === "credit" ? `₹${diff.toLocaleString("en-IN", { minimumFractionDigits: 2 })}` : "—"}
+                                    </td>
+                                  </tr>
+                                )}
+                              </tbody>
+                              <tfoot className="bg-gray-100 border-t-2 border-gray-300 font-bold text-gray-900">
+                                <tr>
+                                  <td className="px-4 py-2.5 border-r border-gray-200 text-right font-bold text-gray-900 text-sm">Grand Total:</td>
+                                  <td className="px-4 py-2.5 border-r border-gray-200 text-right font-mono font-bold text-gray-900 text-sm">
+                                    ₹{grandTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                                  </td>
+                                  <td className="px-4 py-2.5 text-right font-mono font-bold text-gray-900 text-sm">
+                                    ₹{grandTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                                  </td>
+                                </tr>
+                              </tfoot>
+                            </table>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 ) : (
                   <div className="text-center py-8 text-gray-500">No data available</div>
+                )}
+              </div>
+            )}
+
+            {/* Day Book Tab */}
+            {activeAccountingTab === "day-book" && (
+              <div className="bg-white rounded-lg shadow p-6">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-xl font-bold">Day Book Report</h2>
+                    <button
+                      onClick={() => setSelectedSectionInfo("day-book")}
+                      className="text-gray-400 hover:text-blue-600 transition-colors"
+                    >
+                      <Info size={18} />
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-4">
+                    <div className="flex items-center space-x-2">
+                      <label className="text-sm font-medium">Start Date:</label>
+                      <input
+                        type="date"
+                        value={dayBookStartDate}
+                        onChange={(e) => setDayBookStartDate(e.target.value)}
+                        className="border rounded px-3 py-1 text-sm"
+                      />
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <label className="text-sm font-medium">End Date:</label>
+                      <input
+                        type="date"
+                        value={dayBookEndDate}
+                        onChange={(e) => setDayBookEndDate(e.target.value)}
+                        className="border rounded px-3 py-1 text-sm"
+                      />
+                    </div>
+                    <button
+                      onClick={fetchDayBookReport}
+                      className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 text-sm font-medium"
+                    >
+                      Generate Report
+                    </button>
+                    {dayBookData.length > 0 && (
+                      <button
+                        onClick={handlePrintDayBook}
+                        className="px-4 py-2 bg-slate-800 text-white rounded hover:bg-slate-700 text-sm font-medium flex items-center gap-1.5"
+                      >
+                        Print Day Book
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {dayBookLoading ? (
+                  <div className="text-center py-8">Loading Day Book...</div>
+                ) : dayBookData.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-xs border border-gray-200" id="day-book-table-print-area">
+                      <thead className="bg-gray-100 font-bold border-b border-gray-200 text-gray-700">
+                        <tr>
+                          <th className="px-4 py-2.5 border-r border-gray-200 text-left">Date</th>
+                          <th className="px-4 py-2.5 border-r border-gray-200 text-left">Particulars</th>
+                          <th className="px-4 py-2.5 border-r border-gray-200 text-left">Vch Type</th>
+                          <th className="px-4 py-2.5 border-r border-gray-200 text-center">Vch No.</th>
+                          <th className="px-4 py-2.5 border-r border-gray-200 text-right">Debit Amount</th>
+                          <th className="px-4 py-2.5 border-r border-gray-200 text-right">Credit Amount</th>
+                          <th className="px-4 py-2.5 border-r border-gray-200 text-center">Outwards Qty</th>
+                          <th className="px-4 py-2.5 text-center">Inwards Qty</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 bg-white">
+                        {dayBookData.map((row, i) => (
+                          <tr key={i} className="hover:bg-gray-50/50 transition-colors">
+                            <td className="px-4 py-2 border-r border-gray-200 whitespace-nowrap font-mono">{row.date}</td>
+                            <td className="px-4 py-2 border-r border-gray-200 font-semibold text-gray-800">{row.particulars}</td>
+                            <td className="px-4 py-2 border-r border-gray-200 whitespace-nowrap">{row.vch_type}</td>
+                            <td className="px-4 py-2 border-r border-gray-200 whitespace-nowrap text-center font-mono">{row.vch_no}</td>
+                            <td className="px-4 py-2 border-r border-gray-200 whitespace-nowrap text-right font-mono">
+                              {row.debit_amount ? `₹${row.debit_amount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}` : "₹ -"}
+                            </td>
+                            <td className="px-4 py-2 border-r border-gray-200 whitespace-nowrap text-right font-mono">
+                              {row.credit_amount ? `₹${row.credit_amount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}` : "₹ -"}
+                            </td>
+                            <td className="px-4 py-2 border-r border-gray-200 text-center text-gray-400">—</td>
+                            <td className="px-4 py-2 text-center text-gray-400">—</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot className="bg-gray-50 border-t-2 border-gray-300 font-bold text-gray-900">
+                        <tr>
+                          <td colSpan="4" className="px-4 py-2.5 border-r border-gray-200 text-right font-bold">Total:</td>
+                          <td className="px-4 py-2.5 border-r border-gray-200 text-right font-mono font-bold">
+                            ₹{dayBookData.reduce((sum, r) => sum + (r.debit_amount || 0), 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="px-4 py-2.5 border-r border-gray-200 text-right font-mono font-bold">
+                            ₹{dayBookData.reduce((sum, r) => sum + (r.credit_amount || 0), 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="px-4 py-2.5 border-r border-gray-200 text-center">—</td>
+                          <td className="px-4 py-2.5 text-center">—</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="text-center py-12 text-gray-400 border rounded-xl border-dashed border-gray-200">
+                    <History size={40} className="mx-auto mb-3 opacity-30" />
+                    <p className="font-semibold text-sm">No Day Book postings found</p>
+                    <p className="text-xs">Adjust your date range filters and click Generate Report.</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Ledger Report Tab */}
+            {activeAccountingTab === "ledger-report" && (
+              <div className="bg-white rounded-lg shadow p-6">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-xl font-bold">Ledger Account Statement</h2>
+                    <button
+                      onClick={() => setSelectedSectionInfo("ledger-report")}
+                      className="text-gray-400 hover:text-emerald-600 transition-colors"
+                    >
+                      <Info size={18} />
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-4">
+                    <div className="flex items-center space-x-2">
+                      <label className="text-sm font-medium">Ledger:</label>
+                      <select
+                        value={selectedLedgerId}
+                        onChange={(e) => setSelectedLedgerId(e.target.value)}
+                        className="border rounded px-3 py-1 text-sm max-w-xs"
+                      >
+                        <option value="all">All</option>
+                        {accountLedgers.map((ledger) => (
+                          <option key={ledger.id} value={ledger.id}>
+                            {ledger.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <label className="text-sm font-medium">Start Date:</label>
+                      <input
+                        type="date"
+                        value={statementStartDate}
+                        onChange={(e) => setStatementStartDate(e.target.value)}
+                        className="border rounded px-3 py-1 text-sm"
+                      />
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <label className="text-sm font-medium">End Date:</label>
+                      <input
+                        type="date"
+                        value={statementEndDate}
+                        onChange={(e) => setStatementEndDate(e.target.value)}
+                        className="border rounded px-3 py-1 text-sm"
+                      />
+                    </div>
+                    <button
+                      onClick={fetchLedgerStatement}
+                      className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 text-sm font-medium"
+                    >
+                      Generate Report
+                    </button>
+                    {ledgerStatementData && ledgerStatementData.postings && (
+                      <button
+                        onClick={handlePrintLedgerStatement}
+                        className="px-4 py-2 bg-slate-800 text-white rounded hover:bg-slate-700 text-sm font-medium flex items-center gap-1.5"
+                      >
+                        Print Statement
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {statementLoading ? (
+                  <div className="text-center py-8">Loading Ledger Statement...</div>
+                ) : ledgerStatementData ? (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-xs border border-gray-200" id="ledger-statement-table-print-area">
+                      <thead className="bg-gray-100 font-bold border-b border-gray-200 text-gray-700">
+                        <tr>
+                          <th className="px-4 py-2.5 border-r border-gray-200 text-left">Date</th>
+                          <th className="px-4 py-2.5 border-r border-gray-200 text-left">Particulars</th>
+                          <th className="px-4 py-2.5 border-r border-gray-200 text-left">Vch Type</th>
+                          <th className="px-4 py-2.5 border-r border-gray-200 text-center">Vch No.</th>
+                          <th className="px-4 py-2.5 border-r border-gray-200 text-right">Debit Amount</th>
+                          <th className="px-4 py-2.5 border-r border-gray-200 text-right">Credit Amount</th>
+                          {selectedLedgerId === "all" && <th className="px-4 py-2.5 border-r border-gray-200 text-right">Inward Qty</th>}
+                          {selectedLedgerId === "all" && <th className="px-4 py-2.5 border-r border-gray-200 text-right">Outward Qty</th>}
+                          {selectedLedgerId !== "all" && <th className="px-4 py-2.5 text-right">Running Balance</th>}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 bg-white">
+                        {/* Opening Balance Row */}
+                        {selectedLedgerId !== "all" && (
+                          <tr className="bg-gray-50/50 font-semibold text-gray-700">
+                            <td className="px-4 py-2 border-r border-gray-200 whitespace-nowrap font-mono"></td>
+                            <td className="px-4 py-2 border-r border-gray-200">Opening Balance</td>
+                          <td className="px-4 py-2 border-r border-gray-200 whitespace-nowrap"></td>
+                          <td className="px-4 py-2 border-r border-gray-200 whitespace-nowrap text-center font-mono"></td>
+                          <td className="px-4 py-2 border-r border-gray-200 whitespace-nowrap text-right font-mono">—</td>
+                          <td className="px-4 py-2 border-r border-gray-200 whitespace-nowrap text-right font-mono">—</td>
+                          <td className="px-4 py-2 whitespace-nowrap text-right font-mono">
+                            {(() => {
+                              const val = ledgerStatementData.opening_balance;
+                              const normalType = ledgerStatementData.balance_type;
+                              if (val === null || val === undefined || isNaN(val)) return "₹ -";
+                              if (val === 0) return "₹ 0.00";
+                              const absVal = Math.abs(val);
+                              const formatted = absVal.toLocaleString("en-IN", { minimumFractionDigits: 2 });
+                              if (normalType === "debit") {
+                                return val >= 0 ? `₹ ${formatted} Dr` : `₹ ${formatted} Cr`;
+                              } else {
+                                return val >= 0 ? `₹ ${formatted} Cr` : `₹ ${formatted} Dr`;
+                              }
+                            })()}
+                            </td>
+                          </tr>
+                        )}
+
+                        {/* Posting Transactions */}
+                        {ledgerStatementData.postings.map((row, i) => (
+                          <tr key={i} className="hover:bg-gray-50/50 transition-colors">
+                            <td className="px-4 py-2 border-r border-gray-200 whitespace-nowrap font-mono">{row.date}</td>
+                            <td className="px-4 py-2 border-r border-gray-200 font-semibold text-gray-800">{row.particulars}</td>
+                            <td className="px-4 py-2 border-r border-gray-200 whitespace-nowrap">{row.vch_type}</td>
+                            <td className="px-4 py-2 border-r border-gray-200 whitespace-nowrap text-center font-mono">{row.vch_no}</td>
+                            <td className="px-4 py-2 border-r border-gray-200 whitespace-nowrap text-right font-mono">
+                              {row.debit_amount ? `₹${row.debit_amount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}` : "—"}
+                            </td>
+                            <td className="px-4 py-2 border-r border-gray-200 whitespace-nowrap text-right font-mono">
+                              {row.credit_amount ? `₹${row.credit_amount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}` : "—"}
+                            </td>
+                            {selectedLedgerId === "all" && (
+                              <td className="px-4 py-2 border-r border-gray-200 whitespace-nowrap text-right font-mono">
+                                {row.inwards_qty ? row.inwards_qty : "—"}
+                              </td>
+                            )}
+                            {selectedLedgerId === "all" && (
+                              <td className="px-4 py-2 border-r border-gray-200 whitespace-nowrap text-right font-mono">
+                                {row.outwards_qty ? row.outwards_qty : "—"}
+                              </td>
+                            )}
+                            {selectedLedgerId !== "all" && (
+                              <td className="px-4 py-2 whitespace-nowrap text-right font-mono">
+                                {(() => {
+                                  const val = row.running_balance;
+                                  const normalType = ledgerStatementData.balance_type;
+                                  if (val === null || val === undefined || isNaN(val)) return "₹ -";
+                                  if (val === 0) return "₹ 0.00";
+                                  const absVal = Math.abs(val);
+                                  const formatted = absVal.toLocaleString("en-IN", { minimumFractionDigits: 2 });
+                                  if (normalType === "debit") {
+                                    return val >= 0 ? `₹ ${formatted} Dr` : `₹ ${formatted} Cr`;
+                                  } else {
+                                    return val >= 0 ? `₹ ${formatted} Cr` : `₹ ${formatted} Dr`;
+                                  }
+                                })()}
+                              </td>
+                            )}
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot className="bg-gray-50 border-t-2 border-gray-300 font-bold text-gray-900">
+                        {/* Totals row */}
+                        <tr>
+                          <td colSpan="4" className="px-4 py-2.5 border-r border-gray-200 text-right font-bold">Total Current:</td>
+                          <td className="px-4 py-2.5 border-r border-gray-200 text-right font-mono font-bold">
+                            ₹{ledgerStatementData.postings.reduce((sum, r) => sum + (r.debit_amount || 0), 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="px-4 py-2.5 border-r border-gray-200 text-right font-mono font-bold">
+                            ₹{ledgerStatementData.postings.reduce((sum, r) => sum + (r.credit_amount || 0), 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                          </td>
+                          {selectedLedgerId === "all" && <td className="px-4 py-2.5 border-r border-gray-200 text-right">—</td>}
+                          {selectedLedgerId === "all" && <td className="px-4 py-2.5 border-r border-gray-200 text-right">—</td>}
+                          {selectedLedgerId !== "all" && <td className="px-4 py-2.5 text-right">—</td>}
+                        </tr>
+                        {/* Closing balance row */}
+                        {selectedLedgerId !== "all" && (
+                          <tr className="bg-indigo-50 border-t border-indigo-200">
+                            <td colSpan="4" className="px-4 py-2.5 border-r border-gray-200 text-right font-bold text-indigo-900">Closing Balance:</td>
+                          <td className="px-4 py-2.5 border-r border-gray-200 text-right font-mono font-bold">—</td>
+                          <td className="px-4 py-2.5 border-r border-gray-200 text-right font-mono font-bold">—</td>
+                          <td className="px-4 py-2.5 text-right font-mono font-bold text-indigo-900">
+                            {(() => {
+                              const val = ledgerStatementData.closing_balance;
+                              const normalType = ledgerStatementData.balance_type;
+                              if (val === null || val === undefined || isNaN(val)) return "₹ -";
+                              if (val === 0) return "₹ 0.00";
+                              const absVal = Math.abs(val);
+                              const formatted = absVal.toLocaleString("en-IN", { minimumFractionDigits: 2 });
+                              if (normalType === "debit") {
+                                return val >= 0 ? `₹ ${formatted} Dr` : `₹ ${formatted} Cr`;
+                              } else {
+                                return val >= 0 ? `₹ ${formatted} Cr` : `₹ ${formatted} Dr`;
+                              }
+                            })()}
+                          </td>
+                        </tr>
+                        )}
+                      </tfoot>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="text-center py-12 text-gray-400 border rounded-xl border-dashed border-gray-200">
+                    <BookOpen size={40} className="mx-auto mb-3 opacity-30" />
+                    <p className="font-semibold text-sm">No Ledger Statement selected</p>
+                    <p className="text-xs">Select an account ledger from the dropdown and adjust date filters.</p>
+                  </div>
                 )}
               </div>
             )}

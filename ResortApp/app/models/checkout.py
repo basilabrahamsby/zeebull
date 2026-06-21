@@ -139,6 +139,7 @@ class Checkout(Base):
     # B2B/GSTIN
     guest_gstin = Column(String, nullable=True)  # For B2B invoices
     pan_number = Column(String, nullable=True)  # Optional PAN for GST/Tax purposes
+    gst_number = Column(String, nullable=True)  # Optional GST Number for Guest
     is_b2b = Column(Boolean, default=False)
     invoice_number = Column(String, nullable=True, unique=True, index=True)
     

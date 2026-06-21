@@ -622,18 +622,46 @@ def update_purchase_status(db: Session, purchase_id: int, status: str, current_u
                 if vendor and vendor.gst_number and len(vendor.gst_number) >= 2:
                     is_interstate = vendor.gst_number[:2] != RESORT_STATE_CODE
                 
+                # Separate amounts into Assets and regular Inventory
+                equipment_amount = 0.0
+                furniture_amount = 0.0
+                inventory_amount = 0.0
+                from app.models.inventory import InventoryItem, InventoryCategory
+                
+                for detail in purchase.details:
+                    item_subtotal = float(detail.quantity or 0) * float(detail.unit_price or 0)
+                    
+                    # Query item category to check if it's an asset
+                    item_info = db.query(InventoryItem, InventoryCategory).join(
+                        InventoryCategory, InventoryItem.category_id == InventoryCategory.id
+                    ).filter(InventoryItem.id == detail.item_id).first()
+                    
+                    if item_info:
+                        cat = item_info.InventoryCategory
+                        if cat.is_asset_fixed or getattr(cat, 'is_capital_good', False):
+                            if cat.name and 'furniture' in cat.name.lower():
+                                furniture_amount += item_subtotal
+                            else:
+                                equipment_amount += item_subtotal
+                        else:
+                            inventory_amount += item_subtotal
+                    else:
+                        inventory_amount += item_subtotal
+                        
                 create_purchase_journal_entry(
                     db=db,
                     purchase_id=purchase.id,
                     vendor_id=purchase.vendor_id,
-                    inventory_amount=float(purchase.sub_total or 0),
+                    inventory_amount=inventory_amount,
                     cgst_amount=float(purchase.cgst or 0),
                     sgst_amount=float(purchase.sgst or 0),
                     igst_amount=float(purchase.igst or 0),
                     vendor_name=vendor_name,
                     is_interstate=is_interstate,
                     branch_id=purchase.branch_id,
-                    created_by=current_user_id or purchase.created_by
+                    created_by=current_user_id or purchase.created_by,
+                    equipment_amount=equipment_amount,
+                    furniture_amount=furniture_amount
                 )
 
         except Exception as e:
@@ -2191,6 +2219,21 @@ def process_food_order_usage(db: Session, order_id: int):
             branch_id=order.branch_id
         )
         db.add(transaction)
+        
+        if transaction.total_amount and transaction.total_amount > 0:
+            try:
+                from app.utils.accounting_helpers import create_consumption_journal_entry
+                create_consumption_journal_entry(
+                    db=db,
+                    consumption_id=order_id,
+                    cogs_amount=float(transaction.total_amount),
+                    inventory_item_name=item.name,
+                    branch_id=order.branch_id,
+                    created_by=None,
+                    reference_type="food_order_consumption"
+                )
+            except Exception as e:
+                print(f"[WARNING] Could not create COGS journal for food order: {e}")
     
     # db.commit() removed to allow atomic transaction in caller
 

@@ -48,6 +48,13 @@ def clear_transactional_data(session, dry_run=True):
     
     # List of tables to clear (in order to respect foreign keys)
     tables_to_clear = [
+        # Accounting & Payments (clear these first as they reference bookings/purchases)
+        ("journal_entry_lines", "Journal Entry Lines"),
+        ("journal_entries", "Journal Entries"),
+        ("payments", "Payments"),
+        ("expenses", "Expenses"),
+        ("billing_records", "Billing Records"),
+        
         # Checkout related
         ("checkout_verifications", "Checkout Verifications"),
         ("checkout_payments", "Checkout Payments"),
@@ -68,7 +75,8 @@ def clear_transactional_data(session, dry_run=True):
         ("booking_rooms", "Booking Rooms"),
         ("bookings", "Bookings"),
         
-        # Inventory transactions
+        # Inventory transactions (clear transactions before masters)
+        ("inventory_transactions", "Inventory Transactions"),
         ("waste_logs", "Waste Logs"),
         ("stock_issue_details", "Stock Issue Details"),
         ("stock_issues", "Stock Issues"),
@@ -76,21 +84,11 @@ def clear_transactional_data(session, dry_run=True):
         ("stock_requisitions", "Stock Requisitions"),
         ("purchase_details", "Purchase Details"),
         ("purchase_masters", "Purchase Masters"),
-        ("inventory_transactions", "Inventory Transactions"),
         ("location_stocks", "Location Stocks"),
         
         # Asset tracking
         ("asset_registry", "Asset Registry"),
         ("asset_mappings", "Asset Mappings"),
-        
-        # Billing
-        ("billing_records", "Billing Records"),
-        
-        # Payments
-        ("payments", "Payments"),
-        
-        # Expenses
-        ("expenses", "Expenses"),
     ]
     
     total_deleted = 0
@@ -125,10 +123,10 @@ def clear_transactional_data(session, dry_run=True):
                 })
                 continue
             
-            # Delete records
             if not dry_run:
                 delete_query = text(f"DELETE FROM {table_name}")
                 session.execute(delete_query)
+                session.commit()
                 print(f"✓ {description} ({table_name}): Deleted {count} records")
                 total_deleted += count
                 results.append({
@@ -148,6 +146,7 @@ def clear_transactional_data(session, dry_run=True):
                 })
                 
         except Exception as e:
+            session.rollback()
             print(f"❌ Error processing {table_name}: {e}")
             results.append({
                 "table": table_name,
@@ -170,6 +169,7 @@ def clear_transactional_data(session, dry_run=True):
             if not dry_run:
                 reset_query = text("UPDATE inventory_items SET current_stock = 0")
                 session.execute(reset_query)
+                session.commit()
                 print(f"✓ Reset stock to 0 for {items_with_stock} inventory items")
             else:
                 print(f"  Would reset stock to 0 for {items_with_stock} inventory items")
@@ -177,6 +177,7 @@ def clear_transactional_data(session, dry_run=True):
             print("✓ All inventory items already have 0 stock")
             
     except Exception as e:
+        session.rollback()
         print(f"❌ Error resetting inventory stocks: {e}")
     
     # Commit if not dry run

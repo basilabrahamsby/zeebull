@@ -160,10 +160,8 @@ async def create_expense(
     # Add employee name in the response
     employee = db.query(Employee).filter(Employee.id == employee_id, Employee.branch_id == branch_id).first()
 
-    return {
-        **created.__dict__,
-        "employee_name": employee.name if employee else "N/A"
-    }
+    created.employee_name = employee.name if employee else "N/A"
+    return created
 
 @router.get("", response_model=list[ExpenseOut])
 def get_expenses(
@@ -185,10 +183,8 @@ def get_expenses(
     result = []
     for exp in expenses:
         emp = db.query(Employee).filter(Employee.id == exp.employee_id).first()
-        result.append({
-            **exp.__dict__,
-            "employee_name": emp.name if emp else "N/A"
-        })
+        exp.employee_name = emp.name if emp else "N/A"
+        result.append(exp)
     return result
 
 @router.get("/image/{filename}")
@@ -220,6 +216,19 @@ def delete_expense(
                 # Log error but continue with expense deletion
                 print(f"Error deleting image file {image_path}: {e}")
     
+    # Delete associated journal entries
+    from app.models.account import JournalEntry
+    journal_entries = db.query(JournalEntry).filter(
+        JournalEntry.reference_type.in_(["expense", "rcm_expense"]),
+        JournalEntry.reference_id == expense_id,
+        JournalEntry.branch_id == branch_id
+    ).all()
+    
+    for je in journal_entries:
+        db.delete(je)
+    
+    db.commit()
+
     expense_crud.delete_expense(db, expense_id, branch_id=branch_id)
 
     return {"message": "Expense deleted successfully"}

@@ -167,7 +167,13 @@ def get_account_ledgers(
 
 def update_account_ledger(db: Session, ledger_id: int, ledger_update: AccountLedgerUpdate, branch_id: int) -> Optional[AccountLedger]:
     """Update account ledger"""
-    db_ledger = db.query(AccountLedger).filter(AccountLedger.id == ledger_id, AccountLedger.branch_id == branch_id).first()
+    query = db.query(AccountLedger).filter(AccountLedger.id == ledger_id)
+    
+    if branch_id is not None:
+        from sqlalchemy import or_
+        query = query.filter(or_(AccountLedger.branch_id == branch_id, AccountLedger.branch_id == None))
+        
+    db_ledger = query.first()
 
     if not db_ledger:
         return None
@@ -183,7 +189,13 @@ def update_account_ledger(db: Session, ledger_id: int, ledger_update: AccountLed
 
 def delete_account_ledger(db: Session, ledger_id: int, branch_id: int) -> bool:
     """Delete account ledger (soft delete)"""
-    db_ledger = db.query(AccountLedger).filter(AccountLedger.id == ledger_id, AccountLedger.branch_id == branch_id).first()
+    query = db.query(AccountLedger).filter(AccountLedger.id == ledger_id)
+    
+    if branch_id is not None:
+        from sqlalchemy import or_
+        query = query.filter(or_(AccountLedger.branch_id == branch_id, AccountLedger.branch_id == None))
+        
+    db_ledger = query.first()
 
     if not db_ledger:
         return False
@@ -371,8 +383,12 @@ def get_ledger_balance(db: Session, ledger_id: int, branch_id: int, as_on_date: 
     
     if ledger.balance_type == "debit":
         balance = opening_balance + debit_result - credit_result
+        closing_debit = balance if balance >= 0 else 0.0
+        closing_credit = abs(balance) if balance < 0 else 0.0
     else:  # credit
         balance = opening_balance - debit_result + credit_result
+        closing_credit = balance if balance >= 0 else 0.0
+        closing_debit = abs(balance) if balance < 0 else 0.0
     
     return {
         "ledger_id": ledger_id,
@@ -381,11 +397,66 @@ def get_ledger_balance(db: Session, ledger_id: int, branch_id: int, as_on_date: 
         "credit_total": credit_result,
         "opening_balance": opening_balance,
         "balance": balance,
-        "balance_type": ledger.balance_type
+        "closing_debit": closing_debit,
+        "closing_credit": closing_credit,
+        "balance_type": ledger.balance_type,
+        "group_name": ledger.group.name if ledger.group else "General Ledger"
     }
 
 
-def get_trial_balance(db: Session, branch_id: int, as_on_date: Optional[datetime] = None, automatic: bool = False) -> dict:
+def get_ledger_details(db: Session, ledger_id: int, branch_id: int, as_on_date: Optional[datetime] = None) -> list:
+    from app.models.account import JournalEntry, JournalEntryLine
+    from sqlalchemy import or_
+    
+    query = db.query(JournalEntryLine).join(JournalEntry).filter(
+        or_(
+            JournalEntryLine.debit_ledger_id == ledger_id,
+            JournalEntryLine.credit_ledger_id == ledger_id
+        )
+    )
+    if branch_id is not None:
+        query = query.filter(JournalEntryLine.branch_id == branch_id)
+    if as_on_date:
+        query = query.filter(JournalEntry.entry_date <= as_on_date)
+        
+    lines = query.all()
+    details_map = {}
+    
+    for line in lines:
+        je = line.entry
+        is_debit = line.debit_ledger_id == ledger_id
+        amt = float(line.amount if is_debit else -line.amount)
+        detail_name = line.description or je.description or f"JE {je.entry_number}"
+        
+        if je.reference_type == 'purchase':
+            from app.models.inventory import PurchaseMaster, InventoryItem
+            pm = db.query(PurchaseMaster).get(je.reference_id)
+            if pm:
+                for pd in pm.details:
+                    item = db.query(InventoryItem).get(pd.item_id)
+                    name = item.name if item else "Unknown Item"
+                    if name not in details_map:
+                        details_map[name] = 0.0
+                    details_map[name] += float(pd.total_amount if is_debit else -pd.total_amount)
+                continue
+                
+        if detail_name not in details_map:
+            details_map[detail_name] = 0.0
+        details_map[detail_name] += amt
+
+    # Convert to list
+    details_list = []
+    for name, amt in details_map.items():
+        if abs(amt) > 0.001:
+            details_list.append({
+                "item_name": name,
+                "amount": abs(amt),
+                "type": "debit" if amt > 0 else "credit"
+            })
+    
+    return details_list
+
+def get_trial_balance(db: Session, branch_id: int, as_on_date: Optional[datetime] = None, automatic: bool = False, detailed: bool = False) -> dict:
     """
     Generate trial balance for all active ledgers in a branch.
     
@@ -408,6 +479,9 @@ def get_trial_balance(db: Session, branch_id: int, as_on_date: Optional[datetime
     
     for ledger in ledgers:
         balance_data = get_ledger_balance(db, ledger.id, branch_id=branch_id, as_on_date=as_on_date)
+        
+        if detailed and abs(balance_data["balance"]) > 0.001:
+            balance_data["details"] = get_ledger_details(db, ledger.id, branch_id=branch_id, as_on_date=as_on_date)
 
         ledger_balances.append(balance_data)
         
@@ -426,8 +500,24 @@ def get_trial_balance(db: Session, branch_id: int, as_on_date: Optional[datetime
             else:
                 total_debits += abs(balance)
     
+    # Group ledgers
+    groups_dict = {}
+    for lb in ledger_balances:
+        g_name = lb.get("group_name", "General Ledger")
+        if g_name not in groups_dict:
+            groups_dict[g_name] = {
+                "group_name": g_name,
+                "ledgers": [],
+                "closing_debit": 0.0,
+                "closing_credit": 0.0
+            }
+        groups_dict[g_name]["ledgers"].append(lb)
+        groups_dict[g_name]["closing_debit"] += lb.get("closing_debit", 0.0)
+        groups_dict[g_name]["closing_credit"] += lb.get("closing_credit", 0.0)
+        
     return {
         "ledgers": ledger_balances,
+        "groups": list(groups_dict.values()),
         "total_debits": total_debits,
         "total_credits": total_credits,
         "is_balanced": abs(total_debits - total_credits) < 0.01  # Allow small rounding differences
@@ -651,11 +741,36 @@ def get_automatic_trial_balance(db: Session, branch_id: int, as_on_date: Optiona
         total_credits = 0.0
         
         for ledger_balance in ledger_balances:
+            bal = ledger_balance["balance"]
+            b_type = ledger_balance.get("balance_type", "debit")
+            if b_type == "debit":
+                ledger_balance["closing_debit"] = bal if bal >= 0 else 0.0
+                ledger_balance["closing_credit"] = abs(bal) if bal < 0 else 0.0
+            else:
+                ledger_balance["closing_credit"] = bal if bal >= 0 else 0.0
+                ledger_balance["closing_debit"] = abs(bal) if bal < 0 else 0.0
+                
             total_debits += ledger_balance["debit_total"]
             total_credits += ledger_balance["credit_total"]
         
+        # Group ledgers
+        groups_dict = {}
+        for lb in ledger_balances:
+            g_name = lb.get("group_name", "General Ledger")
+            if g_name not in groups_dict:
+                groups_dict[g_name] = {
+                    "group_name": g_name,
+                    "ledgers": [],
+                    "closing_debit": 0.0,
+                    "closing_credit": 0.0
+                }
+            groups_dict[g_name]["ledgers"].append(lb)
+            groups_dict[g_name]["closing_debit"] += lb.get("closing_debit", 0.0)
+            groups_dict[g_name]["closing_credit"] += lb.get("closing_credit", 0.0)
+            
         return {
             "ledgers": ledger_balances,
+            "groups": list(groups_dict.values()),
             "total_debits": total_debits,
             "total_credits": total_credits,
             "is_balanced": abs(total_debits - total_credits) < 0.01  # Allow small rounding differences
@@ -667,6 +782,7 @@ def get_automatic_trial_balance(db: Session, branch_id: int, as_on_date: Optiona
         # Return empty trial balance on error
         return {
             "ledgers": [],
+            "groups": [],
             "total_debits": 0.0,
             "total_credits": 0.0,
             "is_balanced": True

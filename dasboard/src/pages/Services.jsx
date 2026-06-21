@@ -1729,6 +1729,12 @@ const Services = () => {
 
     const request = serviceRequests.find(r => r.id === requestId);
 
+    if (request && request.is_checkout_request && newStatus === "completed") {
+      const checkoutRequestId = request.checkout_request_id || request.id - 1000000;
+      handleViewCheckoutInventory(checkoutRequestId);
+      return;
+    }
+
     // For regular requests being completed, check if they have a linked assignment to trigger the modal
     if (newStatus === "completed" && request) {
       const linkedAssigned = assignedServices.find(as =>

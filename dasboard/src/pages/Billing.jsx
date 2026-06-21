@@ -3,7 +3,7 @@ import DashboardLayout from "../layout/DashboardLayout";
 import BannerMessage from "../components/BannerMessage";
 import axios from "axios"; // We need axios to create the api service object
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { DollarSign, BedDouble, Users, Utensils, Package, Hash, Calendar, CreditCard, X, Search, Filter, XCircle, RefreshCw, Edit, Save, ChevronDown, User, Tag } from 'lucide-react';
+import { DollarSign, BedDouble, Users, Utensils, Package, Hash, Calendar, CreditCard, X, Search, Filter, XCircle, RefreshCw, Edit, Save, ChevronDown, User, Tag, Printer, Download, Mail, CheckCircle, Percent, FileText, Share2, ClipboardList, ChevronRight, AlertTriangle } from 'lucide-react';
 import jsPDF from 'jspdf';
 import { useNavigate } from "react-router-dom";
 import autoTable from 'jspdf-autotable';
@@ -79,7 +79,7 @@ const KpiCard = React.memo(({ title, value, icon, color, prefix = '', suffix = '
 ));
 KpiCard.displayName = 'KpiCard';
 
-const CheckoutDetailModal = React.memo(({ checkout, onClose, onUpdateSuccess }) => {
+const CheckoutDetailModal = React.memo(({ checkout, onClose, onUpdateSuccess, resortSettings }) => {
   const [details, setDetails] = useState(null);
   const [loading, setLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -121,7 +121,7 @@ const CheckoutDetailModal = React.memo(({ checkout, onClose, onUpdateSuccess }) 
     console.log("Invoice PDF Path:", details.invoice_pdf_path);
   }
 
-  const handleDownloadPDF = () => {
+  const handleDownloadPDF = async () => {
     if (!details) return;
 
     if (!printRoom && !printFood && !printServices) {
@@ -131,59 +131,138 @@ const CheckoutDetailModal = React.memo(({ checkout, onClose, onUpdateSuccess }) 
 
     const doc = new jsPDF();
 
-    // 1. Title (Centered, Green, Emerald 600: rgb(5, 150, 105))
+    // Try to load and add logo
+    try {
+      const img = new Image();
+      img.src = logo;
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+      });
+      doc.addImage(img, 'JPEG', 90, 5, 30, 30);
+    } catch (err) {
+      console.warn("Could not load logo for PDF", err);
+    }
+
+    // 1. Header (Centered)
+    const resortName = resortSettings?.branch_name || resortSettings?.resort_name || 'ORCHID TRAILS RESORT';
     doc.setFontSize(24);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(5, 150, 105);
-    doc.text('ORCHID TRAILS RESORT', 105, 25, { align: 'center' });
+    doc.text(resortName.toUpperCase(), 105, 43, { align: 'center' });
 
-    // 2. Subtitle (Left-aligned, Dark Grey)
-    doc.setFontSize(14);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(31, 41, 55); // Hex #1F2937
-    doc.text('Resort Invoice', 14, 38);
-
-    // 3. Info Section (Two Columns)
     doc.setFontSize(10);
-    doc.setTextColor(55, 65, 81); // Hex #374151
-
-    // Column 1
-    doc.setFont('helvetica', 'bold');
-    doc.text('Bill ID:', 14, 48);
     doc.setFont('helvetica', 'normal');
-    doc.text(details.id.toString(), 45, 48);
+    doc.setTextColor(100, 100, 100);
 
-    doc.setFont('helvetica', 'bold');
-    doc.text('Guest Name:', 14, 55);
-    doc.setFont('helvetica', 'normal');
-    doc.text((details.guest_name || 'N/A').toUpperCase(), 45, 55);
-    doc.setFont('helvetica', 'bold');
-    doc.text('PAN Number:', 14, 58);
-    doc.setFont('helvetica', 'normal');
-    doc.text(details.pan_number || 'N/A', 45, 58);
+    const address = resortSettings?.branch_address || resortSettings?.resort_address || '';
+    if (address) {
+      doc.text(address, 105, 49, { align: 'center' });
+    }
 
-    doc.setFont('helvetica', 'bold');
-    doc.text('Check-in:', 14, 62);
-    doc.setFont('helvetica', 'normal');
-    doc.text(formatDateIST(details.check_in || details.created_at), 45, 62);
+    const phone = resortSettings?.branch_phone || '';
+    const gst = resortSettings?.gst_number || '';
+    
+    let contactInfo = [];
+    if (phone) contactInfo.push(`Phone: ${phone}`);
+    if (gst) contactInfo.push(`GSTIN: ${gst}`);
+    if (contactInfo.length > 0) {
+      doc.text(contactInfo.join(' | '), 105, 55, { align: 'center' });
+    }
 
-    // Column 2
+    // TAX INVOICE Badge
+    doc.setFillColor(5, 150, 105);
+    doc.roundedRect(85, 60, 40, 7, 2, 2, 'F');
+    doc.setFontSize(11);
     doc.setFont('helvetica', 'bold');
-    doc.text('Date:', 120, 48);
-    doc.setFont('helvetica', 'normal');
-    doc.text(formatDateTimeIST(details.created_at), 145, 48);
+    doc.setTextColor(255, 255, 255); 
+    doc.text('TAX INVOICE', 105, 65, { align: 'center' });
+    
+    // 2. Info Section Layout
+    let startY = 73;
+    let boxHeight = 46;
+    
+    // Draw Guest Details Box
+    doc.setDrawColor(220, 220, 220);
+    doc.setFillColor(250, 252, 251); 
+    doc.roundedRect(14, startY, 88, boxHeight, 3, 3, 'FD');
 
+    // Draw Stay Details Box
+    doc.roundedRect(108, startY, 88, boxHeight, 3, 3, 'FD');
+
+    // Guest details text
+    doc.setFontSize(10);
+    doc.setTextColor(5, 150, 105); 
     doc.setFont('helvetica', 'bold');
-    doc.text('Status:', 120, 55);
+    doc.text('GUEST DETAILS', 18, startY + 6);
+    
+    doc.setTextColor(55, 65, 81);
     doc.setFont('helvetica', 'normal');
-    doc.text('Checked Out', 145, 55);
+    let currentY = startY + 13;
+    doc.text(`Name: ${details.guest_name || 'N/A'}`, 18, currentY);
+    
+    const guestMobile = details.booking_details?.guest_mobile || details.guest_mobile || '';
+    const guestEmail = details.booking_details?.guest_email || details.guest_email || '';
+    
+    if (guestMobile) {
+      currentY += 6;
+      doc.text(`Mobile: ${guestMobile}`, 18, currentY);
+    }
+    if (guestEmail) {
+      currentY += 6;
+      doc.text(`Email: ${guestEmail}`, 18, currentY);
+    }
+    
+    if (details.pan_number) {
+      currentY += 6;
+      doc.text(`PAN: ${details.pan_number}`, 18, currentY);
+    }
+    const finalGstNumber = details.gst_number || details.guest_gstin || '';
+    if (finalGstNumber) {
+      currentY += 6;
+      doc.text(`GSTIN: ${finalGstNumber}`, 18, currentY);
+    }
 
+    // Stay details text
+    doc.setTextColor(5, 150, 105);
     doc.setFont('helvetica', 'bold');
-    doc.text('Check-out:', 120, 62);
+    doc.text('STAY DETAILS', 112, startY + 6);
+    
+    doc.setTextColor(55, 65, 81);
     doc.setFont('helvetica', 'normal');
-    doc.text(formatDateIST(details.check_out || details.created_at), 145, 62);
+    let rightY = startY + 13;
+    doc.text(`Invoice No: ${details.invoice_number || `INV-${(details.id || details.booking_id || 0).toString().padStart(4, '0')}`}`, 112, rightY);
+    
+    rightY += 6;
+    let createdDate = new Date();
+    if (details.created_at) {
+        const parsed = new Date(details.created_at);
+        if (!isNaN(parsed.getTime())) {
+            createdDate = parsed;
+        }
+    }
+    doc.text(`Date: ${formatDateTimeIST(createdDate)}`, 112, rightY);
+    
+    rightY += 6;
+    doc.text(`Room No(s): ${details.room_numbers?.join(', ') || details.room_number || 'N/A'}`, 112, rightY);
 
-    // Helper for currency formatting (no ₹ symbol to avoid backtick glitches)
+    const checkInDate = details.check_in || details.booking_details?.check_in;
+    const checkOutDate = details.check_out || details.booking_details?.check_out;
+    rightY += 6;
+    doc.text(`Check-in: ${checkInDate ? new Date(checkInDate).toLocaleDateString('en-GB') : 'N/A'}`, 112, rightY);
+    rightY += 6;
+    doc.text(`Check-out: ${checkOutDate ? new Date(checkOutDate).toLocaleDateString('en-GB') : 'N/A'}`, 112, rightY);
+
+    const adults = details.booking_details?.adults || details.adults || 0;
+    const children = details.booking_details?.children || details.children || 0;
+    if (adults > 0 || children > 0) {
+      rightY += 6;
+      doc.text(`Pax: ${adults} Adults, ${children} Children`, 112, rightY);
+    }
+
+    currentY = startY + boxHeight + 8;
+
+    // Helper for currency formatting
     const formatPDFCurrency = (amt) => {
       const formatted = new Intl.NumberFormat('en-IN', {
         minimumFractionDigits: 2,
@@ -196,9 +275,10 @@ const CheckoutDetailModal = React.memo(({ checkout, onClose, onUpdateSuccess }) 
     const chargesBody = [];
     let idx = 1;
 
+
     if (printRoom) {
       if (details.room_total > 0) {
-        chargesBody.push([idx++, 'Room Charges', '-', formatPDFCurrency(details.room_total)]);
+        chargesBody.push([idx++, 'Room Stay Charges', '-', formatPDFCurrency(details.room_total)]);
       }
       if (details.package_total > 0) {
         chargesBody.push([idx++, 'Package Charges', '-', formatPDFCurrency(details.package_total)]);
@@ -259,61 +339,82 @@ const CheckoutDetailModal = React.memo(({ checkout, onClose, onUpdateSuccess }) 
           ]);
         });
       }
+      
+      // Late checkout fee
+      if (details.charges?.late_checkout_fee > 0 || details.bill_details?.late_checkout_fee > 0) {
+        chargesBody.push([idx++, 'Late Checkout Fee', '-', formatPDFCurrency(details.charges?.late_checkout_fee || details.bill_details?.late_checkout_fee)]);
+      }
     }
 
     autoTable(doc, {
-      startY: 72,
-      head: [['#', 'Description', 'Qty', 'Amount']],
+      startY: currentY,
+      head: [['Sl No.', 'Particulars', 'Qty/Nights', 'Amount']],
       body: chargesBody,
       theme: 'grid',
       headStyles: { fillColor: [5, 150, 105], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' },
+      alternateRowStyles: { fillColor: [249, 250, 249] },
       columnStyles: {
         0: { halign: 'center', cellWidth: 15 },
         1: { halign: 'left' },
         2: { halign: 'center', cellWidth: 30 },
         3: { halign: 'right', cellWidth: 40 }
       },
-      styles: { cellPadding: 2.5, fontSize: 9 }
+      styles: { cellPadding: 3, fontSize: 9, lineColor: [220, 220, 220], lineWidth: 0.1 }
     });
 
-    // 5. Financial Summary Y position
+    // 5. Financial Summary
     const totalsY = doc.lastAutoTable.finalY + 8;
     
-    const originalSubtotal = (
+    let subtotal, tax, discount, advance, grand, balanceDue, originalSubtotal;
+
+
+    // Modal Details Calculation
+    originalSubtotal = (
       (details.room_total || 0) +
       (details.package_total || 0) +
-      (details.food_orders?.reduce((acc, order) => acc + (order.items?.reduce((sum, item) => sum + (item.total || 0), 0) || 0), 0) || 0) +
-      (details.services?.reduce((acc, s) => acc + (s.charges || 0), 0) || 0) +
-      (details.bill_details?.consumables_items?.reduce((acc, item) => acc + (item.total_charge || 0), 0) || 0) +
-      (details.bill_details?.inventory_usage?.reduce((acc, item) => acc + (item.rental_charge || 0), 0) || 0) +
-      (details.bill_details?.asset_damages?.reduce((acc, item) => acc + (item.total_charge || item.replacement_cost || 0), 0) || 0)
+      (details.food_total || 0) +
+      (details.service_total || 0) +
+      (details.consumables_charges || details.bill_details?.consumables_charges || 0) +
+      (details.inventory_charges || details.bill_details?.inventory_charges || 0) +
+      (details.asset_damage_charges || details.bill_details?.asset_damage_charges || 0) +
+      (details.late_checkout_fee || details.charges?.late_checkout_fee || details.bill_details?.late_checkout_fee || 0) +
+      (details.key_card_fee || 0)
     );
 
     const roomSubtotal = printRoom ? ((details.room_total || 0) + (details.package_total || 0)) : 0;
-    const foodSubtotal = printFood ? (details.food_orders?.reduce((acc, order) => acc + (order.items?.reduce((sum, item) => sum + (item.total || 0), 0) || 0), 0) || 0) : 0;
+    const foodSubtotal = printFood ? (details.food_total || 0) : 0;
     const servicesSubtotal = printServices ? (
-      (details.services?.reduce((acc, s) => acc + (s.charges || 0), 0) || 0) +
-      (details.bill_details?.consumables_items?.reduce((acc, item) => acc + (item.total_charge || 0), 0) || 0) +
-      (details.bill_details?.inventory_usage?.reduce((acc, item) => acc + (item.rental_charge || 0), 0) || 0) +
-      (details.bill_details?.asset_damages?.reduce((acc, item) => acc + (item.total_charge || item.replacement_cost || 0), 0) || 0)
+      (details.service_total || 0) +
+      (details.consumables_charges || details.bill_details?.consumables_charges || 0) +
+      (details.inventory_charges || details.bill_details?.inventory_charges || 0) +
+      (details.asset_damage_charges || details.bill_details?.asset_damage_charges || 0) +
+      (details.late_checkout_fee || details.charges?.late_checkout_fee || details.bill_details?.late_checkout_fee || 0) +
+      (details.key_card_fee || 0)
     ) : 0;
 
-    const subtotal = roomSubtotal + foodSubtotal + servicesSubtotal;
+    subtotal = roomSubtotal + foodSubtotal + servicesSubtotal;
     const scaleFactor = originalSubtotal > 0 ? (subtotal / originalSubtotal) : 1;
 
-    const tax = (details.tax_amount || 0) * scaleFactor;
-    const discount = (details.discount_amount || 0) * scaleFactor;
-    const advance = (details.advance_deposit || 0) * scaleFactor;
-    const grand = subtotal + tax - discount;
-    const balanceDue = Math.max(0, grand - advance);
+    tax = (details.tax_amount || 0) * scaleFactor;
+    discount = (details.discount_amount || 0) * scaleFactor;
+    advance = (details.advance_deposit || 0) * scaleFactor;
+    grand = subtotal + tax - discount;
+    balanceDue = Math.max(0, grand - advance);
 
     const summaryRows = [
-      ['SUBTOTAL', formatPDFCurrency(subtotal)],
-      ['TAX (GST)', `+${formatPDFCurrency(tax)}`],
-      ['DISCOUNT', `-${formatPDFCurrency(discount)}`],
-      ['ADVANCE PAID', `-${formatPDFCurrency(advance)}`],
-      ['NET PAYABLE', formatPDFCurrency(balanceDue)]
+      ['Gross Total', formatPDFCurrency(subtotal)]
     ];
+    if (discount > 0) summaryRows.push(['Discount', `(-)${formatPDFCurrency(discount)}`]);
+    if (tax > 0) {
+      const taxable = subtotal - discount;
+      summaryRows.push(['Taxable Amount', formatPDFCurrency(taxable)]);
+
+      summaryRows.push(['CGST', `(+) ${formatPDFCurrency(tax/2)}`]);
+      summaryRows.push(['SGST', `(+) ${formatPDFCurrency(tax/2)}`]);
+
+    }
+    summaryRows.push(['Grand Total', formatPDFCurrency(grand)]);
+    if (advance > 0) summaryRows.push(['Advance Paid', `(-)${formatPDFCurrency(advance)}`]);
 
     autoTable(doc, {
       startY: totalsY,
@@ -321,43 +422,66 @@ const CheckoutDetailModal = React.memo(({ checkout, onClose, onUpdateSuccess }) 
       theme: 'plain',
       tableWidth: 'wrap',
       margin: { left: 110 },
-      styles: { cellPadding: 2, fontSize: 10 },
+      styles: { cellPadding: 3, fontSize: 10 },
       columnStyles: {
         0: { fontStyle: 'bold', halign: 'right', cellWidth: 50 },
         1: { fontStyle: 'bold', halign: 'right', cellWidth: 40 }
       },
       didParseCell: (data) => {
-        if (data.row.index === summaryRows.length - 1) {
-          data.cell.styles.fontSize = 11;
-          if (data.column.index === 1) {
-            data.cell.styles.textColor = balanceDue > 0 ? [220, 38, 38] : [5, 150, 105]; // Red or Green
-          }
+        if (data.row.index === summaryRows.findIndex(r => r[0] === 'Grand Total')) {
+          // Grand Total line
+          data.cell.styles.textColor = [31, 41, 55];
+          data.cell.styles.fillColor = [243, 244, 246]; // Soft gray bg
+          if (data.column.index === 1) data.cell.styles.fontStyle = 'bold';
         }
       }
     });
 
-    // 6. Footer Y position
-    const footerY = doc.lastAutoTable.finalY + 15;
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(107, 114, 128);
-    doc.text('This is a computer-generated invoice for the services rendered.', 105, footerY, { align: 'center' });
-    doc.text('Please present this invoice for any disputes or refund requests.', 105, footerY + 5, { align: 'center' });
+    // 6. Footer Layout
+    let footerY = doc.lastAutoTable.finalY + 15;
     
+    // Check if we need to add a new page for footer
+    if (footerY > 260) {
+        doc.addPage();
+        footerY = 20;
+    }
+
+    // Terms and Conditions
+    doc.setFontSize(9);
     doc.setFont('helvetica', 'bold');
-    doc.setTextColor(31, 41, 55);
-    doc.text('Orchid Trails Resort', 105, footerY + 13, { align: 'center' });
-    doc.setFont('helvetica', 'italic');
+    doc.setTextColor(5, 150, 105);
+    doc.text('Terms & Conditions:', 14, footerY);
+    
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 100, 100);
+    doc.text('1. All disputes are subject to local jurisdiction.', 14, footerY + 5);
+    doc.text('2. Late checkout is subject to availability and extra charges.', 14, footerY + 9);
+    doc.text('3. Guests are responsible for any damage to resort property.', 14, footerY + 13);
+    doc.text('4. No refund for early check-outs.', 14, footerY + 17);
+
     doc.setFontSize(8);
-    doc.text(`Generated on ${formatDateTimeIST(new Date())}`, 105, footerY + 18, { align: 'center' });
+    doc.setFont('helvetica', 'italic');
+    doc.setTextColor(156, 163, 175);
+    doc.text('This is a computer-generated invoice and requires no physical signature.', 105, footerY + 28, { align: 'center' });
+    doc.setDrawColor(220, 220, 220);
+    doc.line(14, footerY + 32, 196, footerY + 32);
 
     doc.save(`bill-${details.id}.pdf`);
   };
 
   const handleEditSuccess = (updatedCheckout) => {
-    setDetails(updatedCheckout);
     setIsEditing(false);
     if (onUpdateSuccess) onUpdateSuccess(updatedCheckout);
+    
+    // Re-fetch to get all nested relations (food_orders, services, etc)
+    setLoading(true);
+    api.get(`/bill/checkouts/${updatedCheckout.id}/details`)
+      .then(response => {
+        setDetails(response.data);
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
   };
 
   return (
@@ -738,6 +862,7 @@ const EditCheckoutModal = ({ checkout, onClose, onSuccess }) => {
     discount_amount: checkout?.discount_amount || 0,
     grand_total: checkout?.grand_total || 0,
     pan_number: checkout?.pan_number || "",
+    gst_number: checkout?.gst_number || "",
     notes: checkout?.notes || "",
     invoice_number: checkout?.invoice_number || ""
   });
@@ -833,6 +958,16 @@ const EditCheckoutModal = ({ checkout, onClose, onSuccess }) => {
               type="text"
               name="pan_number"
               value={formData.pan_number}
+              onChange={handleChange}
+              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">GST Number</label>
+            <input
+              type="text"
+              name="gst_number"
+              value={formData.gst_number}
               onChange={handleChange}
               className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
             />
@@ -968,6 +1103,7 @@ const Billing = () => {
   const [billData, setBillData] = useState(null);
   const [paymentMethod, setPaymentMethod] = useState("Card");
   const [panNumber, setPanNumber] = useState("");
+  const [gstNumber, setGstNumber] = useState("");
   const [discount, setDiscount] = useState(0);
   const [enableLateFee, setEnableLateFee] = useState(true);
   const [lateFeeAmount, setLateFeeAmount] = useState(0);
@@ -980,6 +1116,13 @@ const Billing = () => {
   const [isFetchingMore, setIsFetchingMore] = useState(false);
   const [checkoutRequest, setCheckoutRequest] = useState(null);
   const [checkingInventory, setCheckingInventory] = useState(false);
+
+  // Collapsible drawers for bill itemized details
+  const [showFoodDetails, setShowFoodDetails] = useState(false);
+  const [showConsumables, setShowConsumables] = useState(false);
+  const [showServices, setShowServices] = useState(false);
+  const [showInventory, setShowInventory] = useState(false);
+  const [showDamages, setShowDamages] = useState(false);
   
   // Custom Dropdown States
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -1027,6 +1170,7 @@ const Billing = () => {
     resort_location: ""
   });
 
+  const [gstType, setGstType] = useState("CGST_SGST");
   const [gstSettings, setGstSettings] = useState({
     gst_enabled: true,
     gst_room_type: "SLAB",
@@ -1042,10 +1186,45 @@ const Billing = () => {
     const diff = currentLateFee - originalLateFee;
 
     const subtotal = (billData.charges?.total_due || 0) + diff;
-    const totalGST = billData.charges?.total_gst || 0;
+    let totalGST = billData.charges?.total_gst || 0;
+    
+    let discountAmount = parseFloat(discount) || 0;
+    
+    // Dynamically recalculate GST if discount is applied to room rent
+    if (discountAmount > 0) {
+      let roomCharges = billData.charges?.room_charges || 0;
+      let packageCharges = billData.charges?.package_charges || 0;
+      
+      let roomDiscount = Math.min(discountAmount, roomCharges);
+      roomCharges -= roomDiscount;
+      let remainingDiscount = discountAmount - roomDiscount;
+      
+      let pkgDiscount = Math.min(remainingDiscount, packageCharges);
+      packageCharges -= pkgDiscount;
+      
+      const numRooms = billData.room_numbers?.length || 1;
+      const stayNights = billData.stay_nights || 1;
+      const dailyRatePerRoom = (roomCharges + packageCharges) / Math.max(1, stayNights * numRooms);
+      
+      let newGstRate = parseFloat(gstSettings.room_gst_rate || 12);
+      if (gstSettings.gst_room_type !== "MANUAL") {
+        if (dailyRatePerRoom < 5000) newGstRate = parseFloat(gstSettings.gst_slab_rate_1 || 5);
+        else if (dailyRatePerRoom <= 7500) newGstRate = parseFloat(gstSettings.gst_slab_rate_2 || 12);
+        else newGstRate = parseFloat(gstSettings.gst_slab_rate_3 || 18);
+      }
+      
+      // Assume exclusive GST for simplicity (standard for most hotels)
+      const newRoomGst = roomCharges * (newGstRate / 100);
+      const newPackageGst = packageCharges * (newGstRate / 100);
+      
+      const oldRoomGst = billData.charges?.room_gst || 0;
+      const oldPackageGst = billData.charges?.package_gst || 0;
+      
+      totalGST = totalGST - oldRoomGst - oldPackageGst + newRoomGst + newPackageGst;
+    }
+
     const totalBill = subtotal + totalGST;
     const advanceDeposit = billData.charges?.advance_deposit || 0;
-    const discountAmount = parseFloat(discount) || 0;
     const netPayable = totalBill - discountAmount - advanceDeposit;
     const refundAmount = Math.max(0, advanceDeposit - (totalBill - discountAmount));
 
@@ -1588,6 +1767,7 @@ const Billing = () => {
     setLoading(true);
     setBillData(null);
     setPanNumber("");
+    setGstNumber("");
     setDiscount(0); // Reset discount when fetching a new bill
     try {
       // Extract actual room number from composite key if needed
@@ -1598,6 +1778,7 @@ const Billing = () => {
         console.log("INVENTORY CHARGES:", res.data.charges?.inventory_charges);
         setBillData(res.data);
         setPanNumber(res.data.pan_number || "");
+        setGstNumber(res.data.gst_number || "");
         setEnableLateFee((res.data.charges?.late_checkout_fee || 0) > 0);
         setLateFeeAmount(res.data.charges?.late_checkout_fee || 0);
         const roomCount = res.data.room_numbers.length;
@@ -1611,6 +1792,7 @@ const Billing = () => {
       showBannerMessage("error", `Error: ${message}`);
       setBillData(null);
       setPanNumber("");
+      setGstNumber("");
       console.error("Error fetching bill:", error);
     } finally {
       setLoading(false);
@@ -1655,11 +1837,13 @@ const Billing = () => {
         enable_late_checkout_fee: enableLateFee,
         custom_late_checkout_fee: enableLateFee ? parseFloat(lateFeeAmount) || 0.0 : 0.0,
         pan_number: panNumber,
+        gst_number: gstNumber,
       });
       const roomCount = billData.room_numbers?.length || 1;
       const modeText = checkoutMode === "single" ? "single room" : "all rooms";
       setBillData(null);
       setPanNumber("");
+      setGstNumber("");
       setDiscount(0);
       setRoomNumber(""); // Clear input on successful checkout
       setCheckoutMode("multiple"); // Reset to default
@@ -1677,6 +1861,7 @@ const Billing = () => {
         showBannerMessage("error", conflictMessage);
         setBillData(null);
         setPanNumber("");
+        setGstNumber("");
         setDiscount(0);
         setRoomNumber("");
         // Refresh active rooms list immediately
@@ -1686,6 +1871,7 @@ const Billing = () => {
         showBannerMessage("error", "Booking not found. It may have already been checked out. Refreshing...");
         setBillData(null);
         setPanNumber("");
+        setGstNumber("");
         setRoomNumber("");
         fetchInitialData();
       } else {
@@ -1697,65 +1883,143 @@ const Billing = () => {
     }
   };
 
-  const generatePDF = (action = 'print') => {
+  const generatePDF = async (action = 'print') => {
     if (!billData) return;
 
     const doc = new jsPDF();
 
-    // 1. Title (Centered, Green, Emerald 600: rgb(5, 150, 105))
+    // Try to load and add logo
+    try {
+      const img = new Image();
+      img.src = logo;
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+      });
+      doc.addImage(img, 'JPEG', 90, 5, 30, 30);
+    } catch (err) {
+      console.warn("Could not load logo for PDF", err);
+    }
+
+    // 1. Header (Centered)
+    const resortName = resortSettings?.branch_name || resortSettings?.resort_name || 'ORCHID TRAILS RESORT';
     doc.setFontSize(24);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(5, 150, 105);
-    doc.text('ORCHID TRAILS RESORT', 105, 25, { align: 'center' });
+    doc.text(resortName.toUpperCase(), 105, 43, { align: 'center' });
 
-    // 2. Subtitle (Left-aligned, Dark Grey)
-    doc.setFontSize(14);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(31, 41, 55); // Hex #1F2937
-    doc.text('Resort Invoice', 14, 38);
-
-    // 3. Info Section (Two Columns)
     doc.setFontSize(10);
-    doc.setTextColor(55, 65, 81); // Hex #374151
-
-    // Column 1
-    doc.setFont('helvetica', 'bold');
-    doc.text('Booking ID:', 14, 48);
     doc.setFont('helvetica', 'normal');
-    doc.text(billData.booking_display_id || `BK-${billData.booking_id || ''}`, 45, 48);
+    doc.setTextColor(100, 100, 100);
 
+    const address = resortSettings?.branch_address || resortSettings?.resort_address || '';
+    if (address) {
+      doc.text(address, 105, 49, { align: 'center' });
+    }
+
+    const phone = resortSettings?.branch_phone || '';
+    const gst = resortSettings?.gst_number || '';
+    
+    let contactInfo = [];
+    if (phone) contactInfo.push(`Phone: ${phone}`);
+    if (gst) contactInfo.push(`GSTIN: ${gst}`);
+    if (contactInfo.length > 0) {
+      doc.text(contactInfo.join(' | '), 105, 55, { align: 'center' });
+    }
+
+    // TAX INVOICE Badge
+    doc.setFillColor(5, 150, 105);
+    doc.roundedRect(85, 60, 40, 7, 2, 2, 'F');
+    doc.setFontSize(11);
     doc.setFont('helvetica', 'bold');
-    doc.text('Guest Name:', 14, 55);
-    doc.setFont('helvetica', 'normal');
-    doc.text((billData.guest_name || 'N/A').toUpperCase(), 45, 55);
+    doc.setTextColor(255, 255, 255); 
+    doc.text('TAX INVOICE', 105, 65, { align: 'center' });
+    
+    // 2. Info Section Layout
+    let startY = 73;
+    let boxHeight = 46;
+    
+    // Draw Guest Details Box
+    doc.setDrawColor(220, 220, 220);
+    doc.setFillColor(250, 252, 251); 
+    doc.roundedRect(14, startY, 88, boxHeight, 3, 3, 'FD');
 
+    // Draw Stay Details Box
+    doc.roundedRect(108, startY, 88, boxHeight, 3, 3, 'FD');
+
+    // Guest details text
+    doc.setFontSize(10);
+    doc.setTextColor(5, 150, 105); 
     doc.setFont('helvetica', 'bold');
-    doc.text('PAN Number:', 14, 58);
+    doc.text('GUEST DETAILS', 18, startY + 6);
+    
+    doc.setTextColor(55, 65, 81);
     doc.setFont('helvetica', 'normal');
-    doc.text(panNumber || billData.pan_number || 'N/A', 45, 58);
+    let currentY = startY + 13;
+    doc.text(`Name: ${billData.guest_name || 'N/A'}`, 18, currentY);
+    
+    const guestMobile = billData.booking_details?.guest_mobile || billData.guest_mobile || '';
+    const guestEmail = billData.booking_details?.guest_email || billData.guest_email || '';
+    
+    if (guestMobile) {
+      currentY += 6;
+      doc.text(`Mobile: ${guestMobile}`, 18, currentY);
+    }
+    if (guestEmail) {
+      currentY += 6;
+      doc.text(`Email: ${guestEmail}`, 18, currentY);
+    }
+    
+    if (billData.pan_number) {
+      currentY += 6;
+      doc.text(`PAN: ${billData.pan_number}`, 18, currentY);
+    }
+    const currentGst = gstNumber || billData.gst_number || billData.guest_gstin || '';
+    if (currentGst) {
+      currentY += 6;
+      doc.text(`GSTIN: ${currentGst}`, 18, currentY);
+    }
 
+    // Stay details text
+    doc.setTextColor(5, 150, 105);
     doc.setFont('helvetica', 'bold');
-    doc.text('Check-in:', 14, 62);
+    doc.text('STAY DETAILS', 112, startY + 6);
+    
+    doc.setTextColor(55, 65, 81);
     doc.setFont('helvetica', 'normal');
-    doc.text(new Date(billData.check_in).toLocaleDateString('en-GB'), 45, 62);
+    let rightY = startY + 13;
+    doc.text(`Invoice No: ${billData.invoice_number || `INV-${(billData.id || billData.booking_id || 0).toString().padStart(4, '0')}`}`, 112, rightY);
+    
+    rightY += 6;
+    let createdDate = new Date();
+    if (billData.created_at) {
+        const parsed = new Date(billData.created_at);
+        if (!isNaN(parsed.getTime())) {
+            createdDate = parsed;
+        }
+    }
+    doc.text(`Date: ${formatDateTimeIST(createdDate)}`, 112, rightY);
+    
+    rightY += 6;
+    doc.text(`Room No(s): ${billData.room_numbers?.join(', ') || billData.room_number || 'N/A'}`, 112, rightY);
 
-    // Column 2
-    doc.setFont('helvetica', 'bold');
-    doc.text('Date:', 120, 48);
-    doc.setFont('helvetica', 'normal');
-    doc.text(formatDateTimeIST(new Date()), 145, 48);
+    const checkInDate = billData.check_in || billData.booking_details?.check_in;
+    const checkOutDate = billData.check_out || billData.booking_details?.check_out;
+    rightY += 6;
+    doc.text(`Check-in: ${checkInDate ? new Date(checkInDate).toLocaleDateString('en-GB') : 'N/A'}`, 112, rightY);
+    rightY += 6;
+    doc.text(`Check-out: ${checkOutDate ? new Date(checkOutDate).toLocaleDateString('en-GB') : 'N/A'}`, 112, rightY);
 
-    doc.setFont('helvetica', 'bold');
-    doc.text('Status:', 120, 55);
-    doc.setFont('helvetica', 'normal');
-    doc.text('Checked Out', 145, 55);
+    const adults = billData.booking_details?.adults || billData.adults || 0;
+    const children = billData.booking_details?.children || billData.children || 0;
+    if (adults > 0 || children > 0) {
+      rightY += 6;
+      doc.text(`Pax: ${adults} Adults, ${children} Children`, 112, rightY);
+    }
 
-    doc.setFont('helvetica', 'bold');
-    doc.text('Check-out:', 120, 62);
-    doc.setFont('helvetica', 'normal');
-    doc.text(new Date(billData.check_out).toLocaleDateString('en-GB'), 145, 62);
+    currentY = startY + boxHeight + 8;
 
-    // Helper for currency formatting (no ₹ symbol to avoid backtick glitches)
+    // Helper for currency formatting
     const formatPDFCurrency = (amt) => {
       const formatted = new Intl.NumberFormat('en-IN', {
         minimumFractionDigits: 2,
@@ -1764,81 +2028,67 @@ const Billing = () => {
       return `Rs.${formatted}`;
     };
 
-    // 4. Itemized Charges Table
+    // 4. Charges Table
     const chargesBody = [];
     let idx = 1;
 
-    if (billData.charges.room_charges > 0) {
-      const numRooms = billData.room_numbers?.length || 1;
-      const dailyRatePerRoom = billData.charges.room_charges / (billData.stay_nights * numRooms);
-      chargesBody.push([
-        idx++,
-        'Room Charges',
-        `${formatPDFCurrency(dailyRatePerRoom)}/day × ${billData.stay_nights} nights × ${numRooms} rooms`,
-        formatPDFCurrency(billData.charges.room_charges)
-      ]);
+
+    if (billData.charges?.room_charges > 0) {
+      chargesBody.push([idx++, 'Room Stay Charges', '-', formatPDFCurrency(billData.charges.room_charges)]);
     }
-    if (billData.charges.package_charges > 0) {
-      chargesBody.push([
-        idx++,
-        'Package Charges',
-        `Package for ${billData.stay_nights} nights`,
-        formatPDFCurrency(billData.charges.package_charges)
-      ]);
+    if (billData.charges?.package_charges > 0) {
+      chargesBody.push([idx++, 'Package Charges', '-', formatPDFCurrency(billData.charges.package_charges)]);
     }
-    
-    // Food items
-    if (billData.charges.food_items && billData.charges.food_items.length > 0) {
+
+    if (billData.charges?.food_items && billData.charges.food_items.length > 0) {
       billData.charges.food_items.forEach(item => {
-        chargesBody.push([idx++, `Food: ${item.item_name}`, `x${item.quantity}`, formatPDFCurrency(item.amount)]);
+        if (!item.is_paid || item.payment_status === "Complimentary") {
+          chargesBody.push([idx++, `Food: ${item.item_name}`, `x${item.quantity}`, formatPDFCurrency(item.amount)]);
+        }
       });
     }
 
-    // Service items
-    if (billData.charges.service_items && billData.charges.service_items.length > 0) {
+    if (billData.charges?.service_items && billData.charges.service_items.length > 0) {
       billData.charges.service_items.forEach(item => {
-        const serviceLabel = item.is_paid ? `Service: ${item.service_name} (Previously Billed)` : `Service: ${item.service_name}`;
-        chargesBody.push([idx++, serviceLabel, '-', formatPDFCurrency(item.charges)]);
+        if (!item.is_paid) {
+          chargesBody.push([idx++, `Service: ${item.service_name}`, '-', formatPDFCurrency(item.charges)]);
+        }
       });
     }
 
-    // Consumables details
-    if (billData.charges.consumables_items && billData.charges.consumables_items.length > 0) {
+    if (billData.charges?.consumables_items && billData.charges.consumables_items.length > 0) {
       billData.charges.consumables_items.forEach(item => {
         chargesBody.push([
           idx++,
           `Consumable: ${item.item_name}`,
-          `Qty: ${item.actual_consumed} (Limit: ${item.complimentary_limit || 0})`,
+          `x${item.quantity || item.actual_consumed || 1}`,
           formatPDFCurrency(item.total_charge)
         ]);
       });
     }
 
-    // Rentals / Inventory
-    if (billData.charges.inventory_usage && billData.charges.inventory_usage.length > 0) {
+    if (billData.charges?.inventory_usage && billData.charges.inventory_usage.length > 0) {
       billData.charges.inventory_usage.forEach(item => {
-        const roomPrefix = item.room_number ? `Rm ${item.room_number}: ` : '';
         chargesBody.push([
           idx++,
-          `Rental: ${roomPrefix}${item.item_name}`,
-          `Qty: ${item.quantity} ${item.unit || ''} ${item.is_rental ? `(Rate: ${formatPDFCurrency(item.rental_price)})` : ''}`,
+          `Rental: ${item.item_name}`,
+          `x${item.quantity} ${item.unit || ''}`,
           formatPDFCurrency(item.rental_charge || 0)
         ]);
       });
     }
 
-    // Asset Damages
-    if (billData.charges.asset_damages && billData.charges.asset_damages.length > 0) {
+    if (billData.charges?.asset_damages && billData.charges.asset_damages.length > 0) {
       billData.charges.asset_damages.forEach(item => {
         chargesBody.push([
           idx++,
-          `Damage: ${item.item_name}`,
-          item.notes || 'Asset Replacement Charge',
-          formatPDFCurrency(item.replacement_cost)
+          `Damage: ${item.item_name} ${item.notes ? `(${item.notes})` : ''}`,
+          '-',
+          formatPDFCurrency(item.total_charge || item.replacement_cost)
         ]);
       });
     }
-
+    
     // Late Checkout Fee
     if (enableLateFee && parseFloat(lateFeeAmount) > 0) {
       chargesBody.push([
@@ -1847,36 +2097,63 @@ const Billing = () => {
         'Late check-out charge',
         formatPDFCurrency(parseFloat(lateFeeAmount))
       ]);
+    } else if (billData.charges?.late_checkout_fee > 0) {
+      chargesBody.push([idx++, 'Late Checkout Fee', '-', formatPDFCurrency(billData.charges.late_checkout_fee)]);
     }
 
     autoTable(doc, {
-      startY: 72,
-      head: [['#', 'Description', 'Qty/Details', 'Amount']],
+      startY: currentY,
+      head: [['Sl No.', 'Particulars', 'Qty/Nights', 'Amount']],
       body: chargesBody,
       theme: 'grid',
       headStyles: { fillColor: [5, 150, 105], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' },
+      alternateRowStyles: { fillColor: [249, 250, 249] },
       columnStyles: {
         0: { halign: 'center', cellWidth: 15 },
         1: { halign: 'left' },
-        2: { halign: 'center', cellWidth: 45 },
+        2: { halign: 'center', cellWidth: 30 },
         3: { halign: 'right', cellWidth: 40 }
       },
-      styles: { cellPadding: 2.5, fontSize: 9 }
+      styles: { cellPadding: 3, fontSize: 9, lineColor: [220, 220, 220], lineWidth: 0.1 }
     });
 
-    // 5. Financial Summary Y position
+    // 5. Financial Summary
     const totalsY = doc.lastAutoTable.finalY + 8;
     
-    const { subtotal, totalGST, netPayable } = getDynamicTotals();
-    const advancePaid = billData.charges.advance_deposit || 0;
+    let subtotal, tax, discount, advance, grand, balanceDue, originalSubtotal;
+
+
+    // Live BillData Calculation
+    const dynTotals = getDynamicTotals();
+    subtotal = dynTotals.subtotal;
+    tax = dynTotals.totalGST;
+    
+    // Discount is applied explicitly on room/package, or we can use state
+    discount = parseFloat(discountAmount) || 0;
+    
+    // Handle global advance/refund
+    advance = billData.charges?.advance_deposit || 0;
+    grand = subtotal + tax - discount;
+    balanceDue = Math.max(0, grand - advance);
 
     const summaryRows = [
-      ['SUBTOTAL', formatPDFCurrency(subtotal)],
-      ['TAX (GST)', `+${formatPDFCurrency(totalGST)}`],
-      ['DISCOUNT', `-${formatPDFCurrency(parseFloat(discount) || 0)}`],
-      ['ADVANCE PAID', `-${formatPDFCurrency(advancePaid)}`],
-      [netPayable >= 0 ? 'NET PAYABLE' : 'REFUND AMOUNT', formatPDFCurrency(Math.abs(netPayable))]
+      ['Gross Total', formatPDFCurrency(subtotal)]
     ];
+    if (discount > 0) summaryRows.push(['Discount', `(-)${formatPDFCurrency(discount)}`]);
+    if (tax > 0) {
+      const taxable = subtotal - discount;
+      summaryRows.push(['Taxable Amount', formatPDFCurrency(taxable)]);
+
+      if (gstType === 'IGST') {
+        summaryRows.push(['IGST', `(+) ${formatPDFCurrency(tax)}`]);
+      } else {
+        summaryRows.push(['CGST', `(+) ${formatPDFCurrency(tax/2)}`]);
+        summaryRows.push(['SGST', `(+) ${formatPDFCurrency(tax/2)}`]);
+      }
+
+    }
+    summaryRows.push(['Grand Total', formatPDFCurrency(grand)]);
+    if (advance > 0) summaryRows.push(['Advance Paid', `(-)${formatPDFCurrency(advance)}`]);
 
     autoTable(doc, {
       startY: totalsY,
@@ -1884,40 +2161,53 @@ const Billing = () => {
       theme: 'plain',
       tableWidth: 'wrap',
       margin: { left: 110 },
-      styles: { cellPadding: 2, fontSize: 10 },
+      styles: { cellPadding: 3, fontSize: 10 },
       columnStyles: {
         0: { fontStyle: 'bold', halign: 'right', cellWidth: 50 },
         1: { fontStyle: 'bold', halign: 'right', cellWidth: 40 }
       },
       didParseCell: (data) => {
-        if (data.row.index === summaryRows.length - 1) {
-          data.cell.styles.fontSize = 11;
-          if (data.column.index === 1) {
-            data.cell.styles.textColor = netPayable >= 0 ? [220, 38, 38] : [5, 150, 105]; // Red or Green
-          }
+        if (data.row.index === summaryRows.findIndex(r => r[0] === 'Grand Total')) {
+          // Grand Total line
+          data.cell.styles.textColor = [31, 41, 55];
+          data.cell.styles.fillColor = [243, 244, 246]; // Soft gray bg
+          if (data.column.index === 1) data.cell.styles.fontStyle = 'bold';
         }
       }
     });
 
-    // 6. Footer Y position
-    const footerY = doc.lastAutoTable.finalY + 15;
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(107, 114, 128);
-    doc.text('This is a computer-generated invoice for the services rendered.', 105, footerY, { align: 'center' });
-    doc.text('Please present this invoice for any disputes or refund requests.', 105, footerY + 5, { align: 'center' });
+    // 6. Footer Layout
+    let footerY = doc.lastAutoTable.finalY + 15;
     
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(31, 41, 55);
-    doc.text('Orchid Trails Resort', 105, footerY + 13, { align: 'center' });
-    doc.setFont('helvetica', 'italic');
-    doc.setFontSize(8);
-    doc.text(`Generated on ${formatDateTimeIST(new Date())}`, 105, footerY + 18, { align: 'center' });
+    // Check if we need to add a new page for footer
+    if (footerY > 260) {
+        doc.addPage();
+        footerY = 20;
+    }
 
-    // Perform action
+    // Terms and Conditions
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(5, 150, 105);
+    doc.text('Terms & Conditions:', 14, footerY);
+    
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 100, 100);
+    doc.text('1. All disputes are subject to local jurisdiction.', 14, footerY + 5);
+    doc.text('2. Late checkout is subject to availability and extra charges.', 14, footerY + 9);
+    doc.text('3. Guests are responsible for any damage to resort property.', 14, footerY + 13);
+    doc.text('4. No refund for early check-outs.', 14, footerY + 17);
+
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'italic');
+    doc.setTextColor(156, 163, 175);
+    doc.text('This is a computer-generated invoice and requires no physical signature.', 105, footerY + 28, { align: 'center' });
+    doc.setDrawColor(220, 220, 220);
+    doc.line(14, footerY + 32, 196, footerY + 32);
+
     if (action === 'print') {
-      doc.autoPrint();
-      doc.output('dataurlnewwindow'); // Opens PDF in new window with print dialog
+      window.open(doc.output('bloburl'), '_blank');
     } else {
       doc.save(`bill-room-${billData.room_numbers.join('-')}.pdf`); // Downloads the file
     }
@@ -2007,7 +2297,14 @@ const Billing = () => {
     if (billData.charges.consumables_gst > 0) {
       text += `Consumables GST (${resortSettings.food_gst_rate || 5}%): +${formatCurrency(billData.charges.consumables_gst || 0)}\n`;
     }
-    text += `Total GST: +${formatCurrency(totalGST || 0)}\n`;
+    if (totalGST > 0) {
+      if (gstType === 'IGST') {
+        text += `IGST: +${formatCurrency(totalGST)}\n`;
+      } else {
+        text += `CGST: +${formatCurrency(totalGST / 2)}\n`;
+        text += `SGST: +${formatCurrency(totalGST / 2)}\n`;
+      }
+    }
     text += `Total Bill Value: ${formatCurrency(totalBill)}\n`;
     if (discount > 0) text += `Discount: -${formatCurrency(parseFloat(discount))}\n`;
     if (advancePaid > 0) text += `Advance Paid: -${formatCurrency(advancePaid)}\n`;
@@ -2179,6 +2476,7 @@ const Billing = () => {
                                 setRoomNumber(uniqueValue);
                                 setBillData(null);
                                 setPanNumber("");
+                                setGstNumber("");
                                 setIsDropdownOpen(false);
                                 setDropdownSearch("");
                               }}
@@ -2334,174 +2632,401 @@ const Billing = () => {
               : 0;
 
             return (
-              <div id="bill-details" className="bg-gray-50 border border-gray-200 p-4 rounded-xl mb-6 animate-fade-in">
-                <h2 className="text-2xl font-bold text-gray-800 mb-4 text-center">Detailed Bill</h2>
-
-                <div className="grid grid-cols-2 gap-x-4 gap-y-2 mb-4 text-sm">
-                  <p><span className="font-semibold">Guest Name:</span> {billData.guest_name}</p>
-                  <p><span className="font-semibold">Rooms:</span> {billData.room_numbers.join(', ')} ({billData.room_numbers.length})</p>
-                  <p><span className="font-semibold">Check-in:</span> {new Date(billData.check_in).toLocaleDateString()}</p>
-                  <p><span className="font-semibold">Check-out:</span> {new Date(billData.check_out).toLocaleDateString()}</p>
-                  <p><span className="font-semibold">Stay:</span> {billData.stay_nights} nights</p>
-                  <p><span className="font-semibold">Guests:</span> {billData.number_of_guests}</p>
+              <div id="bill-details" className="bg-white border border-gray-200 rounded-2xl shadow-xl overflow-hidden mb-6 animate-fade-in">
+                {/* Gradient Header */}
+                <div className="bg-gradient-to-r from-indigo-700 to-purple-800 text-white px-6 py-4 flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <ClipboardList className="text-indigo-200" size={22} />
+                    <h2 className="text-lg font-bold tracking-wide">Detailed Bill & Invoice</h2>
+                  </div>
+                  <span className="bg-white/20 text-xs px-2.5 py-1 rounded-full font-medium backdrop-blur-sm">
+                    Booking Bill
+                  </span>
                 </div>
 
-                <div className="mt-4 pt-4 border-t">
-                  <h3 className="font-bold text-gray-700 mb-2">Itemized Charges:</h3>
-                  <ul className="list-disc list-inside space-y-1 text-gray-600">
-                    {billData.charges.room_charges > 0 && (
-                      <li>
-                        Room Charges: {formatCurrency(billData.charges.room_charges)}
-                        <span className="text-xs text-gray-500 ml-2">
-                          ({formatCurrency(dailyRatePerRoom)}/day × {stayNights} {stayNights === 1 ? 'night' : 'nights'} × {numRooms} {numRooms === 1 ? 'room' : 'rooms'})
-                        </span>
-                      </li>
-                    )}
-                    {billData.charges.package_charges > 0 && <li>Package Charges: {formatCurrency(billData.charges.package_charges)}</li>}
-                    {hasFoodItems && <li>Food Charges: {formatCurrency(foodCharges)} {foodCharges === 0 && billData.charges.food_items.some(item => item.is_paid) && <span className="text-xs text-gray-500">(All paid)</span>}</li>}
-                    {billData.charges.service_charges > 0 && <li>Service Charges: {formatCurrency(billData.charges.service_charges)}</li>}
-                    {billData.charges.consumables_charges > 0 && <li>Consumables Charges: {formatCurrency(billData.charges.consumables_charges)}</li>}
-                    {billData.charges.inventory_charges > 0 && <li className="text-blue-700 font-semibold">Inventory/Rental Charges: {formatCurrency(billData.charges.inventory_charges)}</li>}
-                    {billData.charges.asset_damage_charges > 0 && <li className="text-red-700 font-semibold">Asset Damage Charges: {formatCurrency(billData.charges.asset_damage_charges)}</li>}
-                    {enableLateFee && parseFloat(lateFeeAmount) > 0 && (
-                      <li className="text-amber-700 font-semibold">Late Checkout Fee: {formatCurrency(parseFloat(lateFeeAmount))}</li>
-                    )}
-                  </ul>
-
-                  {billData.charges.food_items.length > 0 && (
-                    <div className="mt-3">
-                      <h4 className="font-semibold text-gray-600">Food & Beverage Details:</h4>
-                      <ul className="list-decimal list-inside ml-4 text-xs text-gray-500">
-                        {billData.charges.food_items.map((item, i) => (
-                          <li key={i} className={item.is_paid ? "text-gray-400 line-through" : ""}>
-                            {item.item_name} (x{item.quantity}) - {formatCurrency(item.amount)}
-                            {item.is_paid && <span className="ml-2 text-green-600 text-xs">(Paid)</span>}
-                          </li>
-                        ))}
-                      </ul>
+                <div className="p-6">
+                  {/* Guest Stats Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <div className="bg-gray-50 border border-gray-100 p-4 rounded-xl flex items-start space-x-3">
+                      <div className="bg-indigo-50 rounded-lg p-2 text-indigo-600 mt-0.5">
+                        <User size={18} />
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500 font-medium uppercase tracking-wider">Guest Name</p>
+                        <p className="text-sm font-bold text-gray-800 mt-0.5">{billData.guest_name}</p>
+                      </div>
                     </div>
-                  )}
+                    
+                    <div className="bg-gray-50 border border-gray-100 p-4 rounded-xl flex items-start space-x-3">
+                      <div className="bg-purple-50 rounded-lg p-2 text-purple-600 mt-0.5">
+                        <BedDouble size={18} />
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500 font-medium uppercase tracking-wider">Rooms Assigned</p>
+                        <p className="text-sm font-bold text-gray-800 mt-0.5">
+                          {billData.room_numbers.join(', ')} <span className="text-xs text-gray-400 font-normal">({billData.room_numbers.length} {billData.room_numbers.length === 1 ? 'room' : 'rooms'})</span>
+                        </p>
+                      </div>
+                    </div>
 
-                  {allConsumables.length > 0 && (
-                    <div className="mt-3">
-                      <h4 className="font-semibold text-gray-600">Consumables:</h4>
-                      <ul className="list-decimal list-inside ml-4 text-xs text-gray-500">
-                        {allConsumables.map((item, i) => (
-                          <li key={i}>
-                            <span className={item.total_charge === 0 ? "text-green-600 font-medium" : ""}>
-                              {item.item_name} (x{item.actual_consumed})
-                              {item.total_charge > 0 ? ` - ${formatCurrency(item.total_charge)}` : " - Complimentary"}
-                            </span>
-                            {item.complimentary_limit > 0 && item.total_charge > 0 && (
-                              <span className="text-xs text-gray-400 ml-1">
-                                (Limit: {item.complimentary_limit} free)
-                              </span>
+                    <div className="bg-gray-50 border border-gray-100 p-4 rounded-xl flex items-start space-x-3">
+                      <div className="bg-emerald-50 rounded-lg p-2 text-emerald-600 mt-0.5">
+                        <Calendar size={18} />
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500 font-medium uppercase tracking-wider">Stay Period</p>
+                        <p className="text-sm font-bold text-gray-800 mt-0.5">{billData.stay_nights} {billData.stay_nights === 1 ? 'night' : 'nights'}</p>
+                        <p className="text-[10px] text-gray-400 mt-0.5 font-medium">
+                          {new Date(billData.check_in).toLocaleDateString()} to {new Date(billData.check_out).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="border-t border-gray-100 pt-5">
+                    <h3 className="font-bold text-sm text-gray-800 mb-3 uppercase tracking-wider">Itemized Charges</h3>
+                    
+                    <div className="space-y-3">
+                      {billData.charges.room_charges > 0 && (
+                        <div className="flex justify-between items-start py-2 border-b border-gray-50">
+                          <div>
+                            <p className="text-sm font-semibold text-gray-800">Room Charges</p>
+                            <p className="text-xs text-gray-400 mt-0.5">
+                              {formatCurrency(dailyRatePerRoom)}/day × {stayNights} {stayNights === 1 ? 'night' : 'nights'} × {numRooms} {numRooms === 1 ? 'room' : 'rooms'}
+                            </p>
+                          </div>
+                          <span className="font-mono text-sm font-bold text-gray-800">{formatCurrency(billData.charges.room_charges)}</span>
+                        </div>
+                      )}
+                      
+                      {billData.charges.package_charges > 0 && (
+                        <div className="flex justify-between items-center py-2 border-b border-gray-50">
+                          <span className="text-sm font-semibold text-gray-800">Package Charges</span>
+                          <span className="font-mono text-sm font-bold text-gray-800">{formatCurrency(billData.charges.package_charges)}</span>
+                        </div>
+                      )}
+                      
+                      {hasFoodItems && (
+                        <div className="flex justify-between items-center py-2 border-b border-gray-50">
+                          <div>
+                            <span className="text-sm font-semibold text-gray-800">Food Charges</span>
+                            {foodCharges === 0 && billData.charges.food_items.some(item => item.is_paid) && (
+                              <span className="text-[10px] bg-green-50 text-green-600 px-1.5 py-0.5 rounded font-semibold ml-2">All Paid</span>
                             )}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
+                          </div>
+                          <span className="font-mono text-sm font-bold text-gray-800">{formatCurrency(foodCharges)}</span>
+                        </div>
+                      )}
 
-                  {billData.charges.service_items.length > 0 && (
-                    <div className="mt-3">
-                      <h4 className="font-semibold text-gray-600">Additional Services:</h4>
-                      <ul className="list-decimal list-inside ml-4 text-xs text-gray-500">
-                        {billData.charges.service_items.map((item, i) => (
-                          <li key={i} className={item.is_paid ? "text-gray-400 line-through" : ""}>
-                            {item.service_name} - {formatCurrency(item.charges)}
-                            {item.is_paid && <span className="ml-2 text-green-600 text-xs font-semibold no-underline">({item.payment_status || "Paid"})</span>}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
+                      {billData.charges.service_charges > 0 && (
+                        <div className="flex justify-between items-center py-2 border-b border-gray-50">
+                          <span className="text-sm font-semibold text-gray-800">Service Charges</span>
+                          <span className="font-mono text-sm font-bold text-gray-800">{formatCurrency(billData.charges.service_charges)}</span>
+                        </div>
+                      )}
 
-                  {payableInventory.length > 0 && (
-                    <div className="mt-3">
-                      <h4 className="font-semibold text-gray-600">Inventory/Rental Usage:</h4>
-                      <ul className="list-disc list-inside ml-4 text-xs text-gray-500">
-                        {payableInventory.map((item, i) => (
-                          <li key={i}>
-                            <span className="font-medium text-gray-700">{item.item_name}</span>
-                            {item.quantity > 0 && ` (x${item.quantity} ${item.unit})`}
-                            {item.rental_price > 0 && (
-                              <span className="text-blue-700 font-semibold ml-2">
-                                @ ₹{item.rental_price} = ₹{item.rental_charge !== undefined ? item.rental_charge : (item.rental_price * item.quantity)}
-                              </span>
-                            )}
-                            {item.room_number && ` - Room ${item.room_number}`}
-                            <span className="text-gray-400 ml-1">[{new Date(item.date).toLocaleDateString()}]</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
+                      {billData.charges.consumables_charges > 0 && (
+                        <div className="flex justify-between items-center py-2 border-b border-gray-50">
+                          <span className="text-sm font-semibold text-gray-800">Consumables Charges</span>
+                          <span className="font-mono text-sm font-bold text-gray-800">{formatCurrency(billData.charges.consumables_charges)}</span>
+                        </div>
+                      )}
 
-                  {billData.charges.asset_damages && billData.charges.asset_damages.length > 0 && (
-                    <div className="mt-3">
-                      <h4 className="font-semibold text-gray-600">Asset Damages:</h4>
-                      <ul className="list-disc list-inside ml-4 text-xs text-red-500">
-                        {billData.charges.asset_damages.map((item, i) => (
-                          <li key={i}>
-                            <span className="font-medium text-gray-700">{item.item_name}</span>
-                            <span> - {formatCurrency(item.replacement_cost)}</span>
-                            {item.notes && <span className="text-gray-400 ml-1">({item.notes})</span>}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
+                      {billData.charges.inventory_charges > 0 && (
+                        <div className="flex justify-between items-center py-2 border-b border-gray-50">
+                          <span className="text-sm font-semibold text-indigo-700">Inventory/Rental Charges</span>
+                          <span className="font-mono text-sm font-bold text-indigo-700">{formatCurrency(billData.charges.inventory_charges)}</span>
+                        </div>
+                      )}
 
-                  <div className="mt-4 pt-4 border-t text-right space-y-1">
-                    <p className="text-sm text-gray-600">Subtotal: {formatCurrency(getDynamicTotals().subtotal)}</p>
-                    {/* GST Breakdown */}
+                      {billData.charges.asset_damage_charges > 0 && (
+                        <div className="flex justify-between items-center py-2 border-b border-gray-50">
+                          <span className="text-sm font-semibold text-red-700">Asset Damage Charges</span>
+                          <span className="font-mono text-sm font-bold text-red-700">{formatCurrency(billData.charges.asset_damage_charges)}</span>
+                        </div>
+                      )}
+
+                      {enableLateFee && parseFloat(lateFeeAmount) > 0 && (
+                        <div className="flex justify-between items-center py-2 border-b border-gray-50">
+                          <span className="text-sm font-semibold text-amber-700">Late Checkout Fee</span>
+                          <span className="font-mono text-sm font-bold text-amber-700">{formatCurrency(parseFloat(lateFeeAmount))}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Collapsible Sub-item Details Toggles */}
+                  <div className="mt-4 space-y-2">
+                    {/* Food Items Collapsible */}
+                    {hasFoodItems && (
+                      <div className="border border-gray-150 rounded-xl overflow-hidden">
+                        <button
+                          type="button"
+                          onClick={() => setShowFoodDetails(!showFoodDetails)}
+                          className="w-full flex items-center justify-between px-4 py-2.5 bg-gray-50/50 hover:bg-gray-50 transition text-xs font-bold text-gray-700"
+                        >
+                          <span className="flex items-center gap-2">
+                            <Utensils size={14} className="text-indigo-600" />
+                            Food & Beverage Details ({billData.charges.food_items.length} items)
+                          </span>
+                          {showFoodDetails ? <ChevronDown size={16} className="transform rotate-180 transition-transform text-gray-400" /> : <ChevronDown size={16} className="transition-transform text-gray-400" />}
+                        </button>
+                        {showFoodDetails && (
+                          <div className="px-4 py-3 border-t bg-white space-y-1.5 max-h-48 overflow-y-auto">
+                            {billData.charges.food_items.map((item, i) => (
+                              <div key={i} className="flex justify-between items-center text-xs pb-1.5 border-b border-gray-50 last:border-0 last:pb-0">
+                                <span className={item.is_paid ? "text-gray-400 line-through" : "text-gray-600"}>
+                                  {item.item_name} <span className="text-gray-400 font-normal">x{item.quantity}</span>
+                                </span>
+                                <span className="font-mono text-gray-600 font-medium">
+                                  {formatCurrency(item.amount)}
+                                  {item.is_paid && <span className="ml-1 text-green-600 text-[10px] font-bold font-sans">(Paid)</span>}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Consumables Collapsible */}
+                    {allConsumables.length > 0 && (
+                      <div className="border border-gray-150 rounded-xl overflow-hidden">
+                        <button
+                          type="button"
+                          onClick={() => setShowConsumables(!showConsumables)}
+                          className="w-full flex items-center justify-between px-4 py-2.5 bg-gray-50/50 hover:bg-gray-50 transition text-xs font-bold text-gray-700"
+                        >
+                          <span className="flex items-center gap-2">
+                            <Package size={14} className="text-indigo-600" />
+                            Consumables Breakdown ({allConsumables.length} types)
+                          </span>
+                          {showConsumables ? <ChevronDown size={16} className="transform rotate-180 transition-transform text-gray-400" /> : <ChevronDown size={16} className="transition-transform text-gray-400" />}
+                        </button>
+                        {showConsumables && (
+                          <div className="px-4 py-3 border-t bg-white space-y-1.5 max-h-48 overflow-y-auto">
+                            {allConsumables.map((item, i) => (
+                              <div key={i} className="flex justify-between items-center text-xs pb-1.5 border-b border-gray-50 last:border-0 last:pb-0">
+                                <span className="text-gray-600">
+                                  {item.item_name} <span className="text-gray-400">x{item.actual_consumed}</span>
+                                  {item.complimentary_limit > 0 && item.total_charge > 0 && (
+                                    <span className="text-[10px] text-gray-400 ml-1">({item.complimentary_limit} Free)</span>
+                                  )}
+                                </span>
+                                <span className={`font-mono font-medium ${item.total_charge === 0 ? "text-green-600 font-bold font-sans" : "text-gray-600"}`}>
+                                  {item.total_charge > 0 ? formatCurrency(item.total_charge) : "Complimentary"}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Services Collapsible */}
+                    {billData.charges.service_items.length > 0 && (
+                      <div className="border border-gray-150 rounded-xl overflow-hidden">
+                        <button
+                          type="button"
+                          onClick={() => setShowServices(!showServices)}
+                          className="w-full flex items-center justify-between px-4 py-2.5 bg-gray-50/50 hover:bg-gray-50 transition text-xs font-bold text-gray-700"
+                        >
+                          <span className="flex items-center gap-2">
+                            <ClipboardList size={14} className="text-indigo-600" />
+                            Additional Services ({billData.charges.service_items.length} services)
+                          </span>
+                          {showServices ? <ChevronDown size={16} className="transform rotate-180 transition-transform text-gray-400" /> : <ChevronDown size={16} className="transition-transform text-gray-400" />}
+                        </button>
+                        {showServices && (
+                          <div className="px-4 py-3 border-t bg-white space-y-1.5 max-h-48 overflow-y-auto">
+                            {billData.charges.service_items.map((item, i) => (
+                              <div key={i} className="flex justify-between items-center text-xs pb-1.5 border-b border-gray-50 last:border-0 last:pb-0">
+                                <span className={item.is_paid ? "text-gray-400 line-through" : "text-gray-600"}>
+                                  {item.service_name}
+                                </span>
+                                <span className="font-mono text-gray-600 font-medium">
+                                  {formatCurrency(item.charges)}
+                                  {item.is_paid && <span className="ml-1 text-green-600 text-[10px] font-bold font-sans">({item.payment_status || "Paid"})</span>}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Inventory/Rental Usage Collapsible */}
+                    {payableInventory.length > 0 && (
+                      <div className="border border-gray-150 rounded-xl overflow-hidden">
+                        <button
+                          type="button"
+                          onClick={() => setShowInventory(!showInventory)}
+                          className="w-full flex items-center justify-between px-4 py-2.5 bg-gray-50/50 hover:bg-gray-50 transition text-xs font-bold text-gray-700"
+                        >
+                          <span className="flex items-center gap-2">
+                            <Package size={14} className="text-indigo-600" />
+                            Inventory/Rental Usage ({payableInventory.length} items)
+                          </span>
+                          {showInventory ? <ChevronDown size={16} className="transform rotate-180 transition-transform text-gray-400" /> : <ChevronDown size={16} className="transition-transform text-gray-400" />}
+                        </button>
+                        {showInventory && (
+                          <div className="px-4 py-3 border-t bg-white space-y-1.5 max-h-48 overflow-y-auto">
+                            {payableInventory.map((item, i) => (
+                              <div key={i} className="flex justify-between items-start text-xs pb-1.5 border-b border-gray-50 last:border-0 last:pb-0">
+                                <div>
+                                  <p className="text-gray-600 font-semibold">{item.item_name}</p>
+                                  <p className="text-[10px] text-gray-400 mt-0.5">
+                                    Room {item.room_number} • Qty: {item.quantity} {item.unit} • {new Date(item.date).toLocaleDateString()}
+                                  </p>
+                                </div>
+                                <span className="font-mono text-indigo-700 font-semibold">
+                                  {formatCurrency(item.rental_charge !== undefined ? item.rental_charge : (item.rental_price * item.quantity))}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Asset Damages Collapsible */}
+                    {billData.charges.asset_damages && billData.charges.asset_damages.length > 0 && (
+                      <div className="border border-red-150 rounded-xl overflow-hidden">
+                        <button
+                          type="button"
+                          onClick={() => setShowDamages(!showDamages)}
+                          className="w-full flex items-center justify-between px-4 py-2.5 bg-red-50/50 hover:bg-red-50 transition text-xs font-bold text-red-700"
+                        >
+                          <span className="flex items-center gap-2">
+                            <AlertTriangle size={14} className="text-red-600" />
+                            Asset Damages Reported ({billData.charges.asset_damages.length} incidents)
+                          </span>
+                          {showDamages ? <ChevronDown size={16} className="transform rotate-180 transition-transform text-red-400" /> : <ChevronDown size={16} className="transition-transform text-red-400" />}
+                        </button>
+                        {showDamages && (
+                          <div className="px-4 py-3 border-t bg-white space-y-1.5 max-h-48 overflow-y-auto">
+                            {billData.charges.asset_damages.map((item, i) => (
+                              <div key={i} className="flex justify-between items-start text-xs pb-1.5 border-b border-gray-50 last:border-0 last:pb-0">
+                                <div>
+                                  <p className="text-red-700 font-semibold">{item.item_name}</p>
+                                  {item.notes && <p className="text-[10px] text-gray-400 mt-0.5">Note: {item.notes}</p>}
+                                </div>
+                                <span className="font-mono text-red-600 font-bold">{formatCurrency(item.replacement_cost)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Summary & Totals Invoice Card */}
+                  <div className="mt-6 pt-6 border-t border-gray-100 space-y-2 bg-gray-50/40 p-4 rounded-2xl border">
+                    <div className="flex justify-between text-sm text-gray-600">
+                      <span>Subtotal:</span>
+                      <span className="font-mono font-medium">{formatCurrency(getDynamicTotals().subtotal)}</span>
+                    </div>
+
+                    {/* GST Breakdown lines */}
                     {billData.charges.room_gst > 0 && (
-                      <p className="text-xs text-gray-500">Room GST ({
-                        gstSettings.gst_room_type === "MANUAL" ? `${gstSettings.room_gst_rate || 12}%` :
-                          dailyRatePerRoom < 5000 ? `${gstSettings.gst_slab_rate_1}%` :
-                            dailyRatePerRoom <= 7500 ? `${gstSettings.gst_slab_rate_2}%` : `${gstSettings.gst_slab_rate_3}%`
-                      }): +{formatCurrency(billData.charges.room_gst || 0)}</p>
+                      <div className="flex justify-between text-xs text-gray-500">
+                        <span>Room GST ({
+                          gstSettings.gst_room_type === "MANUAL" ? `${gstSettings.room_gst_rate || 12}%` :
+                            dailyRatePerRoom < 5000 ? `${gstSettings.gst_slab_rate_1}%` :
+                              dailyRatePerRoom <= 7500 ? `${gstSettings.gst_slab_rate_2}%` : `${gstSettings.gst_slab_rate_3}%`
+                        }):</span>
+                        <span className="font-mono">+{formatCurrency(billData.charges.room_gst || 0)}</span>
+                      </div>
                     )}
+                    
                     {billData.charges.package_gst > 0 && (
-                      <p className="text-xs text-gray-500">Package GST ({
-                        gstSettings.gst_room_type === "MANUAL" ? `${gstSettings.room_gst_rate || 12}%` :
-                          (billData.charges.package_charges / (stayNights * numRooms)) < 5000 ? `${gstSettings.gst_slab_rate_1}%` :
-                            (billData.charges.package_charges / (stayNights * numRooms)) <= 7500 ? `${gstSettings.gst_slab_rate_2}%` : `${gstSettings.gst_slab_rate_3}%`
-                      }): +{formatCurrency(billData.charges.package_gst || 0)}</p>
+                      <div className="flex justify-between text-xs text-gray-500">
+                        <span>Package GST ({
+                          gstSettings.gst_room_type === "MANUAL" ? `${gstSettings.room_gst_rate || 12}%` :
+                            (billData.charges.package_charges / (stayNights * numRooms)) < 5000 ? `${gstSettings.gst_slab_rate_1}%` :
+                              (billData.charges.package_charges / (stayNights * numRooms)) <= 7500 ? `${gstSettings.gst_slab_rate_2}%` : `${gstSettings.gst_slab_rate_3}%`
+                        }):</span>
+                        <span className="font-mono">+{formatCurrency(billData.charges.package_gst || 0)}</span>
+                      </div>
                     )}
+
                     {billData.charges.food_gst > 0 && (
-                      <p className="text-xs text-gray-500">Food GST ({resortSettings.food_gst_rate || 5}%): +{formatCurrency(billData.charges.food_gst || 0)}</p>
+                      <div className="flex justify-between text-xs text-gray-500">
+                        <span>Food GST ({resortSettings.food_gst_rate || 5}%):</span>
+                        <span className="font-mono">+{formatCurrency(billData.charges.food_gst || 0)}</span>
+                      </div>
                     )}
+
                     {billData.charges.service_gst > 0 && (
-                      <p className="text-xs text-gray-500">Service GST ({resortSettings.service_gst_rate || 5}%): +{formatCurrency(billData.charges.service_gst || 0)}</p>
+                      <div className="flex justify-between text-xs text-gray-500">
+                        <span>Service GST ({resortSettings.service_gst_rate || 5}%):</span>
+                        <span className="font-mono">+{formatCurrency(billData.charges.service_gst || 0)}</span>
+                      </div>
                     )}
+
                     {billData.charges.consumables_gst > 0 && (
-                      <p className="text-xs text-gray-500">Consumables GST ({resortSettings.food_gst_rate || 5}%): +{formatCurrency(billData.charges.consumables_gst || 0)}</p>
+                      <div className="flex justify-between text-xs text-gray-500">
+                        <span>Consumables GST ({resortSettings.food_gst_rate || 5}%):</span>
+                        <span className="font-mono">+{formatCurrency(billData.charges.consumables_gst || 0)}</span>
+                      </div>
                     )}
+
                     {billData.charges.inventory_gst > 0 && (
-                      <p className="text-xs text-gray-500">Inventory GST ({resortSettings.service_gst_rate || 5}%): +{formatCurrency(billData.charges.inventory_gst || 0)}</p>
+                      <div className="flex justify-between text-xs text-gray-500">
+                        <span>Inventory GST ({resortSettings.service_gst_rate || 5}%):</span>
+                        <span className="font-mono">+{formatCurrency(billData.charges.inventory_gst || 0)}</span>
+                      </div>
                     )}
+
                     {billData.charges.asset_damage_gst > 0 && (
-                      <p className="text-xs text-gray-500">Damage GST (5%): +{formatCurrency(billData.charges.asset_damage_gst || 0)}</p>
+                      <div className="flex justify-between text-xs text-gray-500">
+                        <span>Damage GST (5%):</span>
+                        <span className="font-mono">+{formatCurrency(billData.charges.asset_damage_gst || 0)}</span>
+                      </div>
                     )}
-                    <p className="text-sm text-gray-600 font-semibold">Total GST: +{formatCurrency(getDynamicTotals().totalGST)}</p>
-                    <p className="text-sm text-gray-700 font-bold border-t pt-1 mt-1">Total Bill: {formatCurrency(getDynamicTotals().totalBill)}</p>
+
+                    <div className="flex justify-between text-sm font-semibold text-gray-700">
+                      <span>{gstType === 'IGST' ? 'IGST:' : 'CGST:'}</span>
+                      <span className="font-mono">+{formatCurrency(gstType === 'IGST' ? getDynamicTotals().totalGST : getDynamicTotals().totalGST / 2)}</span>
+                    </div>
+                    {gstType !== 'IGST' && (
+                      <div className="flex justify-between text-sm font-semibold text-gray-700">
+                        <span>SGST:</span>
+                        <span className="font-mono">+{formatCurrency(getDynamicTotals().totalGST / 2)}</span>
+                      </div>
+                    )}
+
+                    <div className="flex justify-between text-sm font-bold text-gray-800 border-t border-dashed pt-2 mt-1">
+                      <span>Total Bill:</span>
+                      <span className="font-mono">{formatCurrency(getDynamicTotals().totalBill)}</span>
+                    </div>
 
                     {discount > 0 && (
-                      <p className="text-sm text-green-600">Discount: -{formatCurrency(parseFloat(discount))}</p>
+                      <div className="flex justify-between text-sm text-green-600 font-semibold">
+                        <span>Discount:</span>
+                        <span className="font-mono">-{formatCurrency(parseFloat(discount))}</span>
+                      </div>
                     )}
+                    
                     {getDynamicTotals().advanceDeposit > 0 && (
-                      <p className="text-sm text-emerald-600">Advance Paid: -{formatCurrency(getDynamicTotals().advanceDeposit)}</p>
+                      <div className="flex justify-between text-sm text-emerald-600 font-semibold">
+                        <span>Advance Paid:</span>
+                        <span className="font-mono">-{formatCurrency(getDynamicTotals().advanceDeposit)}</span>
+                      </div>
                     )}
-                    <p className="font-bold text-xl text-gray-900 mt-2 pt-2 border-t-2 border-gray-300">
-                      {getDynamicTotals().netPayable >= 0 
-                        ? "Net Payable: " 
-                        : "Refund Amount: "}
-                      <span className={getDynamicTotals().netPayable < 0 ? "text-blue-600" : ""}>
+
+                    {/* Net Payable Highlight Banner */}
+                    <div className="bg-gradient-to-r from-indigo-700 to-purple-800 text-white rounded-xl p-4 flex items-center justify-between mt-4 shadow-md">
+                      <div className="flex items-center space-x-2">
+                        <CreditCard size={18} className="text-indigo-200" />
+                        <span className="text-sm font-bold">
+                          {getDynamicTotals().netPayable >= 0 ? "Net Payable" : "Refund Due"}
+                        </span>
+                      </div>
+                      <span className="text-xl font-black font-mono">
                         {formatCurrency(Math.abs(getDynamicTotals().netPayable))}
                       </span>
-                    </p>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -2555,51 +3080,136 @@ const Billing = () => {
                 )}
               </div>
 
-              <div className="grid grid-cols-2 gap-4 mb-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                 <div>
-                  <label htmlFor="discount" className="block text-gray-700 font-medium mb-2">Discount (₹)</label>
-                  <input type="number" id="discount" value={discount} onChange={e => setDiscount(e.target.value)} className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="0.00" />
+                  <label htmlFor="discount" className="block text-sm font-bold text-gray-700 mb-1.5">Discount (₹)</label>
+                  <div className="relative rounded-md shadow-sm">
+                    <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400">
+                      <Percent size={14} />
+                    </span>
+                    <input
+                      type="number"
+                      id="discount"
+                      value={discount}
+                      onChange={e => setDiscount(e.target.value)}
+                      className="w-full pl-9 pr-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white text-sm"
+                      placeholder="0.00"
+                    />
+                  </div>
                 </div>
                 <div>
-                  <label htmlFor="payment-method" className="block text-gray-700 font-medium mb-2">Payment Method</label>
-                  <select
-                    id="payment-method"
-                    value={paymentMethod}
-                    onChange={(e) => setPaymentMethod(e.target.value)}
-                    className="w-full px-4 py-2 border rounded-lg h-full focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  >
-                    <option value="Card">Card</option>
-                    <option value="Cash">Cash</option>
-                    <option value="Online">Online</option>
-                  </select>
+                  <label htmlFor="payment-method" className="block text-sm font-bold text-gray-700 mb-1.5">Payment Method</label>
+                  <div className="relative rounded-md shadow-sm">
+                    <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400">
+                      <CreditCard size={14} />
+                    </span>
+                    <select
+                      id="payment-method"
+                      value={paymentMethod}
+                      onChange={(e) => setPaymentMethod(e.target.value)}
+                      className="w-full pl-9 pr-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white text-sm h-[38px]"
+                    >
+                      <option value="Card">Card</option>
+                      <option value="Cash">Cash</option>
+                      <option value="Online">Online</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label htmlFor="gst-type" className="block text-sm font-bold text-gray-700 mb-1.5">GST Type</label>
+                  <div className="relative rounded-md shadow-sm">
+                    <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400">
+                      <FileText size={14} />
+                    </span>
+                    <select
+                      id="gst-type"
+                      value={gstType}
+                      onChange={(e) => setGstType(e.target.value)}
+                      className="w-full pl-9 pr-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white text-sm h-[38px]"
+                    >
+                      <option value="CGST_SGST">Intra-State (CGST & SGST)</option>
+                      <option value="IGST">Inter-State (IGST)</option>
+                    </select>
+                  </div>
                 </div>
               </div>
 
               <div className="mb-4">
-                <label htmlFor="pan-number" className="block text-gray-700 font-medium mb-2">Guest PAN Number</label>
-                <input
-                  type="text"
-                  id="pan-number"
-                  value={panNumber}
-                  onChange={(e) => setPanNumber(e.target.value.toUpperCase())}
-                  className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="Enter Guest PAN (e.g. ABCDE1234F) - Optional"
-                  maxLength={10}
-                />
+                <label htmlFor="pan-number" className="block text-sm font-bold text-gray-700 mb-1.5">Guest PAN Number</label>
+                <div className="relative rounded-md shadow-sm">
+                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400">
+                    <FileText size={14} />
+                  </span>
+                  <input
+                    type="text"
+                    id="pan-number"
+                    value={panNumber}
+                    onChange={(e) => setPanNumber(e.target.value.toUpperCase())}
+                    className="w-full pl-9 pr-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white text-sm"
+                    placeholder="Enter Guest PAN (e.g. ABCDE1234F) - Optional"
+                    maxLength={10}
+                  />
+                </div>
               </div>
-              <div className="space-y-3">
-                <div className="flex space-x-2">
-                  <button onClick={() => generatePDF('print')} className="flex-1 bg-gray-500 text-white py-2 rounded-lg font-semibold hover:bg-gray-600 transition">Print</button>
-                  <button onClick={() => generatePDF('download')} className="flex-1 bg-indigo-500 text-white py-2 rounded-lg font-semibold hover:bg-indigo-600 transition">Download</button>
-                  <button onClick={handleWhatsAppShare} className="flex-1 bg-green-500 text-white py-2 rounded-lg font-semibold hover:bg-green-600 transition">WhatsApp</button>
-                  <button onClick={handleEmailShare} className="flex-1 bg-blue-500 text-white py-2 rounded-lg font-semibold hover:bg-blue-600 transition">Email</button>
+
+              <div className="mb-4">
+                <label htmlFor="gst-number" className="block text-sm font-bold text-gray-700 mb-1.5">Guest GST Number</label>
+                <div className="relative rounded-md shadow-sm">
+                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400">
+                    <FileText size={14} />
+                  </span>
+                  <input
+                    type="text"
+                    id="gst-number"
+                    value={gstNumber}
+                    onChange={(e) => setGstNumber(e.target.value.toUpperCase())}
+                    className="w-full pl-9 pr-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white text-sm"
+                    placeholder="Enter Guest GST Number (e.g. 22AAAAA0000A1Z5) - Optional"
+                    maxLength={15}
+                  />
+                </div>
+              </div>
+              
+              <div className="space-y-4 mt-6">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+                  <button
+                    onClick={() => generatePDF('print')}
+                    className="flex items-center justify-center gap-1.5 bg-slate-700 text-white py-2 px-3 rounded-lg font-semibold hover:bg-slate-800 transition text-sm shadow-sm"
+                  >
+                    <Printer size={15} />
+                    Print
+                  </button>
+                  <button
+                    onClick={() => generatePDF('download')}
+                    className="flex items-center justify-center gap-1.5 bg-indigo-600 text-white py-2 px-3 rounded-lg font-semibold hover:bg-indigo-700 transition text-sm shadow-sm"
+                  >
+                    <Download size={15} />
+                    Download
+                  </button>
+                  <button
+                    onClick={handleWhatsAppShare}
+                    className="flex items-center justify-center gap-1.5 bg-green-600 text-white py-2 px-3 rounded-lg font-semibold hover:bg-green-700 transition text-sm shadow-sm"
+                  >
+                    <Share2 size={15} />
+                    WhatsApp
+                  </button>
+                  <button
+                    onClick={handleEmailShare}
+                    className="flex items-center justify-center gap-1.5 bg-blue-600 text-white py-2 px-3 rounded-lg font-semibold hover:bg-blue-700 transition text-sm shadow-sm"
+                  >
+                    <Mail size={15} />
+                    Email
+                  </button>
                 </div>
                 <button
                   onClick={handleCheckout}
-                  className="w-full bg-red-600 text-white py-3 rounded-lg font-bold text-lg hover:bg-red-700 transition duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                  className="w-full bg-gradient-to-r from-rose-600 to-red-700 text-white py-3 rounded-xl font-bold text-lg hover:from-rose-700 hover:to-red-800 transition duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 shadow-md flex items-center justify-center gap-2"
                   disabled={loading}
                 >
-                  {loading ? "Processing..." : "Complete Checkout"}
+                  <CheckCircle size={20} />
+                  {loading ? "Processing..." : "Complete Checkout & Close Billing"}
                 </button>
               </div>
             </>
@@ -2830,6 +3440,7 @@ const Billing = () => {
             onUpdateSuccess={(updated) => {
               setCheckouts(prev => prev.map(c => c.id === updated.id ? updated : c));
             }}
+            resortSettings={resortSettings}
           />
         )}
 

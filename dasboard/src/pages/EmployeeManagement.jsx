@@ -1738,6 +1738,7 @@ const EmployeeListAndForm = () => {
       data.append("password", form.password);
     }
     if (form.phone) data.append("phone", form.phone);
+    if (form.join_date) data.append("join_date", form.join_date);
     if (form.daily_tasks) data.append("daily_tasks", JSON.stringify(form.daily_tasks));
     if (form.image) data.append("image", form.image);
 

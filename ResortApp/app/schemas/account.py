@@ -159,6 +159,11 @@ class JournalEntryOut(JournalEntryBase):
 
 
 # Ledger Balance Schema
+class LedgerDetail(BaseModel):
+    item_name: str
+    amount: float
+    type: str = ""
+
 class LedgerBalance(BaseModel):
     ledger_id: Optional[int] = None  # None for virtual ledgers (automatic calculations)
     ledger_name: str
@@ -166,12 +171,23 @@ class LedgerBalance(BaseModel):
     credit_total: float = 0.0
     opening_balance: float = 0.0
     balance: float = 0.0  # Positive for debit balance, negative for credit balance
+    closing_debit: float = 0.0
+    closing_credit: float = 0.0
     balance_type: str  # "debit" or "credit"
+    group_name: Optional[str] = "General Ledger"
+    details: Optional[List[LedgerDetail]] = []
 
+
+class LedgerGroup(BaseModel):
+    group_name: str
+    ledgers: List[LedgerBalance]
+    closing_debit: float = 0.0
+    closing_credit: float = 0.0
 
 # Trial Balance Schema
 class TrialBalance(BaseModel):
     ledgers: List[LedgerBalance]
+    groups: List[LedgerGroup] = []
     total_debits: float
     total_credits: float
     is_balanced: bool
