@@ -186,9 +186,25 @@ def _populate_order_item_prices(order):
     if not order or not order.items:
         return order
     
+    # Check if order was billed as inclusive by comparing catalog total to total_with_gst
+    catalog_total = 0.0
+    for item in order.items:
+        if item.food_item:
+            price = resolve_food_item_price(item.food_item, order.order_type)
+            catalog_total += price * (item.quantity or 0)
+            
+    is_inclusive = False
+    if order.total_with_gst and order.amount and order.total_with_gst > order.amount:
+        # If catalog total matches total_with_gst, it was inclusive!
+        if abs(catalog_total - order.total_with_gst) < 1.0:
+            is_inclusive = True
+
     for item in order.items:
         if item.food_item:
             item.price = resolve_food_item_price(item.food_item, order.order_type)
+            if is_inclusive and order.total_with_gst > 0:
+                # scale down the price to pre-tax amount
+                item.price = item.price * (order.amount / order.total_with_gst)
             item.subtotal = item.price * (item.quantity or 0)
         else:
             item.price = 0.0
@@ -232,8 +248,17 @@ def create_food_order(db: Session, order_data: FoodOrderCreate, branch_id: int):
             else:
                 booking_id = b_id
 
-    gst_amount = final_amount * 0.05
-    total_with_gst = final_amount + gst_amount
+    from app.utils.settings_helpers import get_gst_settings
+    gst_settings = get_gst_settings(db, branch_id)
+    gst_rate = float(gst_settings["food_gst_rate"]) / 100.0 if gst_settings.get("gst_enabled", False) else 0.0
+    
+    if gst_settings.get("gst_inclusive", False) and gst_rate > 0:
+        total_with_gst = final_amount
+        gst_amount = total_with_gst - (total_with_gst / (1 + gst_rate))
+        final_amount = total_with_gst - gst_amount
+    else:
+        gst_amount = final_amount * gst_rate
+        total_with_gst = final_amount + gst_amount
 
     order = FoodOrder(
         room_id=order_data.room_id,

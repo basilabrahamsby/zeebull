@@ -2422,6 +2422,25 @@ def get_checkout_details(checkout_id: int, db: Session = Depends(get_db), curren
             elif 'charges_breakdown' in bill_details and 'asset_damages' in bill_details['charges_breakdown']:
                 bill_details['asset_damages'] = bill_details['charges_breakdown']['asset_damages']
 
+    # Dynamically strip tax from raw food_orders and services for inclusive bookings
+    # This ensures the PDF generated from Completed Checkouts shows pre-tax line items
+    if booking:
+        from app.utils.settings_helpers import get_gst_settings
+        gst_settings = get_gst_settings(db, getattr(booking, 'branch_id', None))
+        global_is_inclusive = getattr(booking, 'rate_plan_code', None) == 'TAX_INCLUSIVE' or gst_settings.get("gst_inclusive", False)
+        
+        if global_is_inclusive:
+            food_rate = float(gst_settings.get("food_gst_rate", 5)) / 100.0
+            service_rate = float(gst_settings.get("service_gst_rate", 5)) / 100.0
+            
+            for order in food_orders:
+                for item in order.get("items", []):
+                    item["total"] = item["total"] / (1 + food_rate)
+                    item["price"] = item["price"] / (1 + food_rate)
+                    
+            for svc in services:
+                svc["charges"] = svc["charges"] / (1 + service_rate)
+
     return {
         "id": checkout.id,
         "booking_id": checkout.booking_id,
@@ -4290,6 +4309,51 @@ def get_bill_for_booking(room_number: str, checkout_mode: str = "multiple", db: 
     if checkout_mode == "single":
         bill_data = _calculate_bill_for_single_room(db, room_number, branch_id)
         effective_checkout = bill_data.get("effective_checkout_date", bill_data["booking"].check_out)
+        
+        from app.utils.settings_helpers import get_gst_settings
+        gst_settings = get_gst_settings(db, branch_id)
+        global_is_inclusive = getattr(bill_data["booking"], 'rate_plan_code', None) == 'TAX_INCLUSIVE' or gst_settings.get("gst_inclusive", False)
+        if global_is_inclusive:
+            charges = bill_data["charges"]
+            
+            food_rate = float(gst_settings.get("food_gst_rate", 5)) / 100.0
+            service_rate = float(gst_settings.get("service_gst_rate", 5)) / 100.0
+            for item in charges.food_items:
+                if isinstance(item, dict) and 'amount' in item:
+                    item['amount'] = item['amount'] / (1 + food_rate)
+                elif hasattr(item, 'amount') and getattr(item, 'amount') is not None:
+                    item.amount = item.amount / (1 + food_rate)
+            for item in charges.service_items:
+                if isinstance(item, dict) and 'charges' in item:
+                    item['charges'] = item['charges'] / (1 + service_rate)
+                elif hasattr(item, 'charges') and getattr(item, 'charges') is not None:
+                    item.charges = item.charges / (1 + service_rate)
+                    
+            charges.food_charges = max(0, (charges.food_charges or 0) - (charges.food_gst or 0))
+            charges.package_charges = max(0, (charges.package_charges or 0) - (charges.package_gst or 0))
+            charges.service_charges = max(0, (charges.service_charges or 0) - (charges.service_gst or 0))
+            charges.consumables_charges = max(0, (charges.consumables_charges or 0) - (charges.consumables_gst or 0))
+            charges.inventory_charges = max(0, (charges.inventory_charges or 0) - (charges.inventory_gst or 0))
+            
+            charges.total_due = sum([
+                charges.room_charges or 0,
+                charges.food_charges or 0,
+                charges.package_charges or 0,
+                charges.service_charges or 0,
+                charges.consumables_charges or 0,
+                charges.inventory_charges or 0,
+                charges.asset_damage_charges or 0,
+                charges.late_checkout_fee or 0
+            ])
+            
+            charges.rent = (charges.room_charges or 0) + (charges.package_charges or 0)
+            charges.food = (charges.food_charges or 0)
+            charges.services = (charges.service_charges or 0)
+            charges.penalties = (charges.inventory_charges or 0) + (charges.asset_damage_charges or 0) + (charges.consumables_charges or 0) + (charges.late_checkout_fee or 0)
+            charges.subtotal = (charges.total_due or 0)
+            charges.gst = (charges.total_gst or 0)
+            charges.grand_total = (charges.total_due or 0) + (charges.total_gst or 0)
+        
         return BillSummary(
             guest_name=bill_data["booking"].guest_name,
             room_numbers=[bill_data["room"].number],
@@ -4312,6 +4376,51 @@ def get_bill_for_booking(room_number: str, checkout_mode: str = "multiple", db: 
     else:
         bill_data = _calculate_bill_for_entire_booking(db, room_number, branch_id)
         effective_checkout = bill_data.get("effective_checkout_date", bill_data["booking"].check_out)
+        
+        from app.utils.settings_helpers import get_gst_settings
+        gst_settings = get_gst_settings(db, branch_id)
+        global_is_inclusive = getattr(bill_data["booking"], 'rate_plan_code', None) == 'TAX_INCLUSIVE' or gst_settings.get("gst_inclusive", False)
+        if global_is_inclusive:
+            charges = bill_data["charges"]
+            
+            food_rate = float(gst_settings.get("food_gst_rate", 5)) / 100.0
+            service_rate = float(gst_settings.get("service_gst_rate", 5)) / 100.0
+            for item in charges.food_items:
+                if isinstance(item, dict) and 'amount' in item:
+                    item['amount'] = item['amount'] / (1 + food_rate)
+                elif hasattr(item, 'amount') and getattr(item, 'amount') is not None:
+                    item.amount = item.amount / (1 + food_rate)
+            for item in charges.service_items:
+                if isinstance(item, dict) and 'charges' in item:
+                    item['charges'] = item['charges'] / (1 + service_rate)
+                elif hasattr(item, 'charges') and getattr(item, 'charges') is not None:
+                    item.charges = item.charges / (1 + service_rate)
+                    
+            charges.food_charges = max(0, (charges.food_charges or 0) - (charges.food_gst or 0))
+            charges.package_charges = max(0, (charges.package_charges or 0) - (charges.package_gst or 0))
+            charges.service_charges = max(0, (charges.service_charges or 0) - (charges.service_gst or 0))
+            charges.consumables_charges = max(0, (charges.consumables_charges or 0) - (charges.consumables_gst or 0))
+            charges.inventory_charges = max(0, (charges.inventory_charges or 0) - (charges.inventory_gst or 0))
+            
+            charges.total_due = sum([
+                charges.room_charges or 0,
+                charges.food_charges or 0,
+                charges.package_charges or 0,
+                charges.service_charges or 0,
+                charges.consumables_charges or 0,
+                charges.inventory_charges or 0,
+                charges.asset_damage_charges or 0,
+                charges.late_checkout_fee or 0
+            ])
+            
+            charges.rent = (charges.room_charges or 0) + (charges.package_charges or 0)
+            charges.food = (charges.food_charges or 0)
+            charges.services = (charges.service_charges or 0)
+            charges.penalties = (charges.inventory_charges or 0) + (charges.asset_damage_charges or 0) + (charges.consumables_charges or 0) + (charges.late_checkout_fee or 0)
+            charges.subtotal = (charges.total_due or 0)
+            charges.gst = (charges.total_gst or 0)
+            charges.grand_total = (charges.total_due or 0) + (charges.total_gst or 0)
+        
         return BillSummary(
             guest_name=bill_data["booking"].guest_name,
             room_numbers=sorted([room.number for room in bill_data["all_rooms"]]),
@@ -4601,7 +4710,10 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, backgro
             tips_gratuity = max(0, request.tips_gratuity or 0.0)
             
             if discount_amount > 0:
-                is_inclusive = getattr(booking, 'rate_plan_code', None) == 'TAX_INCLUSIVE'
+                from app.utils.settings_helpers import get_gst_settings
+                gst_settings = get_gst_settings(db, effective_branch_id)
+                room_is_inclusive = getattr(booking, 'rate_plan_code', None) == 'TAX_INCLUSIVE'
+                global_is_inclusive = gst_settings.get("gst_inclusive", False)
                 new_gst_breakdown = calculate_gst_breakdown(
                     db=db,
                     branch_id=effective_branch_id,
@@ -4614,7 +4726,7 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, backgro
                     nights=bill_data.get("stay_nights", 1),
                     use_night_charges=False,
                     booking_id=booking.id,
-                    is_inclusive=is_inclusive,
+                    is_inclusive=room_is_inclusive,
                     discount_amount=discount_amount
                 )
                 tax_amount = new_gst_breakdown["total_gst"] + asset_damage_gst
@@ -4628,11 +4740,74 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, backgro
                 charges.inventory_gst = new_gst_breakdown["inventory_gst"]
                 charges.total_gst = new_gst_breakdown["total_gst"]
             else:
+                from app.utils.settings_helpers import get_gst_settings
+                gst_settings = get_gst_settings(db, effective_branch_id)
+                room_is_inclusive = getattr(booking, 'rate_plan_code', None) == 'TAX_INCLUSIVE'
+                global_is_inclusive = gst_settings.get("gst_inclusive", False)
                 consumables_gst = consumables_charges * 0.05
                 tax_amount = base_gst + consumables_gst + asset_damage_gst
             
+            if global_is_inclusive:
+                food_rate = float(gst_settings.get("food_gst_rate", 5)) / 100.0
+                service_rate = float(gst_settings.get("service_gst_rate", 5)) / 100.0
+                for item in charges.food_items:
+                    if isinstance(item, dict) and 'amount' in item:
+                        item['amount'] = item['amount'] / (1 + food_rate)
+                    elif hasattr(item, 'amount') and getattr(item, 'amount') is not None:
+                        item.amount = item.amount / (1 + food_rate)
+                for item in charges.service_items:
+                    if isinstance(item, dict) and 'charges' in item:
+                        item['charges'] = item['charges'] / (1 + service_rate)
+                    elif hasattr(item, 'charges') and getattr(item, 'charges') is not None:
+                        item.charges = item.charges / (1 + service_rate)
+                
+                # Convert the saved charges to pre-tax so the invoice breakdown is mathematically correct
+                charges.food_charges = max(0, (charges.food_charges or 0) - (charges.food_gst or 0))
+                charges.package_charges = max(0, (charges.package_charges or 0) - (charges.package_gst or 0))
+                charges.service_charges = max(0, (charges.service_charges or 0) - (charges.service_gst or 0))
+                charges.consumables_charges = max(0, (charges.consumables_charges or 0) - (charges.consumables_gst or 0))
+                charges.inventory_charges = max(0, (charges.inventory_charges or 0) - (charges.inventory_gst or 0))
+                
+                consumables_charges = charges.consumables_charges
+                
+            if room_is_inclusive:
+                charges.room_charges = max(0, (charges.room_charges or 0) - (charges.room_gst or 0))
+            
+            # --- ROUNDING FIX ---
+            # Round all components to 2 decimal places to prevent float precision discrepancies
+            charges.room_charges = round(charges.room_charges or 0.0, 2)
+            charges.food_charges = round(charges.food_charges or 0.0, 2)
+            charges.package_charges = round(charges.package_charges or 0.0, 2)
+            charges.service_charges = round(charges.service_charges or 0.0, 2)
+            charges.consumables_charges = round(charges.consumables_charges or 0.0, 2)
+            charges.inventory_charges = round(charges.inventory_charges or 0.0, 2)
+            charges.asset_damage_charges = round(charges.asset_damage_charges or 0.0, 2)
+            charges.late_checkout_fee = round(charges.late_checkout_fee or 0.0, 2)
+            
+            tax_amount = round(tax_amount or 0.0, 2)
+            key_card_fee = round(key_card_fee or 0.0, 2)
+            discount_amount = round(discount_amount or 0.0, 2)
+            tips_gratuity = round(tips_gratuity or 0.0, 2)
+            advance_deposit = round(advance_deposit or 0.0, 2)
+            consumables_charges = round(consumables_charges or 0.0, 2)
+            asset_damage_charges = round(asset_damage_charges or 0.0, 2)
+            
+            # Recompute total_due exactly from rounded components
+            charges.total_due = sum([
+                charges.room_charges,
+                charges.food_charges,
+                charges.package_charges,
+                charges.service_charges,
+                charges.consumables_charges,
+                charges.inventory_charges,
+                charges.asset_damage_charges,
+                charges.late_checkout_fee
+            ])
+            # --- END ROUNDING FIX ---
+            
             # Grand total before advance deposit deduction
-            grand_total_before_advance = subtotal + tax_amount - discount_amount + tips_gratuity
+            # total_due represents the sum of all exclusive base charges
+            grand_total_before_advance = charges.total_due + tax_amount + key_card_fee - discount_amount + tips_gratuity
             
             # Deduct advance deposit
             grand_total = grand_total_before_advance - advance_deposit
@@ -5426,7 +5601,10 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, backgro
             tips_gratuity = max(0, request.tips_gratuity or 0.0)
             
             if discount_amount > 0:
-                is_inclusive = getattr(booking, 'rate_plan_code', None) == 'TAX_INCLUSIVE'
+                from app.utils.settings_helpers import get_gst_settings
+                gst_settings = get_gst_settings(db, effective_branch_id)
+                room_is_inclusive = getattr(booking, 'rate_plan_code', None) == 'TAX_INCLUSIVE'
+                global_is_inclusive = gst_settings.get("gst_inclusive", False)
                 new_gst_breakdown = calculate_gst_breakdown(
                     db=db,
                     branch_id=effective_branch_id,
@@ -5439,7 +5617,7 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, backgro
                     nights=bill_data.get("stay_nights", 1),
                     use_night_charges=False,
                     booking_id=booking.id,
-                    is_inclusive=is_inclusive,
+                    is_inclusive=room_is_inclusive,
                     discount_amount=discount_amount
                 )
                 tax_amount = new_gst_breakdown["total_gst"] + asset_damage_gst
@@ -5452,10 +5630,72 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, backgro
                 charges.inventory_gst = new_gst_breakdown["inventory_gst"]
                 charges.total_gst = new_gst_breakdown["total_gst"]
             else:
+                from app.utils.settings_helpers import get_gst_settings
+                gst_settings = get_gst_settings(db, effective_branch_id)
+                room_is_inclusive = getattr(booking, 'rate_plan_code', None) == 'TAX_INCLUSIVE'
+                global_is_inclusive = gst_settings.get("gst_inclusive", False)
                 consumables_gst = total_consumables_charges * 0.05
                 tax_amount = base_gst + consumables_gst + asset_damage_gst
             
-            grand_total_before_advance = subtotal + tax_amount - discount_amount + tips_gratuity
+            if global_is_inclusive:
+                food_rate = float(gst_settings.get("food_gst_rate", 5)) / 100.0
+                service_rate = float(gst_settings.get("service_gst_rate", 5)) / 100.0
+                for item in charges.food_items:
+                    if isinstance(item, dict) and 'amount' in item:
+                        item['amount'] = item['amount'] / (1 + food_rate)
+                    elif hasattr(item, 'amount') and getattr(item, 'amount') is not None:
+                        item.amount = item.amount / (1 + food_rate)
+                for item in charges.service_items:
+                    if isinstance(item, dict) and 'charges' in item:
+                        item['charges'] = item['charges'] / (1 + service_rate)
+                    elif hasattr(item, 'charges') and getattr(item, 'charges') is not None:
+                        item.charges = item.charges / (1 + service_rate)
+                
+                # Convert the saved charges to pre-tax so the invoice breakdown is mathematically correct
+                charges.food_charges = max(0, (charges.food_charges or 0) - (charges.food_gst or 0))
+                charges.package_charges = max(0, (charges.package_charges or 0) - (charges.package_gst or 0))
+                charges.service_charges = max(0, (charges.service_charges or 0) - (charges.service_gst or 0))
+                charges.consumables_charges = max(0, (total_consumables_charges or 0) - (charges.consumables_gst or 0))
+                charges.inventory_charges = max(0, (charges.inventory_charges or 0) - (charges.inventory_gst or 0))
+                
+                total_consumables_charges = charges.consumables_charges
+
+            if room_is_inclusive:
+                charges.room_charges = max(0, (charges.room_charges or 0) - (charges.room_gst or 0))
+
+            # --- ROUNDING FIX ---
+            # Round all components to 2 decimal places to prevent float precision discrepancies
+            charges.room_charges = round(charges.room_charges or 0.0, 2)
+            charges.food_charges = round(charges.food_charges or 0.0, 2)
+            charges.package_charges = round(charges.package_charges or 0.0, 2)
+            charges.service_charges = round(charges.service_charges or 0.0, 2)
+            charges.consumables_charges = round(charges.consumables_charges or 0.0, 2)
+            charges.inventory_charges = round(charges.inventory_charges or 0.0, 2)
+            charges.asset_damage_charges = round(charges.asset_damage_charges or 0.0, 2)
+            charges.late_checkout_fee = round(charges.late_checkout_fee or 0.0, 2)
+            
+            tax_amount = round(tax_amount or 0.0, 2)
+            discount_amount = round(discount_amount or 0.0, 2)
+            tips_gratuity = round(tips_gratuity or 0.0, 2)
+            advance_deposit = round(advance_deposit or 0.0, 2)
+            total_consumables_charges = round(total_consumables_charges or 0.0, 2)
+            total_asset_damage_charges = round(total_asset_damage_charges or 0.0, 2)
+            total_key_card_fee = round(total_key_card_fee or 0.0, 2)
+            
+            # Recompute total_due exactly from rounded components
+            charges.total_due = sum([
+                charges.room_charges,
+                charges.food_charges,
+                charges.package_charges,
+                charges.service_charges,
+                charges.consumables_charges,
+                charges.inventory_charges,
+                charges.asset_damage_charges,
+                charges.late_checkout_fee
+            ])
+            # --- END ROUNDING FIX ---
+            
+            grand_total_before_advance = charges.total_due + tax_amount + total_key_card_fee - discount_amount + tips_gratuity
             grand_total = grand_total_before_advance - advance_deposit
             refund_amount = max(0, advance_deposit - grand_total_before_advance)
             

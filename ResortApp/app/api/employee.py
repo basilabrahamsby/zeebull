@@ -724,7 +724,7 @@ def create_salary_payment(
     # Create Journal Entry for the new payment
     try:
         from app.utils.accounting_helpers import create_salary_journal_entry
-        employee_name = f"{emp.first_name} {emp.last_name}".strip() if emp else "Employee"
+        employee_name = emp.name if emp else "Employee"
         create_salary_journal_entry(
             db=db,
             payment_id=new_payment.id,

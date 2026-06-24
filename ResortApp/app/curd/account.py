@@ -233,7 +233,7 @@ def generate_entry_number(db: Session, branch_id: int) -> str:
     return entry_number
 
 
-def create_journal_entry(db: Session, entry: JournalEntryCreate, branch_id: int, created_by: Optional[int] = None) -> JournalEntry:
+def create_journal_entry(db: Session, entry: JournalEntryCreate, branch_id: int, created_by: Optional[int] = None, commit: bool = True) -> JournalEntry:
 
     """Create a new journal entry with lines - includes balance validation"""
     # Validate balance: Total Debits must equal Total Credits
@@ -293,8 +293,11 @@ def create_journal_entry(db: Session, entry: JournalEntryCreate, branch_id: int,
 
         db.add(db_line)
     
-    db.commit()
-    db.refresh(db_entry)
+    if commit:
+        db.commit()
+        db.refresh(db_entry)
+    else:
+        db.flush()
     return db_entry
 
 

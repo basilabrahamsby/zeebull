@@ -25,6 +25,16 @@ def generate_checkout_bill_pdf(checkout, bill_details, output_path):
         str: Path to the generated PDF
     """
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    
+    # Support both flat and nested DB formats
+    if bill_details and 'charges_breakdown' in bill_details:
+        flat_details = bill_details['charges_breakdown']
+        # Also copy over the arrays from nested structure if present
+        if 'consumables_audit' in bill_details and isinstance(bill_details['consumables_audit'], dict):
+            flat_details['consumables_items'] = bill_details['consumables_audit'].get('items', [])
+        if 'asset_damages' in bill_details and isinstance(bill_details['asset_damages'], dict):
+            flat_details['asset_damages'] = bill_details['asset_damages'].get('items', [])
+        bill_details = flat_details
 
     doc = SimpleDocTemplate(output_path, pagesize=A4,
                             rightMargin=0.5*inch, leftMargin=0.5*inch,

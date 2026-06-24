@@ -1175,16 +1175,17 @@ def create_booking(
         base_amt = 0.0
 
         if booking.custom_room_rate and booking.custom_room_rate > 0:
-            # Custom rate is treated as "Base Room Charges" (excluding GST)
+            # Custom rate is treated as "Base Room Charges"
             base_amt = booking.custom_room_rate
-            # Store the BASE room rate per night
-            booking_full.room_rate = base_amt / (nights * room_count)
         elif booking_full.room_type_id and booking_full.check_in and booking_full.check_out:
             base_amt = calculate_dynamic_booking_price(db, booking_full.room_type_id, booking_full.check_in, booking_full.check_out, room_count)
-            # Store base rate
-            booking_full.room_rate = base_amt / (nights * room_count)
 
-        # Calculate GST on top of base_amt at the time of booking
+        # Check if actually inclusive
+        from app.utils.settings_helpers import get_gst_settings
+        gst_settings = get_gst_settings(db, branch_id)
+        is_inclusive_global = gst_settings.get("gst_inclusive", False)
+
+        # Calculate GST
         gst_data = calculate_gst_breakdown(
             db=db,
             branch_id=branch_id,
@@ -1192,9 +1193,15 @@ def create_booking(
             food_charges=0,
             package_charges=0,
             nights=nights,
-            is_inclusive=False
+            is_inclusive=is_inclusive_global
         )
-        total_amt = base_amt + gst_data["total_gst"]
+        if gst_settings.get("gst_inclusive", False):
+            # If inclusive, base_amt IS the total. The true room_rate is base minus tax
+            total_amt = base_amt
+            booking_full.room_rate = (base_amt - gst_data["total_gst"]) / (nights * room_count)
+        else:
+            total_amt = base_amt + gst_data["total_gst"]
+            booking_full.room_rate = base_amt / (nights * room_count)
 
     except Exception as e:
         print(f"Error calculating dynamic price for booking {booking_full.id}: {e}")

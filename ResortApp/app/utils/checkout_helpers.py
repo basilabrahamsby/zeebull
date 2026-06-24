@@ -408,6 +408,9 @@ def calculate_gst_breakdown(
     
     gst_settings = get_gst_settings(db, branch_id)
     
+    # Get global inclusivity for non-room items
+    global_is_inclusive = gst_settings.get("gst_inclusive", False)
+    
     # If GST is disabled globally for this branch, return zero
     if not gst_settings.get("gst_enabled", False):
         return {
@@ -469,28 +472,28 @@ def calculate_gst_breakdown(
         else:
             room_gst_rate = float(gst_settings.get("room_gst_rate", 12)) / 100.0
             
-        if is_inclusive:
+        if is_inclusive: # Use EXPLICIT flag for room
             # Formula: GST = Total - (Total / (1 + Rate))
             room_gst = room_charges - (room_charges / (1 + room_gst_rate))
         else:
             room_gst = room_charges * room_gst_rate
     
     # Package GST (usually same as room rate)
-    if is_inclusive:
+    if global_is_inclusive:
         package_gst = package_charges - (package_charges / (1 + room_gst_rate))
     else:
         package_gst = package_charges * room_gst_rate
     
     # Food GST
     food_rate = float(gst_settings.get("food_gst_rate", 5)) / 100.0
-    if is_inclusive:
+    if global_is_inclusive:
         food_gst = food_charges - (food_charges / (1 + food_rate))
     else:
         food_gst = food_charges * food_rate
     
     # Service GST
     service_rate = float(gst_settings.get("service_gst_rate", 5)) / 100.0
-    if is_inclusive:
+    if global_is_inclusive:
         service_gst = service_charges - (service_charges / (1 + service_rate))
     else:
         service_gst = service_charges * service_rate
@@ -500,13 +503,13 @@ def calculate_gst_breakdown(
     if consumables_breakdown:
         for rate, amt in consumables_breakdown.items():
             r = float(rate) / 100.0
-            if is_inclusive:
+            if global_is_inclusive:
                 consumables_gst += amt - (amt / (1 + r))
             else:
                 consumables_gst += amt * r
     else:
         # Fallback to food rate if no breakdown provided
-        if is_inclusive:
+        if global_is_inclusive:
             consumables_gst = consumables_charges - (consumables_charges / (1 + food_rate))
         else:
             consumables_gst = consumables_charges * food_rate
@@ -516,13 +519,13 @@ def calculate_gst_breakdown(
     if inventory_breakdown:
         for rate, amt in inventory_breakdown.items():
             r = float(rate) / 100.0
-            if is_inclusive:
+            if global_is_inclusive:
                 inventory_gst += amt - (amt / (1 + r))
             else:
                 inventory_gst += amt * r
     else:
         # Fallback to service rate if no breakdown provided
-        if is_inclusive:
+        if global_is_inclusive:
             inventory_gst = inventory_charges - (inventory_charges / (1 + service_rate))
         else:
             inventory_gst = inventory_charges * service_rate
@@ -536,5 +539,8 @@ def calculate_gst_breakdown(
         "service_gst": service_gst,
         "consumables_gst": consumables_gst,
         "inventory_gst": inventory_gst,
-        "total_gst": total_gst
+        "total_gst": total_gst,
+        "cgst": total_gst / 2,
+        "sgst": total_gst / 2,
+        "igst": 0.0
     }

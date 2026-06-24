@@ -564,19 +564,35 @@ def create_assigned_service(db: Session, assigned: AssignedServiceCreate, branch
                     else:
                         print(f"[WARNING] No source location determined for {item.name}. Skipping LocationStock update.")
 
-                    # 2. Deduct from Global Stock
-                    if item.current_stock < quantity:
-                         print(f"[WARNING] Insufficient global stock for {item.name}. Available: {item.current_stock}, Required: {quantity}")
-                    item.current_stock -= quantity
-                    print(f"[DEBUG] Deducted {quantity} {inv_data['unit']} of {item.name}. New global stock: {item.current_stock}")
+                    # Add to destination location (Room/Cart)
+                    if room and room.inventory_location_id:
+                        dest_loc_stock = db.query(LocationStock).filter(
+                            LocationStock.location_id == room.inventory_location_id,
+                            LocationStock.item_id == item_id
+                        ).first()
+                        if dest_loc_stock:
+                            dest_loc_stock.quantity += quantity
+                            dest_loc_stock.last_updated = datetime.now(timezone.utc)
+                        else:
+                            new_dest_stock = LocationStock(
+                                location_id=room.inventory_location_id,
+                                item_id=item_id,
+                                quantity=quantity,
+                                last_updated=datetime.now(timezone.utc),
+                                branch_id=branch_id if branch_id is not None else 1
+                            )
+                            db.add(new_dest_stock)
+
+                    # 2. DO NOT Deduct from Global Stock at assignment (Deferred to completion)
+                    print(f"[DEBUG] Assigned {quantity} {inv_data['unit']} of {item.name}. Global stock remains: {item.current_stock}")
                     
-                    # 3. Create Inventory Transaction
+                    # 3. Create Inventory Transaction (Transfer only)
                     transaction = InventoryTransaction(
                         item_id=item_id,
                         transaction_type="transfer", # Issue/Assignment movement
                         quantity=quantity,
                         unit_price=item.unit_price,
-                        total_amount=(item.unit_price or 0.0) * quantity,
+                        total_amount=0.0, # Transfers do not hit COGS
                         reference_number=f"SVC-ASSIGN-{db_assigned.id}",
                         department=item.category.parent_department if item.category else "Housekeeping",
                         notes=f"Service Assigned: {service.name} - Room: {room.number} - From {source_location.name if source_location else 'Unknown'}",
@@ -587,23 +603,7 @@ def create_assigned_service(db: Session, assigned: AssignedServiceCreate, branch
                     )
                     db.add(transaction)
                     
-                    # 4. Create COGS Journal Entry
-                    try:
-                        db.flush()  # Get transaction ID
-                        from app.utils.accounting_helpers import create_consumption_journal_entry
-                        cogs_val = quantity * (item.unit_price or 0.0)
-                        if cogs_val > 0:
-                            create_consumption_journal_entry(
-                                db=db,
-                                consumption_id=transaction.id,
-                                cogs_amount=cogs_val,
-                                inventory_item_name=item.name,
-                                branch_id=db_assigned.branch_id,
-                                created_by=None
-                            )
-
-                    except Exception as je_error:
-                         print(f"[WARNING] Failed to create COGS journal entry: {je_error}")
+                    # 4. DO NOT Create COGS Journal Entry (Deferred to completion)
 
                     # 5. Create Employee Inventory Assignment
                     if has_emp_inv_model and EmployeeInventoryAssignment:
@@ -795,6 +795,7 @@ def update_assigned_service_status(db: Session, assigned_id: int, update_data: A
             # it doesn't abort the main transaction/session.
             with db.begin_nested():
                 from app.models.employee_inventory import EmployeeInventoryAssignment
+                from app.models.inventory import LocationStock, InventoryTransaction, Location, LaundryLog
                 
                 # Mark all inventory assignments for this service as completed (ready for return)
                 assignments = db.query(EmployeeInventoryAssignment).filter(
@@ -901,7 +902,6 @@ def update_assigned_service_status(db: Session, assigned_id: int, update_data: A
                                 ))
                                 
                                 # Add to LaundryLog
-                                from app.models.inventory import LaundryLog
                                 try:
                                     db.add(LaundryLog(
                                         item_id=item.id, quantity=quantity_used, status="Incomplete Washing",
@@ -913,7 +913,6 @@ def update_assigned_service_status(db: Session, assigned_id: int, update_data: A
                                     print(f"[WARNING] Failed to add LaundryLog: {log_err}")
                                 
                                 # Update Stock in Laundry Location
-                                from app.models.inventory import LocationStock
                                 l_stock = db.query(LocationStock).filter(LocationStock.location_id == laundry_loc.id, LocationStock.item_id == item.id).first()
                                 if l_stock: l_stock.quantity += quantity_used
                                 else: db.add(LocationStock(location_id=laundry_loc.id, item_id=item.id, quantity=quantity_used, branch_id=assigned.branch_id))
@@ -922,17 +921,36 @@ def update_assigned_service_status(db: Session, assigned_id: int, update_data: A
                             else:
                                 # REGULAR USAGE
                                 consumption_amount = quantity_used * (item.unit_price or 0.0)
+                                
+                                # 1. Deduct from Global Stock
+                                if item.current_stock < quantity_used:
+                                     print(f"[WARNING] Insufficient global stock at completion for {item.name}. Available: {item.current_stock}, Required: {quantity_used}")
+                                item.current_stock -= quantity_used
+                                
+                                # 2. Deduct from Room/Cart Location
+                                if assigned.room and assigned.room.inventory_location_id:
+                                    room_loc_stock = db.query(LocationStock).filter(
+                                        LocationStock.location_id == assigned.room.inventory_location_id,
+                                        LocationStock.item_id == item.id
+                                    ).first()
+                                    if room_loc_stock:
+                                        room_loc_stock.quantity -= quantity_used
+                                        room_loc_stock.last_updated = datetime.now(timezone.utc)
+                                
+                                # 3. Record Out Transaction
                                 inv_txn = InventoryTransaction(
                                     item_id=item.id, transaction_type="out", quantity=quantity_used,
                                     unit_price=item.unit_price, total_amount=consumption_amount,
                                     reference_number=f"SVC-USAGE-{assigned_id}",
                                     department=item.category.name if item.category else "Housekeeping",
                                     notes=f"Actual Consumption during Service: {assigned.service.name}",
-                                    created_by=updated_by, branch_id=assigned.branch_id, created_at=datetime.now(timezone.utc)
+                                    created_by=updated_by, branch_id=assigned.branch_id, created_at=datetime.now(timezone.utc),
+                                    source_location_id=assigned.room.inventory_location_id if assigned.room else None
                                 )
                                 db.add(inv_txn)
                                 db.flush() # To get inv_txn.id
                                 
+                                # 4. Create COGS Journal Entry
                                 if consumption_amount > 0:
                                     from app.utils.accounting_helpers import create_consumption_journal_entry
                                     # Try to debit a department specific ledger, e.g., Housekeeping Supplies
@@ -956,17 +974,26 @@ def update_assigned_service_status(db: Session, assigned_id: int, update_data: A
 
                         # 4. Handle Clean Returns (Back to Store)
                         if quantity_returned > 0:
-                            item.current_stock = (item.current_stock or 0.0) + round(float(quantity_returned), 4)
+                            # NOTE: Do NOT add to global item.current_stock because we no longer deduct the full assigned amount from global stock upfront.
                             dest_loc = global_return_location
                             if return_data and hasattr(return_data, 'return_location_id') and return_data.return_location_id:
                                 spec_loc = db.query(Location).filter(Location.id == return_data.return_location_id).first()
                                 if spec_loc: dest_loc = spec_loc
                             
                             if dest_loc:
-                                from app.models.inventory import LocationStock
                                 lstk = db.query(LocationStock).filter(LocationStock.location_id == dest_loc.id, LocationStock.item_id == item.id).first()
                                 if lstk: lstk.quantity += round(quantity_returned, 4)
                                 else: db.add(LocationStock(location_id=dest_loc.id, item_id=item.id, quantity=round(quantity_returned, 4), branch_id=assigned.branch_id))
+
+                            # Deduct returned amount from Room/Cart Location
+                            if assigned.room and assigned.room.inventory_location_id:
+                                room_loc_stock = db.query(LocationStock).filter(
+                                    LocationStock.location_id == assigned.room.inventory_location_id,
+                                    LocationStock.item_id == item.id
+                                ).first()
+                                if room_loc_stock:
+                                    room_loc_stock.quantity -= round(quantity_returned, 4)
+                                    room_loc_stock.last_updated = datetime.now(timezone.utc)
 
                             db.add(InventoryTransaction(
                                 item_id=item.id, transaction_type="transfer_in", quantity=round(quantity_returned, 4),
@@ -1038,7 +1065,8 @@ def update_assigned_service_status(db: Session, assigned_id: int, update_data: A
             # Check if this request was created recently (last 7 days)
             is_recent = True
             if req.created_at:
-                is_recent = (datetime.now(timezone.utc) - req.created_at).total_seconds() < 604800 # 7 days
+                req_dt = req.created_at.replace(tzinfo=timezone.utc) if req.created_at.tzinfo is None else req.created_at
+                is_recent = (datetime.now(timezone.utc) - req_dt).total_seconds() < 604800 # 7 days
             
             if type_match and is_recent:
                 # Sync employee assignment if relevant

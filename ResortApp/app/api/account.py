@@ -441,48 +441,63 @@ def get_day_book(
 
         formatted_date = entry.entry_date.strftime("%d-%b-%y")
 
-        debits = []
-        credits = []
-        for line in entry.lines:
-            if line.debit_ledger:
-                debits.append({"ledger": line.debit_ledger.name.upper()})
-            if line.credit_ledger:
-                credits.append({"ledger": line.credit_ledger.name.upper()})
+        debits = [l for l in entry.lines if l.debit_ledger]
+        credits = [l for l in entry.lines if l.credit_ledger]
         
         particulars = "Unknown"
         debit_amount = None
         credit_amount = None
         total_amt = float(entry.total_amount) if entry.total_amount else 0.0
+        details_list = []
         
-        if vch_type == "Sales":
+        if vch_type in ["Sales", "Payment"]:
             if debits:
-                particulars = debits[0]["ledger"]
-                debit_amount = total_amt
-        elif vch_type == "Receipt":
+                if len(debits) == 1:
+                    particulars = debits[0].debit_ledger.name.upper()
+                else:
+                    particulars = "By (as per details)"
+                if vch_type == "Sales":
+                    advance_adjusted = sum(float(l.amount) for l in debits if l.description == "Advance Adjusted" or (l.debit_ledger and "advance" in l.debit_ledger.name.lower()))
+                    debit_amount = total_amt - advance_adjusted
+                    if debit_amount < 0: debit_amount = 0.0
+                else:
+                    debit_amount = total_amt
+                
+                # The opposite side is credits
+                if len(credits) > 1 or len(debits) > 1:
+                    if len(debits) > 1 and len(credits) == 1:
+                        particulars = f"To {credits[0].credit_ledger.name.upper()}"
+                        for d in debits:
+                            details_list.append({"name": d.debit_ledger.name, "amount": float(d.amount), "type": "Dr"})
+                    else:
+                        for c in credits:
+                            details_list.append({"name": c.credit_ledger.name, "amount": float(c.amount), "type": "Cr"})
+        elif vch_type in ["Receipt", "Purchase"]:
             if credits:
-                particulars = credits[0]["ledger"]
+                if len(credits) == 1:
+                    particulars = credits[0].credit_ledger.name.upper()
+                else:
+                    particulars = "To (as per details)"
                 credit_amount = total_amt
-        elif vch_type == "Payment":
-            if debits:
-                particulars = debits[0]["ledger"]
-                debit_amount = total_amt
-        elif vch_type == "Purchase":
-            if credits:
-                particulars = credits[0]["ledger"]
-                credit_amount = total_amt
+                
+                # The opposite side is debits
+                if len(debits) > 1 or len(credits) > 1:
+                    if len(credits) > 1 and len(debits) == 1:
+                        particulars = f"By {debits[0].debit_ledger.name.upper()}"
+                        for c in credits:
+                            details_list.append({"name": c.credit_ledger.name, "amount": float(c.amount), "type": "Cr"})
+                    else:
+                        for d in debits:
+                            details_list.append({"name": d.debit_ledger.name, "amount": float(d.amount), "type": "Dr"})
         else:
+            # Contra, Journal, etc. Show the first debit and list credits as details
             if debits:
-                particulars = debits[0]["ledger"]
+                particulars = debits[0].debit_ledger.name.upper() if len(debits) == 1 else "By (as per details)"
                 debit_amount = total_amt
-            elif credits:
-                particulars = credits[0]["ledger"]
-                credit_amount = total_amt
+                for c in credits:
+                    details_list.append({"name": c.credit_ledger.name, "amount": float(c.amount), "type": "Cr"})
 
-        # In Tally, if there are multiple, it might say "As per details", but the first ledger is fine for a simple view
-        if vch_type == "Contra" and credits:
-            particulars = credits[0]["ledger"]
-            credit_amount = total_amt
-            debit_amount = None
+
 
         rows.append({
             "date": formatted_date,
@@ -492,7 +507,8 @@ def get_day_book(
             "debit_amount": debit_amount,
             "credit_amount": credit_amount,
             "inwards_qty": None,
-            "outwards_qty": None
+            "outwards_qty": None,
+            "details": details_list
         })
 
     return rows
@@ -597,12 +613,15 @@ def get_ledger_statement(
         is_debit = line.debit_ledger_id == ledger_id
         amount = float(line.amount)
 
+        details_list = []
         if is_debit:
             credits = [l for l in entry.lines if l.credit_ledger_id]
             if len(credits) == 1:
                 particulars = f"To {credits[0].credit_ledger.name.upper()}"
             elif len(credits) > 1:
                 particulars = "To (as per details)"
+                for c in credits:
+                    details_list.append({"name": c.credit_ledger.name, "amount": float(c.amount), "type": "Cr"})
             else:
                 particulars = "To GENERAL LEDGER"
             
@@ -615,6 +634,8 @@ def get_ledger_statement(
                 particulars = f"By {debits[0].debit_ledger.name.upper()}"
             elif len(debits) > 1:
                 particulars = "By (as per details)"
+                for d in debits:
+                    details_list.append({"name": d.debit_ledger.name, "amount": float(d.amount), "type": "Dr"})
             else:
                 particulars = "By GENERAL LEDGER"
 
@@ -629,7 +650,8 @@ def get_ledger_statement(
             "vch_no": vch_no,
             "debit_amount": debit_amount,
             "credit_amount": credit_amount,
-            "running_balance": current_running_balance
+            "running_balance": current_running_balance,
+            "details": details_list
         })
 
     return {

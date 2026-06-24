@@ -11,26 +11,24 @@ from typing import List
 
 router = APIRouter(prefix="/food-orders", tags=["Food Orders"])
 
-def _create_order_impl(order: FoodOrderCreate, db: Session, current_user: User):
-    """Helper function for create_order"""
-    return crud.create_food_order(db, order)
-
-def create_order(
+@router.post("", response_model=FoodOrderOut)
+def create_order_no_slash(
     order: FoodOrderCreate, 
     db: Session = Depends(get_db), 
     current_user: User = Depends(get_current_user),
     branch_id: int = Depends(get_branch_id)
 ):
+    branch_id = branch_id or 1
     return crud.create_food_order(db, order, branch_id=branch_id)
 
-
-@router.post("/", response_model=FoodOrderOut)  # Handle trailing slash
+@router.post("/", response_model=FoodOrderOut)
 def create_order_slash(
     order: FoodOrderCreate, 
     db: Session = Depends(get_db), 
     current_user: User = Depends(get_current_user),
     branch_id: int = Depends(get_branch_id)
 ):
+    branch_id = branch_id or 1
     return crud.create_food_order(db, order, branch_id=branch_id)
 
 
@@ -118,16 +116,20 @@ def update_order(
     from app.models.employee import Employee
     
     # Check current status before update
-    current_order = db.query(FoodOrder).filter(FoodOrder.id == order_id, FoodOrder.branch_id == branch_id).first()
+    query = db.query(FoodOrder).filter(FoodOrder.id == order_id)
+    if branch_id is not None:
+        query = query.filter(FoodOrder.branch_id == branch_id)
+    current_order = query.first()
 
     if not current_order:
         raise HTTPException(status_code=404, detail="Order not found")
         
     # Auto-set prepared_by_id if moving to cooking
     if order_update.status in ['cooking', 'accepted', 'preparing', 'ready'] and current_order.prepared_by_id is None:
-        # Link current user (chef) to the order
-        chef_emp = db.query(Employee).filter(Employee.user_id == current_user.id, Employee.branch_id == branch_id).first()
-
+        chef_query = db.query(Employee).filter(Employee.user_id == current_user.id)
+        if branch_id is not None:
+            chef_query = chef_query.filter(Employee.branch_id == branch_id)
+        chef_emp = chef_query.first()
         if chef_emp:
             order_update.prepared_by_id = chef_emp.id
 
@@ -163,7 +165,10 @@ def mark_order_paid(
     from datetime import timezone, datetime
     from app.utils.settings_helpers import get_gst_settings
     
-    order = db.query(FoodOrder).filter(FoodOrder.id == order_id, FoodOrder.branch_id == branch_id).first()
+    query = db.query(FoodOrder).filter(FoodOrder.id == order_id)
+    if branch_id is not None:
+        query = query.filter(FoodOrder.branch_id == branch_id)
+    order = query.first()
 
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
@@ -176,9 +181,16 @@ def mark_order_paid(
     
     # Calculate GST if enabled
     base_amount = order.amount or 0
-    gst_rate = float(gst_settings["food_gst_rate"]) if gst_settings["gst_enabled"] else 0.0
-    gst_amount = base_amount * (gst_rate / 100.0)
-    total_with_gst = base_amount + gst_amount
+    gst_rate = float(gst_settings["food_gst_rate"]) if gst_settings.get("gst_enabled", False) else 0.0
+    
+    if gst_settings.get("gst_inclusive", False) and gst_rate > 0:
+        total_with_gst = base_amount
+        gst_amount = total_with_gst - (total_with_gst / (1 + gst_rate / 100.0))
+        # Adjust base_amount to be exclusive of tax now
+        order.amount = total_with_gst - gst_amount
+    else:
+        gst_amount = base_amount * (gst_rate / 100.0)
+        total_with_gst = base_amount + gst_amount
     
     # Update order with payment details
     order.billing_status = "paid"
@@ -205,7 +217,10 @@ def mark_order_paid(
         room_number = "Unknown"
         if order.room_id:
             from app.models.room import Room
-            room = db.query(Room).filter(Room.id == order.room_id, Room.branch_id == branch_id).first()
+            room_query = db.query(Room).filter(Room.id == order.room_id)
+            if branch_id is not None:
+                room_query = room_query.filter(Room.branch_id == branch_id)
+            room = room_query.first()
 
             if room:
                 room_number = room.number

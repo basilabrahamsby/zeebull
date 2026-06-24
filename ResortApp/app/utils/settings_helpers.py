@@ -21,9 +21,11 @@ def get_gst_settings(db: Session, branch_id: int) -> Dict:
     """
     enabled = get_system_setting(db, "gst_enabled", branch_id, default="true")
     room_type = get_system_setting(db, "gst_room_type", branch_id, default="SLAB")
+    inclusive = get_system_setting(db, "gst_inclusive", branch_id, default="false")
     
     return {
         "gst_enabled": enabled.lower() == "true",
+        "gst_inclusive": inclusive.lower() == "true",
         "gst_room_type": room_type.upper(),
         "room_gst_rate": get_system_setting(db, "room_gst_rate", branch_id, default="12"),
         "food_gst_rate": get_system_setting(db, "food_gst_rate", branch_id, default="5"),
