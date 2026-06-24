@@ -11,6 +11,8 @@ import { useInfiniteScroll } from "./useInfiniteScroll";
 import { formatDateIST, formatDateTimeIST, getCurrentDateIST, getCurrentDateTimeIST } from "../utils/dateUtils";
 import DepartmentDetailsModal from "./inventory/modals/DepartmentDetailsModal";
 import { toast } from "react-hot-toast";
+import jsPDF from "jspdf";
+import "jspdf-autotable";
 
 const SECTION_INFO = {
   'chart-of-accounts': {
@@ -382,7 +384,13 @@ export default function ReportsDashboard() {
   // Ledger Statement States
   const [ledgerStatementData, setLedgerStatementData] = useState(null);
   const [selectedLedgerId, setSelectedLedgerId] = useState("all");
-  const [statementStartDate, setStatementStartDate] = useState(getCurrentDateIST());
+  const [statementStartDate, setStatementStartDate] = useState(() => {
+    const d = new Date();
+    d.setDate(1);
+    const offset = d.getTimezoneOffset() * 60000;
+    const istTime = new Date(d.getTime() + (330 * 60000) + offset);
+    return istTime.toISOString().split('T')[0];
+  });
   const [statementEndDate, setStatementEndDate] = useState(getCurrentDateIST());
   const [statementLoading, setStatementLoading] = useState(false);
 
@@ -965,38 +973,178 @@ export default function ReportsDashboard() {
 
   const handlePrintLedgerStatement = () => {
     if (!ledgerStatementData) return;
-    const printWindow = window.open('', '_blank');
-    const tableHTML = document.getElementById('ledger-statement-table-print-area').innerHTML;
+
+    const doc = new jsPDF('p', 'pt', 'a4');
+
+    const formatPDFCurrency = (amt) => {
+      if (amt === null || amt === undefined || isNaN(amt)) return "";
+      if (amt === 0) return "";
+      return amt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    };
+
+    // Header logic
+    const resortName = "ORCHID TRAILS RESORT WAYANAD BY ZEEBULL";
+    const headerLines = [
+      resortName,
+      "Mookkuthikunnu, Noolpuzha, Sultan Bathery, Kerala 673595",
+      "Phone: +918075019543 | GSTIN: 32ECUPS4887K1ZI",
+      `${ledgerStatementData.ledger_name.toUpperCase()} Book`,
+      `${statementStartDate ? statementStartDate : 'All'} to ${statementEndDate ? statementEndDate : 'All'}`
+    ];
+
+    const drawHeader = (data) => {
+      let currentY = 40;
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'bold');
+      doc.text(headerLines[0], doc.internal.pageSize.width / 2, currentY, { align: 'center' });
+      currentY += 12;
+      
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      doc.text(headerLines[1], doc.internal.pageSize.width / 2, currentY, { align: 'center' });
+      currentY += 12;
+      doc.text(headerLines[2], doc.internal.pageSize.width / 2, currentY, { align: 'center' });
+      currentY += 16;
+      
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'bold');
+      doc.text(headerLines[3], doc.internal.pageSize.width / 2, currentY, { align: 'center' });
+      currentY += 14;
+      
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      doc.text(headerLines[4], doc.internal.pageSize.width / 2, currentY, { align: 'center' });
+      
+      doc.setFontSize(8);
+      doc.text(`Page ${data.pageNumber}`, doc.internal.pageSize.width - 40, currentY + 10, { align: 'right' });
+    };
+
+    const tableBody = [];
     
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title>Ledger Statement: ${ledgerStatementData.ledger_name}</title>
-          <style>
-            body { font-family: monospace; padding: 20px; color: black; }
-            h2, h3 { text-align: center; margin: 5px 0; }
-            table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 12px; }
-            th, td { border: 1px solid #000; padding: 8px; text-align: left; }
-            th { background-color: #f2f2f2; }
-            .text-right { text-align: right; }
-            .text-center { text-align: center; }
-            .font-bold { font-weight: bold; }
-            .whitespace-nowrap { white-space: nowrap; }
-          </style>
-        </head>
-        <body>
-          <h2>ORCHID RESORT</h2>
-          <h3>Ledger Account Statement</h3>
-          <p style="text-align: center; font-size: 12px; font-weight: bold;">${ledgerStatementData.ledger_name.toUpperCase()}</p>
-          <p style="text-align: center; font-size: 11px;">Period: ${statementStartDate || 'All'} to ${statementEndDate || 'All'}</p>
-          <table>
-            ${tableHTML}
-          </table>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
-    printWindow.print();
+    const formatBalance = (val) => {
+      const normalType = ledgerStatementData.balance_type;
+      if (val === null || val === undefined || isNaN(val)) return "";
+      if (val === 0) return "";
+      const absVal = Math.abs(val);
+      const formatted = absVal.toLocaleString("en-IN", { minimumFractionDigits: 2 });
+      if (normalType === "debit") {
+        return val >= 0 ? `${formatted} Dr` : `${formatted} Cr`;
+      } else {
+        return val >= 0 ? `${formatted} Cr` : `${formatted} Dr`;
+      }
+    };
+
+    if (ledgerStatementData.opening_balance !== 0) {
+      // Decide if Opening Balance is Debit or Credit based on sign and normal type
+      const isDebitOB = ledgerStatementData.balance_type === 'debit' ? ledgerStatementData.opening_balance >= 0 : ledgerStatementData.opening_balance < 0;
+      const obStr = formatPDFCurrency(Math.abs(ledgerStatementData.opening_balance));
+      tableBody.push([
+        "",
+        { content: "Opening Balance", styles: { fontStyle: 'bold' } },
+        "",
+        "",
+        { content: isDebitOB ? obStr : "", styles: { fontStyle: 'bold', halign: 'right' } },
+        { content: !isDebitOB ? obStr : "", styles: { fontStyle: 'bold', halign: 'right' } }
+      ]);
+    }
+
+    let lastDate = "";
+    ledgerStatementData.postings.forEach(row => {
+      let displayDate = row.date;
+      if (row.date === lastDate) {
+        displayDate = "";
+      } else {
+        lastDate = row.date;
+      }
+
+      tableBody.push([
+        displayDate,
+        row.particulars,
+        row.vch_type,
+        row.vch_no,
+        row.debit_amount ? formatPDFCurrency(row.debit_amount) : "",
+        row.credit_amount ? formatPDFCurrency(row.credit_amount) : ""
+      ]);
+
+      if (row.details && row.details.length > 0) {
+        row.details.forEach(d => {
+          tableBody.push([
+            "",
+            { content: `   ${d.name}        ${formatPDFCurrency(d.amount)} ${d.type}`, styles: { fontStyle: 'normal', textColor: [60, 60, 60] } },
+            "",
+            "",
+            "",
+            ""
+          ]);
+        });
+      }
+    });
+
+    let totalDebit = ledgerStatementData.postings.reduce((sum, r) => sum + (r.debit_amount || 0), 0);
+    let totalCredit = ledgerStatementData.postings.reduce((sum, r) => sum + (r.credit_amount || 0), 0);
+
+    tableBody.push([
+      "",
+      "",
+      "",
+      "",
+      { content: formatPDFCurrency(totalDebit), styles: { fontStyle: 'bold', halign: 'right' } },
+      { content: formatPDFCurrency(totalCredit), styles: { fontStyle: 'bold', halign: 'right' } }
+    ]);
+
+    doc.autoTable({
+      startY: 115,
+      head: [['Date', 'Particulars', 'Vch Type', 'Vch No.', 'Debit', 'Credit']],
+      body: tableBody,
+      theme: 'plain',
+      styles: {
+        fontSize: 8,
+        font: 'helvetica',
+        cellPadding: 3,
+        textColor: [0, 0, 0]
+      },
+      headStyles: {
+        fontStyle: 'bold',
+        lineWidth: { top: 0.5, bottom: 0.5 },
+        lineColor: [0, 0, 0],
+        textColor: [0, 0, 0]
+      },
+      footStyles: {
+        lineWidth: { top: 0.5, bottom: 0.5 },
+        lineColor: [0, 0, 0]
+      },
+      columnStyles: {
+        0: { cellWidth: 50 },
+        1: { cellWidth: 'auto' },
+        2: { cellWidth: 70 },
+        3: { cellWidth: 50, halign: 'center' },
+        4: { cellWidth: 70, halign: 'right' },
+        5: { cellWidth: 70, halign: 'right' }
+      },
+      didDrawPage: function (data) {
+        drawHeader(data);
+      },
+      margin: { top: 110, bottom: 40 }
+    });
+    
+    const finalY = doc.lastAutoTable.finalY + 15;
+    
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    
+    // Draw closing balance
+    const clBal = ledgerStatementData.closing_balance;
+    const isDebitCB = ledgerStatementData.balance_type === 'debit' ? clBal >= 0 : clBal < 0;
+    const clStr = formatPDFCurrency(Math.abs(clBal));
+
+    doc.text("Closing Balance", 60, finalY);
+    if (isDebitCB) {
+      doc.text(clStr, doc.internal.pageSize.width - 115, finalY, { align: 'right' });
+    } else {
+      doc.text(clStr, doc.internal.pageSize.width - 45, finalY, { align: 'right' });
+    }
+
+    doc.save(`${ledgerStatementData.ledger_name}_Ledger.pdf`);
   };
 
   const fetchGSTReport = async () => {
@@ -2445,45 +2593,70 @@ export default function ReportsDashboard() {
 
                         {/* Posting Transactions */}
                         {ledgerStatementData.postings.map((row, i) => (
-                          <tr key={i} className="hover:bg-gray-50/50 transition-colors">
-                            <td className="px-4 py-2 border-r border-gray-200 whitespace-nowrap font-mono">{row.date}</td>
-                            <td className="px-4 py-2 border-r border-gray-200 font-semibold text-gray-800">{row.particulars}</td>
-                            <td className="px-4 py-2 border-r border-gray-200 whitespace-nowrap">{row.vch_type}</td>
-                            <td className="px-4 py-2 border-r border-gray-200 whitespace-nowrap text-center font-mono">{row.vch_no}</td>
-                            <td className="px-4 py-2 border-r border-gray-200 whitespace-nowrap text-right font-mono">
-                              {row.debit_amount ? `₹${row.debit_amount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}` : "—"}
-                            </td>
-                            <td className="px-4 py-2 border-r border-gray-200 whitespace-nowrap text-right font-mono">
-                              {row.credit_amount ? `₹${row.credit_amount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}` : "—"}
-                            </td>
-                            {selectedLedgerId === "all" && (
+                          <React.Fragment key={i}>
+                            <tr className="hover:bg-gray-50/50 transition-colors">
+                              <td className="px-4 py-2 border-r border-gray-200 whitespace-nowrap font-mono">{row.date}</td>
+                              <td className="px-4 py-2 border-r border-gray-200 font-semibold text-gray-800">{row.particulars}</td>
+                              <td className="px-4 py-2 border-r border-gray-200 whitespace-nowrap">{row.vch_type}</td>
+                              <td className="px-4 py-2 border-r border-gray-200 whitespace-nowrap text-center font-mono">{row.vch_no}</td>
                               <td className="px-4 py-2 border-r border-gray-200 whitespace-nowrap text-right font-mono">
-                                {row.inwards_qty ? row.inwards_qty : "—"}
+                                {row.debit_amount ? `₹${row.debit_amount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}` : "—"}
                               </td>
-                            )}
-                            {selectedLedgerId === "all" && (
                               <td className="px-4 py-2 border-r border-gray-200 whitespace-nowrap text-right font-mono">
-                                {row.outwards_qty ? row.outwards_qty : "—"}
+                                {row.credit_amount ? `₹${row.credit_amount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}` : "—"}
                               </td>
-                            )}
-                            {selectedLedgerId !== "all" && (
-                              <td className="px-4 py-2 whitespace-nowrap text-right font-mono">
-                                {(() => {
-                                  const val = row.running_balance;
-                                  const normalType = ledgerStatementData.balance_type;
-                                  if (val === null || val === undefined || isNaN(val)) return "₹ -";
-                                  if (val === 0) return "₹ 0.00";
-                                  const absVal = Math.abs(val);
-                                  const formatted = absVal.toLocaleString("en-IN", { minimumFractionDigits: 2 });
-                                  if (normalType === "debit") {
-                                    return val >= 0 ? `₹ ${formatted} Dr` : `₹ ${formatted} Cr`;
-                                  } else {
-                                    return val >= 0 ? `₹ ${formatted} Cr` : `₹ ${formatted} Dr`;
-                                  }
-                                })()}
-                              </td>
-                            )}
-                          </tr>
+                              {selectedLedgerId === "all" && (
+                                <td className="px-4 py-2 border-r border-gray-200 whitespace-nowrap text-right font-mono">
+                                  {row.inwards_qty ? row.inwards_qty : "—"}
+                                </td>
+                              )}
+                              {selectedLedgerId === "all" && (
+                                <td className="px-4 py-2 border-r border-gray-200 whitespace-nowrap text-right font-mono">
+                                  {row.outwards_qty ? row.outwards_qty : "—"}
+                                </td>
+                              )}
+                              {selectedLedgerId !== "all" && (
+                                <td className="px-4 py-2 whitespace-nowrap text-right font-mono">
+                                  {(() => {
+                                    const val = row.running_balance;
+                                    const normalType = ledgerStatementData.balance_type;
+                                    if (val === null || val === undefined || isNaN(val)) return "₹ -";
+                                    if (val === 0) return "₹ 0.00";
+                                    const absVal = Math.abs(val);
+                                    const formatted = absVal.toLocaleString("en-IN", { minimumFractionDigits: 2 });
+                                    if (normalType === "debit") {
+                                      return val >= 0 ? `₹ ${formatted} Dr` : `₹ ${formatted} Cr`;
+                                    } else {
+                                      return val >= 0 ? `₹ ${formatted} Cr` : `₹ ${formatted} Dr`;
+                                    }
+                                  })()}
+                                </td>
+                              )}
+                            </tr>
+                            
+                            {/* Nested Details Rows */}
+                            {row.details && row.details.length > 0 && row.details.map((detail, dIdx) => (
+                              <tr key={`detail-${i}-${dIdx}`} className="bg-white/50 text-gray-500 italic text-[11px]">
+                                <td className="px-4 py-1 border-r border-gray-100"></td>
+                                <td className="px-4 py-1 pl-8 border-r border-gray-100">{detail.name}</td>
+                                <td className="px-4 py-1 border-r border-gray-100"></td>
+                                <td className="px-4 py-1 border-r border-gray-100"></td>
+                                <td className="px-4 py-1 border-r border-gray-100 text-right font-mono">
+                                  {detail.type === "Dr" ? `₹${detail.amount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}` : ""}
+                                </td>
+                                <td className="px-4 py-1 border-r border-gray-100 text-right font-mono">
+                                  {detail.type === "Cr" ? `₹${detail.amount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}` : ""}
+                                </td>
+                                {selectedLedgerId === "all" && (
+                                  <>
+                                    <td className="px-4 py-1 border-r border-gray-100"></td>
+                                    <td className="px-4 py-1 border-r border-gray-100"></td>
+                                  </>
+                                )}
+                                {selectedLedgerId !== "all" && <td className="px-4 py-1"></td>}
+                              </tr>
+                            ))}
+                          </React.Fragment>
                         ))}
                       </tbody>
                       <tfoot className="bg-gray-50 border-t-2 border-gray-300 font-bold text-gray-900">

@@ -21,7 +21,8 @@ export default function Settings() {
         service_gst_rate: "5",
         gst_slab_rate_1: "5",
         gst_slab_rate_2: "12",
-        gst_slab_rate_3: "18"
+        gst_slab_rate_3: "18",
+        gst_inclusive: "false"
     });
     const [settingsLoading, setSettingsLoading] = useState(false);
 
@@ -88,7 +89,7 @@ export default function Settings() {
     const handleSaveGstSettings = async (e) => {
         e.preventDefault();
         try {
-            const keys = ["gst_enabled", "room_gst_rate", "food_gst_rate", "service_gst_rate", "gst_room_type", "gst_slab_rate_1", "gst_slab_rate_2", "gst_slab_rate_3"];
+            const keys = ["gst_enabled", "room_gst_rate", "food_gst_rate", "service_gst_rate", "gst_room_type", "gst_slab_rate_1", "gst_slab_rate_2", "gst_slab_rate_3", "gst_inclusive"];
             await Promise.all(keys.map(key => 
                 api.post("settings/", {
                     key: key,
@@ -371,6 +372,31 @@ export default function Settings() {
                                                     : "GST will not be added to any transactions. All rates will be treated as tax-exclusive or tax-exempt."}
                                             </p>
                                         </div>
+                                    </div>
+
+                                    {/* Inclusive GST Mode Toggle */}
+                                    <div className={`p-4 rounded-xl border flex items-center justify-between transition-colors ${
+                                        settings.gst_inclusive === "true" ? "bg-indigo-50 border-indigo-100" : "bg-gray-50 border-gray-100"
+                                    }`}>
+                                        <div>
+                                            <h4 className="font-bold text-gray-800">Inclusive GST Mode</h4>
+                                            <p className="text-sm text-gray-600">
+                                                When enabled, entered prices are treated as GST-inclusive. The system will reverse-calculate the base price and tax.
+                                            </p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setSettings({ ...settings, gst_inclusive: settings.gst_inclusive === "true" ? "false" : "true" })}
+                                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                                                settings.gst_inclusive === "true" ? "bg-indigo-600" : "bg-gray-300"
+                                            }`}
+                                        >
+                                            <span
+                                                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                                    settings.gst_inclusive === "true" ? "translate-x-6" : "translate-x-1"
+                                                }`}
+                                            />
+                                        </button>
                                     </div>
 
                                     {/* GST Rates Grid */}

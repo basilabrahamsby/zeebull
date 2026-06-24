@@ -1441,6 +1441,7 @@ const MonthlyReport = () => {
   const [employees, setEmployees] = useState([]);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
   const [report, setReport] = useState(null);
+  const [salaryPayment, setSalaryPayment] = useState(null);
   const [loading, setLoading] = useState(false);
   const [date, setDate] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM format
 
@@ -1465,12 +1466,23 @@ const MonthlyReport = () => {
         params: { year, month }
       });
       setReport(response.data);
+      
+      try {
+        const paymentRes = await api.get(`/employees/${selectedEmployeeId}/salary-payments`);
+        const payments = paymentRes.data;
+        const matchingPayment = payments.find(p => p.year === year && p.month_number === month);
+        setSalaryPayment(matchingPayment || null);
+      } catch(e) {
+        console.error('Failed to fetch salary payments', e);
+        setSalaryPayment(null);
+      }
     } catch (error) {
       console.error("Failed to fetch monthly report", error);
       const errorMsg = error.response?.data?.detail;
       const message = typeof errorMsg === 'string' ? errorMsg : 'Failed to load monthly report';
       console.error(message);
       setReport(null);
+      setSalaryPayment(null);
     } finally {
       setLoading(false);
     }
@@ -1534,6 +1546,20 @@ const MonthlyReport = () => {
               </div>
             </div>
           </div>
+
+          {salaryPayment && (
+            <div className="bg-white p-4 rounded-lg shadow border-l-4 border-green-500">
+              <h4 className="font-semibold mb-2 text-green-700">Salary Paid Details</h4>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div><p className="text-gray-500">Status</p><p className="font-bold text-green-600">PAID</p></div>
+                <div><p className="text-gray-500">Paid Amount</p><p className="font-bold">{formatCurrency(salaryPayment.net_salary)}</p></div>
+                <div><p className="text-gray-500">Payment Method</p><p className="font-bold capitalize">{salaryPayment.payment_method || '-'}</p></div>
+                <div><p className="text-gray-500">Payment Date</p><p className="font-bold">{salaryPayment.payment_date ? new Date(salaryPayment.payment_date).toLocaleDateString() : '-'}</p></div>
+              </div>
+              {salaryPayment.notes && <p className="mt-2 text-xs text-gray-500">Notes: {salaryPayment.notes}</p>}
+            </div>
+          )}
+
         </motion.div>
       )}
     </div>

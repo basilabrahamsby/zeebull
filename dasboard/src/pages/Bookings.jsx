@@ -3321,7 +3321,7 @@ const BookingFormModal = ({
   }, [formData.selectedRoomTypes, formData.room_type_id, formData.num_rooms]);
 
   // Derived pricing totals
-  const { totalBase, totalGST, grandTotal } = React.useMemo(() => {
+  const { totalBase, totalGST, grandTotal, isInclusiveGlobally } = React.useMemo(() => {
     const base = parseFloat(formData.custom_room_rate) || 0;
     
     // Distribute base and calculate GST based on backend slab logic
@@ -3330,7 +3330,9 @@ const BookingFormModal = ({
         items.push({ num_rooms: parseInt(formData.num_rooms) || 1 });
     }
 
-    const gst = items.reduce((sum, item) => {
+    const isInclusive = gstSettings && String(gstSettings.gst_inclusive) === "true";
+
+    const gstData = items.reduce((acc, item) => {
       const itemRooms = parseInt(item.num_rooms) || 1;
       // Item's share of the global base
       const itemBaseShare = (base / totalRoomsForCalc) * itemRooms;
@@ -3359,10 +3361,28 @@ const BookingFormModal = ({
         if (dailyRatePerRoom < 7500) taxRate = 0.12;
       }
       
-      return sum + (itemBaseShare * taxRate);
-    }, 0);
+      let itemGst = 0;
+      let itemTrueBase = itemBaseShare;
+      
+      if (isInclusive) {
+        itemGst = itemBaseShare - (itemBaseShare / (1 + taxRate));
+        itemTrueBase = itemBaseShare - itemGst;
+      } else {
+        itemGst = itemBaseShare * taxRate;
+      }
+      
+      return {
+        gst: acc.gst + itemGst,
+        trueBase: acc.trueBase + itemTrueBase
+      };
+    }, { gst: 0, trueBase: 0 });
     
-    return { totalBase: base, totalGST: gst, grandTotal: base + gst };
+    return { 
+        totalBase: isInclusive ? gstData.trueBase : base, 
+        totalGST: gstData.gst, 
+        grandTotal: isInclusive ? base : base + gstData.gst,
+        isInclusiveGlobally: isInclusive
+    };
   }, [formData.custom_room_rate, formData.selectedRoomTypes, formData.room_type_id, formData.num_rooms, totalRoomsForCalc, nights, gstSettings]);
 
   return (
@@ -3622,7 +3642,7 @@ const BookingFormModal = ({
                         {formData.room_type_id && (
                           <>
                             <div className="space-y-1">
-                              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide ml-1">Base Room Traffic (Excl. GST)</label>
+                              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide ml-1">Base Room Traffic ({isInclusiveGlobally ? 'Incl. GST' : 'Excl. GST'})</label>
                               <div className="group relative">
                                 <div className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-slate-400 group-focus-within:text-indigo-600 transition-colors text-xs">₹</div>
                                 <input
@@ -3713,7 +3733,7 @@ const BookingFormModal = ({
                                   {item.num_rooms} {item.num_rooms === 1 ? "Room" : "Rooms"} • {item.adults} Adults {item.children > 0 ? `, ${item.children} Children` : ""}
                                 </p>
                                 <p className="text-[10px] text-indigo-600 font-bold mt-1">
-                                  Base Traffic (Excl. GST)
+                                  Base Traffic (Pre-tax)
                                 </p>
                                 {itemBase > 0 && nights > 0 && (
                                   <p className="text-[9px] text-slate-500 font-medium mt-0.5">
@@ -3760,7 +3780,7 @@ const BookingFormModal = ({
                                       {currentUnsavedItem.num_rooms} {currentUnsavedItem.num_rooms === 1 ? "Room" : "Rooms"} • {currentUnsavedItem.adults} Guests (Configuring)
                                     </p>
                                     <p className="text-[10px] text-amber-700 font-bold mt-1">
-                                      Base Traffic (Excl. GST)
+                                      Base Traffic (Pre-tax)
                                     </p>
                                     {itemBase > 0 && nights > 0 && (
                                       <p className="text-[9px] text-amber-600/80 font-medium mt-0.5">
@@ -4095,6 +4115,7 @@ const Bookings = () => {
 
   const [gstSettings, setGstSettings] = useState({
     gst_enabled: true,
+    gst_inclusive: false,
     gst_room_type: "SLAB",
     gst_slab_rate_1: "5",
     gst_slab_rate_2: "12",
@@ -4256,6 +4277,7 @@ const Bookings = () => {
         setGstSettings(prev => ({
           ...prev,
           gst_enabled: settingsMap.gst_enabled?.toLowerCase() === "true",
+          gst_inclusive: settingsMap.gst_inclusive?.toLowerCase() === "true",
           gst_room_type: settingsMap.gst_room_type?.toUpperCase() || "SLAB",
           room_gst_rate: settingsMap.room_gst_rate || "12",
           gst_slab_rate_1: settingsMap.gst_slab_rate_1 || "5",
