@@ -527,22 +527,23 @@ def get_ledger_statement(
     from app.models.account import JournalEntry, JournalEntryLine, AccountLedger
     from sqlalchemy import and_, or_
 
-    if branch_id is None:
-        raise HTTPException(status_code=400, detail="Branch ID is required")
+    if branch_id is not None:
+        ledger = db.query(AccountLedger).filter(
+            AccountLedger.id == ledger_id,
+            or_(AccountLedger.branch_id == branch_id, AccountLedger.branch_id == None)
+        ).first()
+    else:
+        ledger = db.query(AccountLedger).filter(AccountLedger.id == ledger_id).first()
 
-    # Verify ledger exists
-    ledger = db.query(AccountLedger).filter(
-        AccountLedger.id == ledger_id,
-        or_(AccountLedger.branch_id == branch_id, AccountLedger.branch_id == None)
-    ).first()
     if not ledger:
         raise HTTPException(status_code=404, detail="Ledger not found")
 
     # Fetch all lines for this ledger
     query = db.query(JournalEntryLine).join(JournalEntry).filter(
-        JournalEntry.branch_id == branch_id,
         or_(JournalEntryLine.debit_ledger_id == ledger_id, JournalEntryLine.credit_ledger_id == ledger_id)
     )
+    if branch_id is not None:
+        query = query.filter(JournalEntry.branch_id == branch_id)
 
     if start_date:
         try:
