@@ -141,4 +141,18 @@ class JournalEntryLine(Base):
     debit_ledger = relationship("AccountLedger", foreign_keys=[debit_ledger_id], back_populates="debit_entries")
     credit_ledger = relationship("AccountLedger", foreign_keys=[credit_ledger_id], back_populates="credit_entries")
 
-
+class JournalEditLog(Base):
+    """Log of edits made to journal entries"""
+    __tablename__ = "journal_edit_logs"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    entry_id = Column(Integer, ForeignKey("journal_entries.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    username = Column(String, nullable=False)
+    edited_at = Column(DateTime(timezone=True), server_default=func.now())
+    details = Column(Text, nullable=True)
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False, index=True)
+    
+    entry = relationship("JournalEntry")
+    user = relationship("User")
+    branch = relationship("Branch")

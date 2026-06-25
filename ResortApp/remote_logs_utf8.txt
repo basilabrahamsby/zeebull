@@ -1,0 +1,102 @@
+﻿Connecting to 34.162.60.52...
+Jun 25 04:02:16 instance-20260407-170435 python3[2081943]: [DEBUG-PERF] Path: /api/accounts/ledgers
+Jun 25 04:02:16 instance-20260407-170435 python3[2081943]: INFO:     103.72.178.228:0 - "GET /api/accounts/ledgers?limit=100 HTTP/1.0" 200 OK
+Jun 25 04:02:25 instance-20260407-170435 python3[2081943]: [RECV-LOG] GET /api/accounts/journal-entries
+Jun 25 04:02:25 instance-20260407-170435 python3[2081943]: [SEND-LOG] GET /api/accounts/journal-entries -> 200
+Jun 25 04:02:25 instance-20260407-170435 python3[2081943]: [DEBUG-PERF] Path: /api/accounts/journal-entries
+Jun 25 04:02:25 instance-20260407-170435 python3[2081943]: INFO:     103.72.178.228:0 - "GET /api/accounts/journal-entries?limit=100 HTTP/1.0" 200 OK
+Jun 25 04:02:33 instance-20260407-170435 python3[2081943]: [RECV-LOG] GET /api/settings/aiosell_active
+Jun 25 04:02:33 instance-20260407-170435 python3[2081943]: [SEND-LOG] GET /api/settings/aiosell_active -> 200
+Jun 25 04:02:33 instance-20260407-170435 python3[2081943]: [DEBUG-PERF] Path: /api/settings/aiosell_active
+Jun 25 04:02:33 instance-20260407-170435 python3[2081943]: INFO:     205.254.184.138:0 - "GET /api/settings/aiosell_active HTTP/1.0" 200 OK
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [RECV-LOG] GET /api/rooms/types
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [RECV-LOG] GET /api/packages/
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [SEND-LOG] GET /api/rooms/types -> 200
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-PERF] Path: /api/rooms/types
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: INFO:     205.254.184.138:0 - "GET /api/rooms/types HTTP/1.0" 200 OK
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [SEND-LOG] GET /api/packages/ -> 200
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-PERF] Path: /api/packages/
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: INFO:     205.254.184.138:0 - "GET /api/packages/?_t=1782360153988 HTTP/1.0" 200 OK
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [RECV-LOG] GET /api/packages/bookingsall
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [RECV-LOG] GET /api/food-items/
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [SEND-LOG] GET /api/packages/bookingsall -> 200
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-PERF] Path: /api/packages/bookingsall
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-PERF] Disabled Cache for: /api/packages/bookingsall
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: INFO:     205.254.184.138:0 - "GET /api/packages/bookingsall HTTP/1.0" 200 OK
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Backend sending 72 items for branch 1
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Fresh lime juice (ID: 12, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Veg clear soup (ID: 20, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Horlicks (ID: 11, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Green salad (ID: 17, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Boost Drink (ID: 10, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Mint lime soda (ID: 13, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Soft drinks (ID: 15, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Fatush salad (ID: 18, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Lemon tea (ID: 5, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Sweet corn veg soup (ID: 21, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Greek salad (ID: 19, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Chicken sweet corn soup (ID: 24, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Coffee (ID: 8, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Chicken manchow soup (ID: 28, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: French fries (ID: 37, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Ginger Tea (ID: 6, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Mutton paya soup (ID: 29, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Mineral water (ID: 16, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: TEA (ID: 4, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Chicken clear soup (ID: 23, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Hot & Sour veg soup (ID: 22, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Fresh fruits juice (ID: 14, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Hot Milk (ID: 9, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Veg pakoda (ID: 38, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Masala Tea (ID: 7, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Egg Pakoda (ID: 40, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Onion Pakoda (ID: 39, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Veg Sandwiches (ID: 42, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Banana Fry (ID: 41, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Chicken Sandwiches (ID: 43, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: porotta (ID: 82, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Kerala style fish thenga arachathu (ID: 66, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: veg korma (ID: 57, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Fish mappas (ID: 64, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Shawai chicken (ID: 71, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Chicken 65 (ID: 72, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Mutton Biriyani (ID: 47, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Chcken Biriyani (ID: 46, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Puttu & Kadala (ID: 83, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Chilli beef (ID: 77, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Dragon chicken (ID: 73, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: veg stew (ID: 56, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Allepy fish curry (ID: 65, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Chilli Paneer (ID: 52, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Poori bhaji (ID: 85, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Mutton Chukka (ID: 78, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Paneer butter masala (ID: 55, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Chicken stew (ID: 68, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Spicy chilli fish fry (ID: 80, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Ice Cream (ID: 48, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Meen pollichathu (ID: 62, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Mutton stew (ID: 67, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Gulab Jamun (ID: 50, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Gobi Manchurian (ID: 51, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Prawns fry (ID: 76, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Chicken pattiala (ID: 69, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Chappathi (ID: 81, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Kerala style prawns pollichathu (ID: 79, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: butter chicken (ID: 59, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Dosa,chutney&Sambar (ID: 84, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Pepper chicken dry (ID: 74, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Dal fry (ID: 54, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Chilli Mushroom (ID: 53, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Plain Rice (ID: 44, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Naadan chicken curry (ID: 58, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Fruit Salad (ID: 49, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Chicken BBQ half (ID: 70, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Jeera rice (ID: 45, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: mutton curry  (ID: 60, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Beef dry fry (ID: 75, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Fish Mulakittathu (ID: 61, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-FOOD] Item: Tawa fish (ID: 63, Branch: 1, Available: True)
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [SEND-LOG] GET /api/food-items/ -> 200
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: [DEBUG-PERF] Path: /api/food-items/
+Jun 25 04:02:34 instance-20260407-170435 python3[2081943]: INFO:     205.254.184.138:0 - "GET /api/food-items/?limit=10000 HTTP/1.0" 200 OK
+

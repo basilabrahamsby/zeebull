@@ -298,12 +298,83 @@ def create_journal_entry(db: Session, entry: JournalEntryCreate, branch_id: int,
         db.refresh(db_entry)
     else:
         db.flush()
+        
+    return db_entry
+
+def update_journal_entry(db: Session, entry_id: int, entry_update: JournalEntryUpdate, branch_id: int, commit: bool = True) -> Optional[JournalEntry]:
+    """Update a journal entry including its lines"""
+    query = db.query(JournalEntry).filter(JournalEntry.id == entry_id)
+    if branch_id is not None:
+        from sqlalchemy import or_
+        query = query.filter(or_(JournalEntry.branch_id == branch_id, JournalEntry.branch_id == None))
+        
+    db_entry = query.first()
+    if not db_entry:
+        return None
+
+    # Update basic fields if provided
+    if entry_update.entry_date is not None:
+        db_entry.entry_date = entry_update.entry_date
+    if entry_update.description is not None:
+        db_entry.description = entry_update.description
+    if entry_update.notes is not None:
+        db_entry.notes = entry_update.notes
+
+    # Update lines if provided
+    if entry_update.lines is not None:
+        total_debits = sum(line.amount for line in entry_update.lines if line.debit_ledger_id)
+        total_credits = sum(line.amount for line in entry_update.lines if line.credit_ledger_id)
+        
+        if abs(total_debits - total_credits) > 0.01:
+            raise ValueError(
+                f"Journal entry must balance. Debits: Rs.{total_debits:.2f}, Credits: Rs.{total_credits:.2f}, "
+                f"Difference: Rs.{abs(total_debits - total_credits):.2f}"
+            )
+            
+        for idx, line in enumerate(entry_update.lines, 1):
+            if not line.debit_ledger_id and not line.credit_ledger_id:
+                raise ValueError(f"Line {idx}: Must have either debit or credit ledger (both are missing)")
+            if line.debit_ledger_id and line.credit_ledger_id:
+                raise ValueError(f"Line {idx}: Cannot have both debit and credit ledger")
+            if line.amount <= 0:
+                raise ValueError(f"Line {idx}: Amount must be greater than zero")
+
+        db_entry.total_amount = total_debits
+
+        # Delete existing lines
+        db.query(JournalEntryLine).filter(JournalEntryLine.entry_id == entry_id).delete()
+        
+        # Add new lines
+        for idx, line_data in enumerate(entry_update.lines, start=1):
+            db_line = JournalEntryLine(
+                entry_id=db_entry.id,
+                debit_ledger_id=line_data.debit_ledger_id,
+                credit_ledger_id=line_data.credit_ledger_id,
+                amount=line_data.amount,
+                description=line_data.description,
+                line_number=idx,
+                branch_id=db_entry.branch_id
+            )
+            db.add(db_line)
+
+    if commit:
+        db.commit()
+        # Expire the lines relationship so it's re-fetched correctly
+        db.expire(db_entry, ['lines'])
+        db.refresh(db_entry)
+    else:
+        db.flush()
+        
     return db_entry
 
 
 def get_journal_entry(db: Session, entry_id: int, branch_id: int) -> Optional[JournalEntry]:
     """Get journal entry by ID"""
-    return db.query(JournalEntry).filter(JournalEntry.id == entry_id, JournalEntry.branch_id == branch_id).first()
+    query = db.query(JournalEntry).filter(JournalEntry.id == entry_id)
+    if branch_id is not None:
+        from sqlalchemy import or_
+        query = query.filter(or_(JournalEntry.branch_id == branch_id, JournalEntry.branch_id == None))
+    return query.first()
 
 
 

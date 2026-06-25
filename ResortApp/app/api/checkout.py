@@ -6,6 +6,7 @@ from typing import List, Optional
 from datetime import date, datetime, timedelta
 import traceback
 import json
+import math
 
 def debug_log(msg: str):
     print(f"[DEBUG][CHECKOUT] {msg}")
@@ -1887,6 +1888,15 @@ def update_checkout(
         raise HTTPException(status_code=404, detail="Checkout record not found")
     
     update_data = checkout_update.model_dump(exclude_unset=True)
+    
+    # Clean empty strings for unique fields
+    if "invoice_number" in update_data and update_data["invoice_number"] == "":
+        update_data["invoice_number"] = None
+    if "pan_number" in update_data and update_data["pan_number"] == "":
+        update_data["pan_number"] = None
+    if "gst_number" in update_data and update_data["gst_number"] == "":
+        update_data["gst_number"] = None
+        
     for key, value in update_data.items():
         setattr(checkout, key, value)
         
@@ -3491,7 +3501,7 @@ def _calculate_bill_for_single_room(db: Session, room_number: str, branch_id: in
     charges.penalties = (charges.inventory_charges or 0) + (charges.asset_damage_charges or 0) + (charges.consumables_charges or 0) + (charges.late_checkout_fee or 0)
     charges.subtotal = (charges.total_due or 0)
     charges.gst = (charges.total_gst or 0)
-    charges.grand_total = (charges.total_due or 0) + (charges.total_gst or 0)
+    charges.grand_total = math.ceil((charges.total_due or 0) + (charges.total_gst or 0))
 
 
     
@@ -4284,7 +4294,7 @@ def _calculate_bill_for_entire_booking(db: Session, room_number: str, branch_id:
     charges.penalties = (charges.inventory_charges or 0) + (charges.asset_damage_charges or 0) + (charges.consumables_charges or 0) + (charges.late_checkout_fee or 0)
     charges.subtotal = (charges.total_due or 0)
     charges.gst = (charges.total_gst or 0)
-    charges.grand_total = (charges.total_due or 0) + (charges.total_gst or 0)
+    charges.grand_total = math.ceil((charges.total_due or 0) + (charges.total_gst or 0))
     
     # Add advance deposit info to charges
     charges.advance_deposit = getattr(booking, 'advance_deposit', 0.0) or 0.0
@@ -4335,6 +4345,9 @@ def get_bill_for_booking(room_number: str, checkout_mode: str = "multiple", db: 
             charges.consumables_charges = max(0, (charges.consumables_charges or 0) - (charges.consumables_gst or 0))
             charges.inventory_charges = max(0, (charges.inventory_charges or 0) - (charges.inventory_gst or 0))
             
+            if getattr(bill_data["booking"], 'rate_plan_code', None) == 'TAX_INCLUSIVE':
+                charges.room_charges = max(0, (charges.room_charges or 0) - (charges.room_gst or 0))
+            
             charges.total_due = sum([
                 charges.room_charges or 0,
                 charges.food_charges or 0,
@@ -4352,7 +4365,7 @@ def get_bill_for_booking(room_number: str, checkout_mode: str = "multiple", db: 
             charges.penalties = (charges.inventory_charges or 0) + (charges.asset_damage_charges or 0) + (charges.consumables_charges or 0) + (charges.late_checkout_fee or 0)
             charges.subtotal = (charges.total_due or 0)
             charges.gst = (charges.total_gst or 0)
-            charges.grand_total = (charges.total_due or 0) + (charges.total_gst or 0)
+            charges.grand_total = math.ceil((charges.total_due or 0) + (charges.total_gst or 0))
         
         return BillSummary(
             guest_name=bill_data["booking"].guest_name,
@@ -4402,6 +4415,9 @@ def get_bill_for_booking(room_number: str, checkout_mode: str = "multiple", db: 
             charges.consumables_charges = max(0, (charges.consumables_charges or 0) - (charges.consumables_gst or 0))
             charges.inventory_charges = max(0, (charges.inventory_charges or 0) - (charges.inventory_gst or 0))
             
+            if getattr(bill_data["booking"], 'rate_plan_code', None) == 'TAX_INCLUSIVE':
+                charges.room_charges = max(0, (charges.room_charges or 0) - (charges.room_gst or 0))
+            
             charges.total_due = sum([
                 charges.room_charges or 0,
                 charges.food_charges or 0,
@@ -4419,7 +4435,7 @@ def get_bill_for_booking(room_number: str, checkout_mode: str = "multiple", db: 
             charges.penalties = (charges.inventory_charges or 0) + (charges.asset_damage_charges or 0) + (charges.consumables_charges or 0) + (charges.late_checkout_fee or 0)
             charges.subtotal = (charges.total_due or 0)
             charges.gst = (charges.total_gst or 0)
-            charges.grand_total = (charges.total_due or 0) + (charges.total_gst or 0)
+            charges.grand_total = math.ceil((charges.total_due or 0) + (charges.total_gst or 0))
         
         return BillSummary(
             guest_name=bill_data["booking"].guest_name,
@@ -4807,7 +4823,7 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, backgro
             
             # Grand total before advance deposit deduction
             # total_due represents the sum of all exclusive base charges
-            grand_total_before_advance = charges.total_due + tax_amount + key_card_fee - discount_amount + tips_gratuity
+            grand_total_before_advance = math.ceil(charges.total_due + tax_amount + key_card_fee - discount_amount + tips_gratuity)
             
             # Deduct advance deposit
             grand_total = grand_total_before_advance - advance_deposit
@@ -5695,7 +5711,7 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, backgro
             ])
             # --- END ROUNDING FIX ---
             
-            grand_total_before_advance = charges.total_due + tax_amount + total_key_card_fee - discount_amount + tips_gratuity
+            grand_total_before_advance = math.ceil(charges.total_due + tax_amount + total_key_card_fee - discount_amount + tips_gratuity)
             grand_total = grand_total_before_advance - advance_deposit
             refund_amount = max(0, advance_deposit - grand_total_before_advance)
             

@@ -19,7 +19,7 @@ from app.models.user import User
 
 from app.models.room import Room
 from app.models.Package import Package, PackageBooking, PackageBookingRoom
-from app.schemas.booking import BookingCreate, BookingOut, BookingConfirm
+from app.schemas.booking import BookingCreate, BookingOut, BookingConfirm, BookingUpdate
 from app.models.checkout import Checkout
 from app.models.payment import Payment
 from app.schemas.room import RoomOut
@@ -1663,7 +1663,81 @@ def cancel_booking(
             print(f"Failed to queue Aiosell inventory push on cancellation: {e}")
 
     return booking
+
+@router.put("/{booking_id}", response_model=BookingOut)
+def update_booking(
+    booking_id: Union[str, int], 
+    booking_in: BookingUpdate,
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user), 
+    branch_id: int = Depends(get_branch_id)
+):
+    numeric_id, booking_type = parse_display_id(str(booking_id))
+    if numeric_id is None:
+        raise HTTPException(status_code=400, detail=f"Invalid booking ID format: {booking_id}")
+    booking_id = numeric_id
+
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+
+    update_data = booking_in.model_dump(exclude_unset=True)
+    room_ids = update_data.pop("room_ids", None)
+
+    for field, value in update_data.items():
+        if value is not None:
+            setattr(booking, field, value)
+            
+    if "total_amount" in update_data and update_data["total_amount"] is not None:
+        base_amt = update_data["total_amount"]
+        nights = max(1, (booking.check_out - booking.check_in).days)
+        room_count = len(booking.booking_rooms) or booking.num_rooms or 1
+        
+        from app.utils.settings_helpers import get_gst_settings
+        from app.utils.checkout_helpers import calculate_gst_breakdown
+        gst_settings = get_gst_settings(db, branch_id)
+        is_inclusive_global = gst_settings.get("gst_inclusive", False)
+        
+        gst_data = calculate_gst_breakdown(
+            db=db,
+            branch_id=branch_id,
+            room_charges=base_amt,
+            food_charges=0,
+            package_charges=0,
+            nights=nights,
+            is_inclusive=is_inclusive_global
+        )
+        if is_inclusive_global:
+            booking.room_rate = (base_amt - gst_data["total_gst"]) / (nights * room_count)
+        else:
+            booking.room_rate = base_amt / (nights * room_count)
+            
+    # Handle room assignments if changed
+    if room_ids is not None:
+        from app.models.booking import BookingRoom
+        from app.models.room import Room
+        
+        # Free up old rooms
+        old_room_ids = [br.room_id for br in booking.booking_rooms]
+        if old_room_ids:
+            db.query(Room).filter(Room.id.in_(old_room_ids)).update({"status": "Available"}, synchronize_session=False)
+            
+        # Delete old relationships
+        db.query(BookingRoom).filter(BookingRoom.booking_id == booking.id).delete()
+        
+        # Add new rooms
+        for room_id in room_ids:
+            db.add(BookingRoom(booking_id=booking.id, room_id=room_id, branch_id=branch_id))
+            room = db.query(Room).filter(Room.id == room_id).first()
+            if room:
+                room.status = "Booked"
+
+    db.commit()
+    db.refresh(booking)
+
+    return booking
     
+
 @router.put("/{booking_id}/extend", response_model=BookingOut)
 def extend_checkout(
     booking_id: Union[str, int], 

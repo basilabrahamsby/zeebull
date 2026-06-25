@@ -29,6 +29,22 @@ class BookingRoomOut(BaseModel):
         from_attributes = True
 
 
+class BookingUpdate(BaseModel):
+    guest_name: Optional[str] = None
+    guest_mobile: Optional[str] = None
+    guest_email: Optional[str] = None
+    adults: Optional[int] = None
+    children: Optional[int] = None
+    check_in: Optional[date] = None
+    check_out: Optional[date] = None
+    gst_number: Optional[str] = None
+    source: Optional[str] = None
+    total_amount: Optional[float] = None
+    room_rate: Optional[float] = None
+    room_type_id: Optional[int] = None
+    num_rooms: Optional[int] = None
+    room_ids: Optional[List[int]] = None
+
 # This schema is used when creating a new booking
 class BookingCreate(BaseModel):
     room_ids: List[int] = []

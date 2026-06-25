@@ -296,6 +296,8 @@ const CHART_COLORS = ["#4f46e5", "#10b981", "#f59e0b", "#ef4444", "#3b82f6"];
 
 export default function ReportsDashboard() {
   const { hasPermission, isAdmin } = usePermissions();
+  const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
+  const isAccountant = currentUser?.role?.name?.toLowerCase() === "accountant" || currentUser?.role === "accountant";
   const mainTabs = [
     { id: "reports", label: "Operational Reports", permission: "account_reports:view", icon: <TrendingUp className="inline mr-2" size={18} /> },
     { id: "accounting", label: "Financial Accounting", permission: "account:view", icon: <BookOpen className="inline mr-2" size={18} /> }
@@ -353,6 +355,10 @@ export default function ReportsDashboard() {
   const [editingLedger, setEditingLedger] = useState(null);
   const [journalEntries, setJournalEntries] = useState([]);
   const [showJournalModal, setShowJournalModal] = useState(false);
+  const [editingJournalId, setEditingJournalId] = useState(null);
+  const [showEditLogsModal, setShowEditLogsModal] = useState(false);
+  const [editLogs, setEditLogs] = useState([]);
+  const [loadingLogs, setLoadingLogs] = useState(false);
   const [expandedEntries, setExpandedEntries] = useState(new Set());
   const [trialBalance, setTrialBalance] = useState(null);
   const [trialBalanceMode, setTrialBalanceMode] = useState("manual"); // "manual" (Journal-Based) or "automatic" (Virtual)
@@ -1206,6 +1212,18 @@ export default function ReportsDashboard() {
     }
   };
 
+  const fetchEditLogs = async () => {
+    try {
+      setLoadingLogs(true);
+      const response = await api.get("/accounts/journal-edit-logs");
+      setEditLogs(response.data);
+    } catch (error) {
+      console.error("Failed to fetch edit logs", error);
+    } finally {
+      setLoadingLogs(false);
+    }
+  };
+
   const fetchJournalEntries = async () => {
     try {
       setLoading(true);
@@ -1388,8 +1406,13 @@ export default function ReportsDashboard() {
         }))
       };
 
-      await api.post("/accounts/journal-entries", payload);
+      if (editingJournalId) {
+        await api.put(`/accounts/journal-entries/${editingJournalId}`, payload);
+      } else {
+        await api.post("/accounts/journal-entries", payload);
+      }
       setShowJournalModal(false);
+      setEditingJournalId(null);
       setJournalForm({
         entry_date: getCurrentDateIST(),
         description: "",
@@ -1405,6 +1428,28 @@ export default function ReportsDashboard() {
   const getLedgerName = (ledgerId) => {
     const ledger = accountLedgers.find(l => l.id === ledgerId);
     return ledger ? ledger.name : `Ledger #${ledgerId}`;
+  };
+
+  const handleEditJournalEntryClick = (e, entry) => {
+    e.stopPropagation();
+    setEditingJournalId(entry.id);
+    
+    // Parse the UTC date to local IST date for the input
+    const dateObj = new Date(entry.entry_date);
+    const istFormatted = new Date(dateObj.getTime() + (330 * 60000)).toISOString().split('T')[0];
+
+    setJournalForm({
+      entry_date: istFormatted,
+      description: entry.description || "",
+      notes: entry.notes || "",
+      lines: entry.lines && entry.lines.length > 0 ? entry.lines.map(line => ({
+        debit_ledger_id: line.debit_ledger_id || "",
+        credit_ledger_id: line.credit_ledger_id || "",
+        amount: line.amount || 0,
+        description: line.description || ""
+      })) : [{ debit_ledger_id: "", credit_ledger_id: "", amount: 0, description: "" }]
+    });
+    setShowJournalModal(true);
   };
 
   const filteredLedgers = selectedGroup
@@ -2024,12 +2069,33 @@ export default function ReportsDashboard() {
                       Export to Sheets
                     </button>
                     <button
-                      onClick={() => setShowJournalModal(true)}
+                      onClick={() => {
+                        setEditingJournalId(null);
+                        setJournalForm({
+                          entry_date: getCurrentDateIST(),
+                          description: "",
+                          notes: "",
+                          lines: [{ debit_ledger_id: "", credit_ledger_id: "", amount: 0, description: "" }]
+                        });
+                        setShowJournalModal(true);
+                      }}
                       className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700"
                     >
                       <Plus size={18} className="inline mr-2" />
                       New Entry
                     </button>
+                    {isAdmin && (
+                      <button
+                        onClick={() => {
+                          fetchEditLogs();
+                          setShowEditLogsModal(true);
+                        }}
+                        className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
+                      >
+                        <History size={18} className="inline mr-2" />
+                        Audit Logs
+                      </button>
+                    )}
                   </div>
                 </div>
                 {loading ? (
@@ -2046,6 +2112,7 @@ export default function ReportsDashboard() {
                           <th className="px-4 py-2 text-left">Ref</th>
                           <th className="px-4 py-2 text-right">Debit (₹)</th>
                           <th className="px-4 py-2 text-right">Credit (₹)</th>
+                          {(isAdmin || isAccountant) && <th className="px-4 py-2 text-center w-16">Actions</th>}
                         </tr>
                       </thead>
                       <tbody>
@@ -2097,6 +2164,19 @@ export default function ReportsDashboard() {
                                   <td className="px-4 py-2 text-right font-semibold">
                                     {totalCredit > 0 ? `₹${totalCredit.toFixed(2)}` : ''}
                                   </td>
+                                  {(isAdmin || isAccountant) && (
+                                    <td className="px-4 py-2 text-center">
+                                      {(isAdmin || (isAccountant && new Date(entry.entry_date).toLocaleDateString('en-GB') === new Date().toLocaleDateString('en-GB'))) && (
+                                        <button
+                                          onClick={(e) => handleEditJournalEntryClick(e, entry)}
+                                          className="text-blue-600 hover:text-blue-800 p-1 rounded"
+                                          title="Edit Journal Entry"
+                                        >
+                                          <Edit size={16} />
+                                        </button>
+                                      )}
+                                    </td>
+                                  )}
                                 </tr>
                                 {isExpanded && entry.lines && entry.lines.map((line, idx) => (
                                   <tr key={`${entry.id}-line-${idx}`} className="border-b bg-gray-50">
@@ -4736,7 +4816,7 @@ export default function ReportsDashboard() {
         {showJournalModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-              <h3 className="text-xl font-bold mb-4">Create Journal Entry</h3>
+              <h3 className="text-xl font-bold mb-4">{editingJournalId ? "Edit Journal Entry" : "Create Journal Entry"}</h3>
               <form onSubmit={handleCreateJournalEntry}>
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
@@ -4912,17 +4992,112 @@ export default function ReportsDashboard() {
                     })()
                       }`}
                   >
-                    Create Entry
+                    {editingJournalId ? "Update Entry" : "Create Entry"}
                   </button>
                   <button
                     type="button"
-                    onClick={() => setShowJournalModal(false)}
+                    onClick={() => {
+                      setShowJournalModal(false);
+                      setEditingJournalId(null);
+                      setJournalForm({
+                        entry_date: getCurrentDateIST(),
+                        description: "",
+                        notes: "",
+                        lines: [{ debit_ledger_id: "", credit_ledger_id: "", amount: 0, description: "" }]
+                      });
+                    }}
                     className="flex-1 px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300"
                   >
                     Cancel
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Logs Modal */}
+        {showEditLogsModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+              <div className="flex justify-between items-center p-4 border-b">
+                <h2 className="text-xl font-bold flex items-center">
+                  <History className="mr-2 text-indigo-600" />
+                  Journal Audit Logs
+                </h2>
+                <button
+                  onClick={() => setShowEditLogsModal(false)}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  <XCircle size={24} />
+                </button>
+              </div>
+              <div className="p-4 overflow-y-auto flex-1">
+                {loadingLogs ? (
+                  <div className="text-center py-8">Loading logs...</div>
+                ) : editLogs.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">No edit logs found.</div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full border-collapse">
+                      <thead className="bg-gray-100">
+                        <tr>
+                          <th className="px-4 py-2 text-left">Date & Time</th>
+                          <th className="px-4 py-2 text-left">User</th>
+                          <th className="px-4 py-2 text-left">Entry ID</th>
+                          <th className="px-4 py-2 text-left">Details</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {editLogs.map((log) => {
+                          let detailsView = <span className="text-sm text-gray-600">{log.details}</span>;
+                          try {
+                            const parsed = JSON.parse(log.details);
+                            if (parsed.before && parsed.after) {
+                              detailsView = (
+                                <div className="flex flex-col space-y-2 text-xs">
+                                  <div className="bg-red-50 p-2 rounded border border-red-100">
+                                    <span className="font-bold text-red-700 block mb-1">Before</span>
+                                    <div>Desc: {parsed.before.description || 'N/A'}</div>
+                                    <div>Total: ₹{parsed.before.total}</div>
+                                    <div>Date: {parsed.before.date || 'N/A'}</div>
+                                  </div>
+                                  <div className="bg-green-50 p-2 rounded border border-green-100">
+                                    <span className="font-bold text-green-700 block mb-1">After</span>
+                                    <div>Desc: {parsed.after.description || 'N/A'}</div>
+                                    <div>Total: ₹{parsed.after.total}</div>
+                                    <div>Date: {parsed.after.date || 'N/A'}</div>
+                                  </div>
+                                </div>
+                              );
+                            } else {
+                              detailsView = <span className="text-sm text-gray-600">Desc: {parsed.description}, Total: ₹{parsed.total}</span>;
+                            }
+                          } catch (e) {
+                            // ignore
+                          }
+                          return (
+                            <tr key={log.id} className="border-b hover:bg-gray-50">
+                              <td className="px-4 py-2 text-sm">{new Date(log.edited_at).toLocaleString('en-IN')}</td>
+                              <td className="px-4 py-2 font-semibold">{log.username}</td>
+                              <td className="px-4 py-2 text-indigo-600 font-medium">#{log.entry_id}</td>
+                              <td className="px-4 py-2">{detailsView}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+              <div className="p-4 border-t flex justify-end bg-gray-50">
+                <button
+                  onClick={() => setShowEditLogsModal(false)}
+                  className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         )}

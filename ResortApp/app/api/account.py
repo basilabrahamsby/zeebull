@@ -19,7 +19,7 @@ from app.schemas.account import (
     AccountGroupCreate, AccountGroupUpdate, AccountGroupOut,
     AccountLedgerCreate, AccountLedgerUpdate, AccountLedgerOut,
     JournalEntryCreate, JournalEntryUpdate, JournalEntryOut,
-    TrialBalance, LedgerBalance
+    TrialBalance, LedgerBalance, JournalEditLogOut
 )
 
 router = APIRouter(prefix="/accounts", tags=["Accounts"])
@@ -217,6 +217,130 @@ def create_journal_entry(
     return account_crud.create_journal_entry(db, entry, branch_id=branch_id, created_by=current_user.id)
 
 
+@router.put("/journal-entries/{entry_id}", response_model=JournalEntryOut)
+def update_journal_entry(
+    entry_id: int,
+    entry_update: JournalEntryUpdate,
+    db: Session = Depends(get_db),
+    branch_id: int = Depends(get_branch_id),
+    current_user: User = Depends(get_current_user)
+):
+    """Update an existing journal entry"""
+    existing_entry = account_crud.get_journal_entry(db, entry_id, branch_id)
+    if not existing_entry:
+        raise HTTPException(status_code=404, detail="Journal entry not found")
+
+    is_admin = current_user.role == "admin" or getattr(current_user, "is_superadmin", False)
+    is_accountant = current_user.role == "accountant"
+
+    if not (is_admin or is_accountant):
+        raise HTTPException(status_code=403, detail="You don't have permission to edit journal entries")
+        
+    if is_accountant and not is_admin:
+        from app.utils.date_utils import get_ist_today, to_ist
+        entry_ist_date = to_ist(existing_entry.entry_date).date()
+        today_ist = get_ist_today().date()
+        
+        if entry_ist_date != today_ist:
+            raise HTTPException(status_code=403, detail="Accountants can only edit journal entries created today")
+            
+        if entry_update.entry_date:
+            new_ist_date = to_ist(entry_update.entry_date).date()
+            if new_ist_date != today_ist:
+                raise HTTPException(status_code=403, detail="Accountants cannot change the entry date to a different day")
+    try:
+        # Capture before state
+        before_state = {
+            "description": existing_entry.description,
+            "total": existing_entry.total_amount,
+            "date": str(existing_entry.entry_date.date()) if existing_entry.entry_date else None,
+            "lines": [{"debit": l.debit_ledger_id, "credit": l.credit_ledger_id, "amount": l.amount} for l in existing_entry.lines] if existing_entry.lines else []
+        }
+
+        updated_entry = account_crud.update_journal_entry(
+            db=db, 
+            entry_id=entry_id, 
+            entry_update=entry_update, 
+            branch_id=branch_id
+        )
+        if not updated_entry:
+            raise HTTPException(status_code=404, detail="Journal entry not found")
+            
+        # Capture after state
+        after_state = {
+            "description": updated_entry.description,
+            "total": updated_entry.total_amount,
+            "date": str(updated_entry.entry_date.date()) if updated_entry.entry_date else None,
+            "lines": [{"debit": l.debit_ledger_id, "credit": l.credit_ledger_id, "amount": l.amount} for l in updated_entry.lines] if updated_entry.lines else []
+        }
+
+        # Log the edit
+        from app.models.account import JournalEditLog
+        import json
+        
+        edit_log = JournalEditLog(
+            entry_id=updated_entry.id,
+            user_id=current_user.id,
+            username=current_user.name,
+            details=json.dumps({"before": before_state, "after": after_state}),
+            branch_id=updated_entry.branch_id
+        )
+        db.add(edit_log)
+        db.commit()
+        
+        # Send Email Alert
+        try:
+            from app.utils.email import send_email
+            from app.models.user import User
+            from sqlalchemy import or_
+            
+            # Send to superadmins or branch admins
+            admins = db.query(User).filter(
+                or_(User.is_superadmin == True, User.role == "admin")
+            ).all()
+            
+            html_content = f"""
+            <h2>Journal Entry Edited</h2>
+            <p>Journal Entry <b>{updated_entry.entry_number}</b> was edited by <b>{current_user.name}</b>.</p>
+            <p>Date of Entry: {updated_entry.entry_date}</p>
+            <p>New Total Amount: Rs. {updated_entry.total_amount}</p>
+            """
+            for admin in admins:
+                if admin.email:
+                    send_email(
+                        to_email=admin.email,
+                        subject=f"Journal Entry Edited: {updated_entry.entry_number}",
+                        html_content=html_content
+                    )
+            
+            # Send to test email
+            send_email(
+                to_email="dayon10mathew@gmail.com",
+                subject=f"Journal Entry Edited: {updated_entry.entry_number} (TEST ALERT)",
+                html_content=html_content
+            )
+        except Exception as e:
+            import logging
+            logging.error(f"Failed to send email alert for journal edit: {str(e)}")
+
+        return updated_entry
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.get("/journal-edit-logs", response_model=List[JournalEditLogOut])
+def get_journal_edit_logs(
+    limit: int = Query(50, ge=1, le=1000),
+    db: Session = Depends(get_db),
+    branch_id: int = Depends(get_branch_id),
+    current_user: User = Depends(get_current_user)
+):
+    """Get recent journal edit logs"""
+    if current_user.role != "admin" and not getattr(current_user, "is_superadmin", False):
+        raise HTTPException(status_code=403, detail="Only admins can view edit logs")
+        
+    from app.models.account import JournalEditLog
+    logs = db.query(JournalEditLog).filter(JournalEditLog.branch_id == branch_id).order_by(JournalEditLog.edited_at.desc()).limit(limit).all()
+    return logs
 
 @router.get("/journal-entries", response_model=List[JournalEntryOut])
 def get_journal_entries(

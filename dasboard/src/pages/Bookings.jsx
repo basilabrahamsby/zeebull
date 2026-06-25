@@ -26,7 +26,7 @@ import {
   RefreshCw, Grid, Coffee, ClipboardList, Package, ExternalLink,
   Utensils, Settings, ChevronDown, UserCheck, Box, PlusCircle,
   CheckCircle2, XCircle, Zap, LogOut, Star, Eye, MessageSquare, Building2,
-  Briefcase, Heart, CreditCard, FileText
+  Briefcase, Heart, CreditCard, FileText, Edit
 } from "lucide-react";
 
 ChartJS.register(ArcElement, Tooltip, Legend);
@@ -3276,7 +3276,7 @@ const BookingFormModal = ({
   packageBookingForm, handlePackageBookingChange, handlePackageBookingSubmit,
   packages, packageRooms, handlePackageRoomSelect,
   today, formatCurrency, RoomSelection, feedback,
-  showBannerMessage, gstSettings
+  showBannerMessage, gstSettings, isEditMode
 }) => {
   if (!isOpen) return null;
 
@@ -3408,10 +3408,10 @@ const BookingFormModal = ({
               <Plus className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h2 className="text-xl sm:text-2xl font-bold text-slate-800 tracking-tight leading-none mb-1">Reservation Center</h2>
+              <h2 className="text-xl sm:text-2xl font-bold text-slate-800 tracking-tight leading-none mb-1">{isEditMode ? "Edit Reservation" : "Reservation Center"}</h2>
               <div className="flex items-center gap-2">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                <p className="text-slate-500 text-xs font-semibold uppercase tracking-wider opacity-80">New Booking Terminal</p>
+                <p className="text-slate-500 text-xs font-semibold uppercase tracking-wider opacity-80">{isEditMode ? "Edit Booking Data" : "New Booking Terminal"}</p>
               </div>
             </div>
           </div>
@@ -4031,6 +4031,7 @@ const BookingFormModal = ({
   );
 };
 
+
 const Bookings = () => {
   const navigate = useNavigate();
   const { hasPermission, isAdmin } = usePermissions();
@@ -4122,6 +4123,7 @@ const Bookings = () => {
     gst_slab_rate_3: "18"
   });
   const [modalBooking, setModalBooking] = useState(null);
+  const [bookingToEdit, setBookingToEdit] = useState(null);
   const [bookingToExtend, setBookingToExtend] = useState(null);
   const [bookingToCheckIn, setBookingToCheckIn] = useState(null);
   const [selectedImage, setSelectedImage] = useState(null);
@@ -5434,6 +5436,40 @@ const Bookings = () => {
     setFeedback({ message: "", type: "" });
 
     try {
+      if (bookingToEdit) {
+        const checkInDate = new Date(formData.checkIn);
+        const checkOutDate = new Date(formData.checkOut);
+        const nights = Math.max(1, (checkOutDate.getTime() - checkInDate.getTime()) / (1000 * 3600 * 24));
+        const numRooms = parseInt(formData.num_rooms) || 1;
+        const totalAmt = formData.custom_room_rate ? parseFloat(formData.custom_room_rate) : null;
+
+        const updatePayload = {
+          guest_name: formData.guestName,
+          guest_mobile: formData.guestMobile,
+          guest_email: formData.guestEmail,
+          gst_number: formData.gstNumber,
+          adults: parseInt(formData.adults),
+          children: parseInt(formData.children),
+          check_in: formData.checkIn,
+          check_out: formData.checkOut,
+          source: formData.source,
+          total_amount: totalAmt,
+          room_type_id: formData.room_type_id ? parseInt(formData.room_type_id) : null,
+          num_rooms: numRooms,
+          room_ids: (formData.roomNumbers || [])
+            .map((roomNumber) => {
+              const room = rooms.find((r) => r.number === roomNumber);
+              return room ? room.id : null;
+            })
+            .filter((id) => id !== null),
+        };
+        await API.put(`/bookings/${bookingToEdit.id}`, updatePayload, authHeader());
+        showBannerMessage("success", "Booking updated successfully!");
+        setBookingToEdit(null);
+        setIsBookingModalOpen(false);
+        fetchData();
+        return;
+      }
       // --- MINIMUM BOOKING DURATION VALIDATION ---
       if (formData.checkIn && formData.checkOut) {
         const checkInDate = new Date(formData.checkIn);
@@ -7090,6 +7126,35 @@ const Bookings = () => {
                                 >
                                   <Eye className="w-5 h-5" />
                                 </button>
+                                {hasPermission('bookings:edit') && !["checkedin", "checkedout", "cancelled", "noshow"].includes(b.status?.toLowerCase().replace(/[-_]/g, "")) && (
+                                  <button
+                                    onClick={() => {
+                                      setBookingToEdit(b);
+                                      setFormData({
+                                        guestName: b.guest_name || "",
+                                        guestMobile: b.guest_mobile || "",
+                                        guestEmail: b.guest_email || "",
+                                        gstNumber: b.gst_number || "",
+                                        room_type_id: b.room_type_id || "",
+                                        roomNumbers: b.rooms?.map(r => r.number || r.room?.number) || [],
+                                        checkIn: b.check_in || "",
+                                        checkOut: b.check_out || "",
+                                        adults: b.adults || 1,
+                                        children: b.children || 0,
+                                        num_rooms: b.num_rooms || 1,
+                                        source: b.source || "Admin",
+                                        custom_room_rate: b.total_amount ? (b.total_amount).toString() : "",
+                                        selectedRoomTypes: [],
+                                      });
+                                      setBookingTab(b.is_package ? "package" : "room");
+                                      setIsBookingModalOpen(true);
+                                    }}
+                                    className="w-10 h-10 bg-white text-slate-400 hover:text-blue-600 rounded-xl border-2 border-slate-50 hover:border-blue-100 transition-all shadow-sm flex items-center justify-center"
+                                    title="Edit Booking"
+                                  >
+                                    <Edit className="w-5 h-5" />
+                                  </button>
+                                )}
                                 {hasPermission('bookings:edit') && b.status?.toLowerCase().replace(/[-_]/g, "") === "checkedin" && (
                                   <button
                                     onClick={async () => {
@@ -7319,7 +7384,10 @@ const Bookings = () => {
           {isBookingModalOpen && (
             <BookingFormModal
               isOpen={isBookingModalOpen}
-              onClose={() => setIsBookingModalOpen(false)}
+              onClose={() => {
+                setIsBookingModalOpen(false);
+                setBookingToEdit(null);
+              }}
               bookingTab={bookingTab}
               setBookingTab={setBookingTab}
               formData={formData}
@@ -7346,6 +7414,7 @@ const Bookings = () => {
               feedback={feedback}
               showBannerMessage={showBannerMessage}
               gstSettings={gstSettings}
+              isEditMode={!!bookingToEdit}
             />
           )}
         </AnimatePresence>

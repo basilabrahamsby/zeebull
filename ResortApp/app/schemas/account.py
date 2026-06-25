@@ -141,6 +141,7 @@ class JournalEntryUpdate(BaseModel):
     entry_date: Optional[datetime] = None
     description: Optional[str] = None
     notes: Optional[str] = None
+    lines: Optional[List[JournalEntryLineCreateInEntry]] = None
 
 
 class JournalEntryOut(JournalEntryBase):
@@ -192,4 +193,14 @@ class TrialBalance(BaseModel):
     total_credits: float
     is_balanced: bool
 
+class JournalEditLogOut(BaseModel):
+    id: int
+    entry_id: int
+    user_id: int
+    username: str
+    edited_at: datetime
+    details: Optional[str] = None
+    branch_id: int
 
+    class Config:
+        from_attributes = True

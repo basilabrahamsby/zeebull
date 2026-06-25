@@ -881,7 +881,7 @@ const EditCheckoutModal = ({ checkout, onClose, onSuccess }) => {
       const pt = parseFloat(newFormData.package_total) || 0;
       const tax = parseFloat(newFormData.tax_amount) || 0;
       const disc = parseFloat(newFormData.discount_amount) || 0;
-      newFormData.grand_total = (rt + ft + st + pt + tax) - disc;
+      newFormData.grand_total = Math.round((rt + ft + st + pt + tax) - disc);
     }
     
     setFormData(newFormData);
@@ -1223,12 +1223,14 @@ const Billing = () => {
       totalGST = totalGST - oldRoomGst - oldPackageGst + newRoomGst + newPackageGst;
     }
 
-    const totalBill = subtotal + totalGST;
+    const rawTotalBill = subtotal + totalGST;
+    const totalBill = Math.ceil(rawTotalBill);
+    const roundOff = totalBill - rawTotalBill;
     const advanceDeposit = billData.charges?.advance_deposit || 0;
     const netPayable = totalBill - discountAmount - advanceDeposit;
     const refundAmount = Math.max(0, advanceDeposit - (totalBill - discountAmount));
 
-    return { subtotal, totalGST, totalBill, advanceDeposit, netPayable, refundAmount };
+    return { subtotal, totalGST, totalBill, roundOff, advanceDeposit, netPayable, refundAmount };
   };
 
   // Function to show banner message
@@ -2993,6 +2995,13 @@ const Billing = () => {
                       <div className="flex justify-between text-sm font-semibold text-gray-700">
                         <span>SGST:</span>
                         <span className="font-mono">+{formatCurrency(getDynamicTotals().totalGST / 2)}</span>
+                      </div>
+                    )}
+                    
+                    {getDynamicTotals().roundOff > 0 && (
+                      <div className="flex justify-between text-sm font-semibold text-gray-500">
+                        <span>Round Off:</span>
+                        <span className="font-mono">+{formatCurrency(getDynamicTotals().roundOff)}</span>
                       </div>
                     )}
 
