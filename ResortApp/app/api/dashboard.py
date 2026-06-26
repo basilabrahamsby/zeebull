@@ -57,8 +57,8 @@ def get_kpis(
         today = get_ist_today().date()
         ist_now = get_ist_now()
         start_ist, end_ist = get_ist_date_range('today')
-        start_utc = ist_to_utc(start_ist)
-        end_utc = ist_to_utc(end_ist)
+        start_utc = ist_to_utc(start_ist).replace(tzinfo=None)
+        end_utc = ist_to_utc(end_ist).replace(tzinfo=None)
 
         # 1. Checkout KPIs - use estimates for large datasets
         checkouts_today = 0
@@ -535,8 +535,8 @@ def get_summary(
             e_val = e.date() if isinstance(e, datetime) else e
         else:
             # For DateTime columns, convert IST boundaries to UTC
-            s_val = ist_to_utc(s) if isinstance(s, datetime) else s
-            e_val = ist_to_utc(e) if isinstance(e, datetime) else e
+            s_val = ist_to_utc(s).replace(tzinfo=None) if isinstance(s, datetime) else s
+            e_val = ist_to_utc(e).replace(tzinfo=None) if isinstance(e, datetime) else e
             # Log boundary conversion for auditing
             try:
                 col_name = getattr(date_column, 'name', 'expression')

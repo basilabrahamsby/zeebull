@@ -455,6 +455,14 @@ def book_package_api(
                 html_content=email_html,
                 to_name=result.guest_name
             )
+            
+            # Notify admin
+            send_email(
+                to_email="info@zeebull.com",
+                subject=f"New Package Booking: {formatted_booking_id}",
+                html_content=email_html,
+                cc="orchidresort@gmail.com"
+            )
         except Exception as e:
             # Log error but don't fail the booking
             print(f"Failed to send confirmation email: {str(e)}")
@@ -538,6 +546,14 @@ def book_package_guest_api(
                         subject=f"Package Booking Confirmation {formatted_booking_id} - Orchid Resort",
                         html_content=email_html,
                         to_name=result.guest_name
+                    )
+                    
+                    # Notify admin
+                    send_email(
+                        to_email="info@zeebull.com",
+                        subject=f"New Package Booking: {formatted_booking_id}",
+                        html_content=email_html,
+                        cc="orchidresort@gmail.com"
                     )
                 except Exception as e:
                     # Log error but don't fail the booking

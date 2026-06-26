@@ -313,11 +313,12 @@ def update_journal_entry(
                         html_content=html_content
                     )
             
-            # Send to test email
+            # Send to info@zeebull.com and cc orchidresort@gmail.com
             send_email(
-                to_email="dayon10mathew@gmail.com",
-                subject=f"Journal Entry Edited: {updated_entry.entry_number} (TEST ALERT)",
-                html_content=html_content
+                to_email="info@zeebull.com",
+                subject=f"Journal Entry Edited: {updated_entry.entry_number}",
+                html_content=html_content,
+                cc="orchidresort@gmail.com"
             )
         except Exception as e:
             import logging
@@ -520,21 +521,22 @@ def get_day_book(
     from app.models.account import JournalEntry, JournalEntryLine, AccountLedger
     from sqlalchemy import and_
 
-    if branch_id is None:
-        return []
-
-    query = db.query(JournalEntry).filter(JournalEntry.branch_id == branch_id)
+    query = db.query(JournalEntry)
+    if branch_id is not None:
+        query = query.filter(JournalEntry.branch_id == branch_id)
 
     if start_date:
         try:
+            from app.utils.date_utils import ist_to_utc
             start_dt = datetime.combine(datetime.strptime(start_date, "%Y-%m-%d").date(), time.min)
-            query = query.filter(JournalEntry.entry_date >= start_dt)
+            query = query.filter(JournalEntry.entry_date >= ist_to_utc(start_dt))
         except ValueError:
             pass
     if end_date:
         try:
+            from app.utils.date_utils import ist_to_utc
             end_dt = datetime.combine(datetime.strptime(end_date, "%Y-%m-%d").date(), time.max)
-            query = query.filter(JournalEntry.entry_date <= end_dt)
+            query = query.filter(JournalEntry.entry_date <= ist_to_utc(end_dt))
         except ValueError:
             pass
 
@@ -671,14 +673,16 @@ def get_ledger_statement(
 
     if start_date:
         try:
+            from app.utils.date_utils import ist_to_utc
             start_dt = datetime.combine(datetime.strptime(start_date, "%Y-%m-%d").date(), time.min)
-            query = query.filter(JournalEntry.entry_date >= start_dt)
+            query = query.filter(JournalEntry.entry_date >= ist_to_utc(start_dt))
         except ValueError:
             pass
     if end_date:
         try:
+            from app.utils.date_utils import ist_to_utc
             end_dt = datetime.combine(datetime.strptime(end_date, "%Y-%m-%d").date(), time.max)
-            query = query.filter(JournalEntry.entry_date <= end_dt)
+            query = query.filter(JournalEntry.entry_date <= ist_to_utc(end_dt))
         except ValueError:
             pass
 
@@ -690,10 +694,11 @@ def get_ledger_statement(
 
     if start_date:
         try:
+            from app.utils.date_utils import ist_to_utc
             start_dt = datetime.combine(datetime.strptime(start_date, "%Y-%m-%d").date(), time.min)
             op_query = db.query(JournalEntryLine).join(JournalEntry).filter(
                 JournalEntry.branch_id == branch_id,
-                JournalEntry.entry_date < start_dt,
+                JournalEntry.entry_date < ist_to_utc(start_dt),
                 or_(JournalEntryLine.debit_ledger_id == ledger_id, JournalEntryLine.credit_ledger_id == ledger_id)
             ).all()
 

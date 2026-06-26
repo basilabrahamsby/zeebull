@@ -23,7 +23,8 @@ def send_email(
     to_email: str,
     subject: str,
     html_content: str,
-    to_name: Optional[str] = None
+    to_name: Optional[str] = None,
+    cc: Optional[str] = None
 ) -> bool:
     """
     Send an email using SMTP.
@@ -50,6 +51,8 @@ def send_email(
         msg['Subject'] = subject
         msg['From'] = f"{config['from_name']} <{config['from_email']}>"
         msg['To'] = to_email
+        if cc:
+            msg['Cc'] = cc
         
         # Add HTML content
         html_part = MIMEText(html_content, 'html')

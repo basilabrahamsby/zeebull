@@ -1217,6 +1217,34 @@ def create_booking(
         except Exception as e:
             print(f"Failed to queue Aiosell inventory push: {e}")
 
+    try:
+        from app.utils.email import send_email, create_booking_confirmation_email
+        from app.utils.booking_id import format_display_id
+        
+        rooms_data = [{"number": br.room.number, "type": br.room.room_type.name if br.room and br.room.room_type else "Room", "price": br.room.room_type.price if br.room and br.room.room_type else 0} for br in booking_full.booking_rooms] if hasattr(booking_full, 'booking_rooms') and booking_full.booking_rooms else []
+        
+        email_html = create_booking_confirmation_email(
+            guest_name=booking_full.guest_name,
+            booking_id=booking_full.id,
+            booking_type='room',
+            check_in=str(booking_full.check_in),
+            check_out=str(booking_full.check_out),
+            rooms=rooms_data,
+            total_amount=total_amt,
+            guests={'adults': booking_full.adults, 'children': booking_full.children},
+            guest_mobile=booking_full.guest_mobile,
+            room_charges=total_amt
+        )
+        formatted_booking_id = format_display_id(booking_full.id, branch_id=branch_id)
+        send_email(
+            to_email="info@zeebull.com",
+            subject=f"New Room Booking: {formatted_booking_id}",
+            html_content=email_html,
+            cc="orchidresort@gmail.com"
+        )
+    except Exception as e:
+        print(f"Failed to send admin notification email: {str(e)}")
+
     return booking_full
 
 @router.post("/guest", response_model=BookingOut, summary="Create a booking as a guest")

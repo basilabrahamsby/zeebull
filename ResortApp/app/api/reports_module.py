@@ -133,8 +133,8 @@ def get_daily_departure_report(
     # Calculate UTC range for the IST report date
     start_ist = datetime.combine(report_date, datetime.min.time())
     end_ist = start_ist + timedelta(days=1)
-    start_utc = ist_to_utc(start_ist)
-    end_utc = ist_to_utc(end_ist)
+    start_utc = ist_to_utc(start_ist).replace(tzinfo=None)
+    end_utc = ist_to_utc(end_ist).replace(tzinfo=None)
     
     checkouts_query = (db.query(Checkout).filter(Checkout.branch_id == branch_id) if branch_id is not None else db.query(Checkout))
     checkouts = checkouts_query.filter(
@@ -268,8 +268,8 @@ def get_night_audit_report(
     # Calculate UTC range for the IST audit date
     start_ist = datetime.combine(audit_date, datetime.min.time())
     end_ist = start_ist + timedelta(days=1)
-    start_utc = ist_to_utc(start_ist)
-    end_utc = ist_to_utc(end_ist)
+    start_utc = ist_to_utc(start_ist).replace(tzinfo=None)
+    end_utc = ist_to_utc(end_ist).replace(tzinfo=None)
         
     # Room revenue
     rev_q = db.query(func.sum(Checkout.room_total))
@@ -443,8 +443,8 @@ def get_daily_sales_summary(
     # Calculate UTC range for the IST report date
     start_ist = datetime.combine(report_date, datetime.min.time())
     end_ist = start_ist + timedelta(days=1)
-    start_utc = ist_to_utc(start_ist)
-    end_utc = ist_to_utc(end_ist)
+    start_utc = ist_to_utc(start_ist).replace(tzinfo=None)
+    end_utc = ist_to_utc(end_ist).replace(tzinfo=None)
     
     # Get all food orders for the date range
     orders_query = (db.query(FoodOrder).filter(FoodOrder.branch_id == branch_id) if branch_id is not None else db.query(FoodOrder))
@@ -525,10 +525,10 @@ def get_item_wise_sales_report(
     )
     
     if start_date:
-        start_utc = ist_to_utc(datetime.combine(start_date, datetime.min.time()))
+        start_utc = ist_to_utc(datetime.combine(start_date, datetime.min.time())).replace(tzinfo=None)
         query = query.filter(FoodOrder.created_at >= start_utc)
     if end_date:
-        end_utc = ist_to_utc(datetime.combine(end_date, datetime.min.time()) + timedelta(days=1))
+        end_utc = ist_to_utc(datetime.combine(end_date, datetime.min.time()) + timedelta(days=1)).replace(tzinfo=None)
         query = query.filter(FoodOrder.created_at < end_utc)
     
     query = query.group_by(FoodItem.id, FoodItem.name).order_by(
@@ -567,10 +567,10 @@ def get_kot_analysis(
     query = (db.query(FoodOrder).filter(FoodOrder.branch_id == branch_id) if branch_id is not None else db.query(FoodOrder)).filter(FoodOrder.status == "completed")
     
     if start_date:
-        start_utc = ist_to_utc(datetime.combine(start_date, datetime.min.time()))
+        start_utc = ist_to_utc(datetime.combine(start_date, datetime.min.time())).replace(tzinfo=None)
         query = query.filter(FoodOrder.created_at >= start_utc)
     if end_date:
-        end_utc = ist_to_utc(datetime.combine(end_date, datetime.min.time()) + timedelta(days=1))
+        end_utc = ist_to_utc(datetime.combine(end_date, datetime.min.time()) + timedelta(days=1)).replace(tzinfo=None)
         query = query.filter(FoodOrder.created_at < end_utc)
     
     orders = query.options(
@@ -621,10 +621,10 @@ def get_void_cancellation_report(
     )
     
     if start_date:
-        start_utc = ist_to_utc(datetime.combine(start_date, datetime.min.time()))
+        start_utc = ist_to_utc(datetime.combine(start_date, datetime.min.time())).replace(tzinfo=None)
         query = query.filter(FoodOrder.created_at >= start_utc)
     if end_date:
-        end_utc = ist_to_utc(datetime.combine(end_date, datetime.min.time()) + timedelta(days=1))
+        end_utc = ist_to_utc(datetime.combine(end_date, datetime.min.time()) + timedelta(days=1)).replace(tzinfo=None)
         query = query.filter(FoodOrder.created_at < end_utc)
     
     orders = query.options(
@@ -670,10 +670,10 @@ def get_discount_complimentary_report(
     )
     
     if start_date:
-        start_utc = ist_to_utc(datetime.combine(start_date, datetime.min.time()))
+        start_utc = ist_to_utc(datetime.combine(start_date, datetime.min.time())).replace(tzinfo=None)
         query = query.filter(FoodOrder.created_at >= start_utc)
     if end_date:
-        end_utc = ist_to_utc(datetime.combine(end_date, datetime.min.time()) + timedelta(days=1))
+        end_utc = ist_to_utc(datetime.combine(end_date, datetime.min.time()) + timedelta(days=1)).replace(tzinfo=None)
         query = query.filter(FoodOrder.created_at < end_utc)
     
     orders = query.options(
@@ -716,10 +716,10 @@ def get_nc_report(
     )
     
     if start_date:
-        start_utc = ist_to_utc(datetime.combine(start_date, datetime.min.time()))
+        start_utc = ist_to_utc(datetime.combine(start_date, datetime.min.time())).replace(tzinfo=None)
         query = query.filter(FoodOrder.created_at >= start_utc)
     if end_date:
-        end_utc = ist_to_utc(datetime.combine(end_date, datetime.min.time()) + timedelta(days=1))
+        end_utc = ist_to_utc(datetime.combine(end_date, datetime.min.time()) + timedelta(days=1)).replace(tzinfo=None)
         query = query.filter(FoodOrder.created_at < end_utc)
     
     orders = query.options(
@@ -934,10 +934,10 @@ def get_stock_movement_register(
     if item_id:
         query = query.filter(InventoryTransaction.item_id == item_id)
     if start_date:
-        start_utc = ist_to_utc(datetime.combine(start_date, datetime.min.time()))
+        start_utc = ist_to_utc(datetime.combine(start_date, datetime.min.time())).replace(tzinfo=None)
         query = query.filter(InventoryTransaction.created_at >= start_utc)
     if end_date:
-        end_utc = ist_to_utc(datetime.combine(end_date, datetime.min.time()) + timedelta(days=1))
+        end_utc = ist_to_utc(datetime.combine(end_date, datetime.min.time()) + timedelta(days=1)).replace(tzinfo=None)
         query = query.filter(InventoryTransaction.created_at < end_utc)
     
     transactions = query.order_by(InventoryTransaction.created_at.desc()).offset(skip).limit(limit).all()
@@ -978,10 +978,10 @@ def get_waste_spoilage_report(
         )
         
         if start_date:
-            start_utc = ist_to_utc(datetime.combine(start_date, datetime.min.time()))
+            start_utc = ist_to_utc(datetime.combine(start_date, datetime.min.time())).replace(tzinfo=None)
             query = query.filter(WasteLog.created_at >= start_utc)
         if end_date:
-            end_utc = ist_to_utc(datetime.combine(end_date, datetime.min.time()) + timedelta(days=1))
+            end_utc = ist_to_utc(datetime.combine(end_date, datetime.min.time()) + timedelta(days=1)).replace(tzinfo=None)
             query = query.filter(WasteLog.created_at < end_utc)
         
         waste_logs = query.order_by(WasteLog.created_at.desc()).offset(skip).limit(limit).all()

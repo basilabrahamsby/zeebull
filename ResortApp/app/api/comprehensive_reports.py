@@ -130,9 +130,9 @@ def get_comprehensive_report_data(
         query_period = "today" if period == "day" else period
         start_dt, end_dt = get_ist_date_range(query_period)
         
-        # Convert to naive datetimes for general DB comparisons
-        start_dt_naive = start_dt.replace(tzinfo=None)
-        end_dt_naive = end_dt.replace(tzinfo=None)
+        # Convert to naive datetimes for general DB comparisons (must be UTC)
+        start_dt_naive = ist_to_utc(start_dt).replace(tzinfo=None)
+        end_dt_naive = ist_to_utc(end_dt).replace(tzinfo=None)
         
         start_date = start_dt.date()
         end_date = end_dt.date()
