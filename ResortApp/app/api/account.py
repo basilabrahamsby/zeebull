@@ -565,7 +565,10 @@ def get_day_book(
         if match:
             vch_no = match.group(0)
 
-        formatted_date = entry.entry_date.strftime("%d-%b-%y")
+        from app.utils.date_utils import utc_to_ist
+        # Ensure date is displayed in IST (otherwise it shifts a day back because it's stored in UTC)
+        ist_date = utc_to_ist(entry.entry_date) if entry.entry_date.tzinfo else entry.entry_date
+        formatted_date = ist_date.strftime("%d-%b-%y")
 
         debits = [l for l in entry.lines if l.debit_ledger]
         credits = [l for l in entry.lines if l.credit_ledger]
@@ -737,7 +740,9 @@ def get_ledger_statement(
         if match:
             vch_no = match.group(0)
 
-        formatted_date = entry.entry_date.strftime("%d-%b-%y")
+        from app.utils.date_utils import utc_to_ist
+        ist_date = utc_to_ist(entry.entry_date) if entry.entry_date.tzinfo else entry.entry_date
+        formatted_date = ist_date.strftime("%d-%b-%y")
 
         particulars = ""
         is_debit = line.debit_ledger_id == ledger_id
