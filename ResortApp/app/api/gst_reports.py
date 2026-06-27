@@ -2177,38 +2177,23 @@ def get_master_gst_summary(
         # 1. Calculate Total Outward Supplies (Sales) from Checkouts using SQL aggregations
         # IMPORTANT: Filter by room_total > 0 to match Room Tariff Slab logic
         checkout_query = db.query(
-            func.coalesce(func.sum(Checkout.grand_total), 0).label('total_outward_supplies'),
             func.coalesce(func.sum(
-                case(
-                    (Checkout.room_total <= 4999, Checkout.room_total / 1.05),
-                    (Checkout.room_total < 7500, Checkout.room_total / 1.12),
-                    else_=Checkout.room_total / 1.18
-                )
-            ), 0).label('room_taxable'),
+                func.coalesce(Checkout.room_total, 0) + 
+                func.coalesce(Checkout.food_total, 0) + 
+                func.coalesce(Checkout.service_total, 0) + 
+                func.coalesce(Checkout.package_total, 0) -
+                func.coalesce(Checkout.discount_amount, 0) +
+                func.coalesce(Checkout.tax_amount, 0)
+            ), 0).label('total_outward_supplies'),
             func.coalesce(func.sum(
-                case(
-                    (Checkout.room_total <= 4999, (Checkout.room_total - Checkout.room_total / 1.05) / 2),
-                    (Checkout.room_total < 7500, (Checkout.room_total - Checkout.room_total / 1.12) / 2),
-                    else_=(Checkout.room_total - Checkout.room_total / 1.18) / 2
-                )
-            ), 0).label('room_cgst_sgst'),
-            func.coalesce(func.sum(Checkout.food_total / 1.05), 0).label('food_taxable'),
-            func.coalesce(func.sum((Checkout.food_total - Checkout.food_total / 1.05) / 2), 0).label('food_cgst_sgst'),
-            func.coalesce(func.sum(Checkout.service_total / 1.18), 0).label('service_taxable'),
-            func.coalesce(func.sum((Checkout.service_total - Checkout.service_total / 1.18) / 2), 0).label('service_cgst_sgst'),
-            func.coalesce(func.sum(
-                case(
-                    (Checkout.package_total < 7500, Checkout.package_total / 1.12),
-                    else_=Checkout.package_total / 1.18
-                )
-            ), 0).label('package_taxable'),
-            func.coalesce(func.sum(
-                case(
-                    (Checkout.package_total < 7500, (Checkout.package_total - Checkout.package_total / 1.12) / 2),
-                    else_=(Checkout.package_total - Checkout.package_total / 1.18) / 2
-                )
-            ), 0).label('package_cgst_sgst')
-        ).filter(Checkout.room_total > 0)  # Match Room Tariff Slab filter
+                func.coalesce(Checkout.room_total, 0) + 
+                func.coalesce(Checkout.food_total, 0) + 
+                func.coalesce(Checkout.service_total, 0) + 
+                func.coalesce(Checkout.package_total, 0) -
+                func.coalesce(Checkout.discount_amount, 0)
+            ), 0).label('total_taxable_value'),
+            func.coalesce(func.sum(func.coalesce(Checkout.tax_amount, 0)), 0).label('total_tax_amount')
+        )
         if start_dt:
             checkout_query = checkout_query.filter(Checkout.checkout_date >= start_dt)
         if end_dt:
@@ -2217,14 +2202,13 @@ def get_master_gst_summary(
         # Debug: Log query parameters and verify base data matches Room Tariff Slab
         # print(f"Master Summary: Date range - start_dt={start_dt}, end_dt={end_dt}")
         
-        # Verify: Count checkouts that match Room Tariff Slab criteria
-        verify_query = db.query(func.count(Checkout.id)).filter(Checkout.room_total > 0)
+        # Verify: Count checkouts
+        verify_query = db.query(func.count(Checkout.id))
         if start_dt:
             verify_query = verify_query.filter(Checkout.checkout_date >= start_dt)
         if end_dt:
             verify_query = verify_query.filter(Checkout.checkout_date <= end_dt)
         checkout_count = verify_query.scalar() or 0
-        # print(f"Master Summary: Found {checkout_count} checkouts with room_total > 0 (should match Room Tariff Slab)")
         
         result = checkout_query.first()
         
@@ -2232,10 +2216,41 @@ def get_master_gst_summary(
         # print(f"Master Summary: SQL Aggregation Result - outward_supplies={result.total_outward_supplies}, room_taxable={result.room_taxable}, room_cgst_sgst={result.room_cgst_sgst}")
         
         total_outward_supplies = float(result.total_outward_supplies or 0)
-        total_taxable_value = float(result.room_taxable or 0) + float(result.food_taxable or 0) + float(result.service_taxable or 0) + float(result.package_taxable or 0)
-        total_output_cgst = float(result.room_cgst_sgst or 0) + float(result.food_cgst_sgst or 0) + float(result.service_cgst_sgst or 0) + float(result.package_cgst_sgst or 0)
-        total_output_sgst = total_output_cgst  # Same as CGST for intra-state
-        total_output_igst = 0.0  # Assuming intra-state for now
+        total_taxable_value = float(result.total_taxable_value or 0)
+        
+        # Calculate CGST and SGST using Trial Balance Logic (from Journal Entries)
+        from app.models.account import AccountLedger, JournalEntry, JournalEntryLine
+        
+        cgst_ledger = db.query(AccountLedger).filter(AccountLedger.name == "CGST Payable").first()
+        sgst_ledger = db.query(AccountLedger).filter(AccountLedger.name == "SGST Payable").first()
+        igst_ledger = db.query(AccountLedger).filter(AccountLedger.name == "IGST Payable").first()
+        
+        def get_ledger_net_credit(ledger_id):
+            if not ledger_id: return 0.0
+            
+            # Credits
+            cq = db.query(func.coalesce(func.sum(JournalEntryLine.amount), 0)).join(
+                JournalEntry, JournalEntryLine.entry_id == JournalEntry.id
+            ).filter(JournalEntryLine.credit_ledger_id == ledger_id)
+            if branch_id is not None: cq = cq.filter(JournalEntry.branch_id == branch_id)
+            if start_dt: cq = cq.filter(JournalEntry.entry_date >= start_dt)
+            if end_dt: cq = cq.filter(JournalEntry.entry_date <= end_dt)
+            credits = cq.scalar() or 0.0
+            
+            # Debits
+            dq = db.query(func.coalesce(func.sum(JournalEntryLine.amount), 0)).join(
+                JournalEntry, JournalEntryLine.entry_id == JournalEntry.id
+            ).filter(JournalEntryLine.debit_ledger_id == ledger_id)
+            if branch_id is not None: dq = dq.filter(JournalEntry.branch_id == branch_id)
+            if start_dt: dq = dq.filter(JournalEntry.entry_date >= start_dt)
+            if end_dt: dq = dq.filter(JournalEntry.entry_date <= end_dt)
+            debits = dq.scalar() or 0.0
+            
+            return credits - debits
+
+        total_output_cgst = get_ledger_net_credit(cgst_ledger.id if cgst_ledger else None)
+        total_output_sgst = get_ledger_net_credit(sgst_ledger.id if sgst_ledger else None)
+        total_output_igst = get_ledger_net_credit(igst_ledger.id if igst_ledger else None)
         total_output_tax = total_output_igst + total_output_cgst + total_output_sgst
         
         # Debug: Log calculated totals
