@@ -3451,7 +3451,9 @@ def _calculate_bill_for_single_room(db: Session, room_number: str, branch_id: in
 
                 
     # Calculate GST using dynamic helper
-    is_inclusive = getattr(booking, 'rate_plan_code', None) == 'TAX_INCLUSIVE'
+    from app.utils.settings_helpers import get_gst_settings
+    gst_settings_local = get_gst_settings(db, branch_id)
+    is_inclusive = getattr(booking, 'rate_plan_code', None) == 'TAX_INCLUSIVE' or gst_settings_local.get("gst_inclusive", False)
     gst_breakdown = calculate_gst_breakdown(
         db=db,
         branch_id=branch_id,
@@ -4241,7 +4243,9 @@ def _calculate_bill_for_entire_booking(db: Session, room_number: str, branch_id:
 
     # Calculate GST using dynamic helper
     total_room_nights = stay_days * len(all_rooms) if not is_package else stay_days
-    is_inclusive = getattr(booking, 'rate_plan_code', None) == 'TAX_INCLUSIVE'
+    from app.utils.settings_helpers import get_gst_settings
+    gst_settings_local = get_gst_settings(db, branch_id)
+    is_inclusive = getattr(booking, 'rate_plan_code', None) == 'TAX_INCLUSIVE' or gst_settings_local.get("gst_inclusive", False)
     gst_breakdown = calculate_gst_breakdown(
         db=db,
         branch_id=branch_id,
@@ -4316,6 +4320,13 @@ def get_bill_for_booking(room_number: str, checkout_mode: str = "multiple", db: 
     If checkout_mode is 'single', calculates bill for that room only.
     If checkout_mode is 'multiple', calculates bill for all rooms in the booking.
     """
+    if branch_id is None:
+        from app.models.room import Room
+        from sqlalchemy import func
+        room_obj = db.query(Room).filter(func.trim(Room.number) == str(room_number).strip()).first()
+        if room_obj and room_obj.branch_id:
+            branch_id = room_obj.branch_id
+
     if checkout_mode == "single":
         bill_data = _calculate_bill_for_single_room(db, room_number, branch_id)
         effective_checkout = bill_data.get("effective_checkout_date", bill_data["booking"].check_out)
@@ -4345,7 +4356,7 @@ def get_bill_for_booking(room_number: str, checkout_mode: str = "multiple", db: 
             charges.consumables_charges = max(0, (charges.consumables_charges or 0) - (charges.consumables_gst or 0))
             charges.inventory_charges = max(0, (charges.inventory_charges or 0) - (charges.inventory_gst or 0))
             
-            if getattr(bill_data["booking"], 'rate_plan_code', None) == 'TAX_INCLUSIVE':
+            if global_is_inclusive:
                 charges.room_charges = max(0, (charges.room_charges or 0) - (charges.room_gst or 0))
             
             charges.total_due = sum([
@@ -4415,7 +4426,7 @@ def get_bill_for_booking(room_number: str, checkout_mode: str = "multiple", db: 
             charges.consumables_charges = max(0, (charges.consumables_charges or 0) - (charges.consumables_gst or 0))
             charges.inventory_charges = max(0, (charges.inventory_charges or 0) - (charges.inventory_gst or 0))
             
-            if getattr(bill_data["booking"], 'rate_plan_code', None) == 'TAX_INCLUSIVE':
+            if global_is_inclusive:
                 charges.room_charges = max(0, (charges.room_charges or 0) - (charges.room_gst or 0))
             
             charges.total_due = sum([
@@ -4704,6 +4715,8 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, backgro
                     room.price or 0.0
                 )
             
+            charges.late_checkout_fee = late_checkout_fee
+            
             # 3. Get Advance Deposit
             advance_deposit = getattr(booking, 'advance_deposit', 0.0) or 0.0
             
@@ -4728,8 +4741,8 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, backgro
             if discount_amount > 0:
                 from app.utils.settings_helpers import get_gst_settings
                 gst_settings = get_gst_settings(db, effective_branch_id)
-                room_is_inclusive = getattr(booking, 'rate_plan_code', None) == 'TAX_INCLUSIVE'
                 global_is_inclusive = gst_settings.get("gst_inclusive", False)
+                room_is_inclusive = getattr(booking, 'rate_plan_code', None) == 'TAX_INCLUSIVE' or global_is_inclusive
                 new_gst_breakdown = calculate_gst_breakdown(
                     db=db,
                     branch_id=effective_branch_id,
@@ -4758,8 +4771,8 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, backgro
             else:
                 from app.utils.settings_helpers import get_gst_settings
                 gst_settings = get_gst_settings(db, effective_branch_id)
-                room_is_inclusive = getattr(booking, 'rate_plan_code', None) == 'TAX_INCLUSIVE'
                 global_is_inclusive = gst_settings.get("gst_inclusive", False)
+                room_is_inclusive = getattr(booking, 'rate_plan_code', None) == 'TAX_INCLUSIVE' or global_is_inclusive
                 consumables_gst = consumables_charges * 0.05
                 tax_amount = base_gst + consumables_gst + asset_damage_gst
             
@@ -5582,6 +5595,8 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, backgro
                     avg_room_rate
                 )
             
+            charges.late_checkout_fee = late_checkout_fee
+            
             # 3. Get Advance Deposit
             advance_deposit = getattr(booking, 'advance_deposit', 0.0) or 0.0
             
@@ -5619,8 +5634,8 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, backgro
             if discount_amount > 0:
                 from app.utils.settings_helpers import get_gst_settings
                 gst_settings = get_gst_settings(db, effective_branch_id)
-                room_is_inclusive = getattr(booking, 'rate_plan_code', None) == 'TAX_INCLUSIVE'
                 global_is_inclusive = gst_settings.get("gst_inclusive", False)
+                room_is_inclusive = getattr(booking, 'rate_plan_code', None) == 'TAX_INCLUSIVE' or global_is_inclusive
                 new_gst_breakdown = calculate_gst_breakdown(
                     db=db,
                     branch_id=effective_branch_id,
@@ -5648,8 +5663,8 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, backgro
             else:
                 from app.utils.settings_helpers import get_gst_settings
                 gst_settings = get_gst_settings(db, effective_branch_id)
-                room_is_inclusive = getattr(booking, 'rate_plan_code', None) == 'TAX_INCLUSIVE'
                 global_is_inclusive = gst_settings.get("gst_inclusive", False)
+                room_is_inclusive = getattr(booking, 'rate_plan_code', None) == 'TAX_INCLUSIVE' or global_is_inclusive
                 consumables_gst = total_consumables_charges * 0.05
                 tax_amount = base_gst + consumables_gst + asset_damage_gst
             
