@@ -1137,6 +1137,7 @@ def create_booking(
             status="Booked",
             num_rooms=num_rooms_val,
             room_rate=stored_room_rate,
+            total_amount=booking.custom_room_rate if booking.custom_room_rate else 0.0,
             pan_number=booking.pan_number,
             gst_number=booking.gst_number
         )
@@ -1192,13 +1193,13 @@ def create_booking(
             room_charges=base_amt,
             food_charges=0,
             package_charges=0,
-            nights=nights,
+            nights=nights * room_count, # Pass total room nights so daily slab is calculated correctly per room
             is_inclusive=is_inclusive_global
         )
         if gst_settings.get("gst_inclusive", False):
-            # If inclusive, base_amt IS the total. The true room_rate is base minus tax
+            # If inclusive, base_amt IS the total. Keep room_rate inclusive of tax for checkout math
             total_amt = base_amt
-            booking_full.room_rate = (base_amt - gst_data["total_gst"]) / (nights * room_count)
+            booking_full.room_rate = base_amt / (nights * room_count)
         else:
             total_amt = base_amt + gst_data["total_gst"]
             booking_full.room_rate = base_amt / (nights * room_count)
@@ -1727,16 +1728,19 @@ def update_booking(
         
         gst_data = calculate_gst_breakdown(
             db=db,
-            branch_id=branch_id,
+            branch_id=booking.branch_id,
             room_charges=base_amt,
             food_charges=0,
             package_charges=0,
-            nights=nights,
+            nights=nights * room_count,
             is_inclusive=is_inclusive_global
         )
-        if is_inclusive_global:
-            booking.room_rate = (base_amt - gst_data["total_gst"]) / (nights * room_count)
+        if gst_settings.get("gst_inclusive", False):
+            # Keep inclusive room_rate
+            total_amt = base_amt
+            booking.room_rate = base_amt / (nights * room_count)
         else:
+            total_amt = base_amt + gst_data["total_gst"]
             booking.room_rate = base_amt / (nights * room_count)
             
     # Handle room assignments if changed
