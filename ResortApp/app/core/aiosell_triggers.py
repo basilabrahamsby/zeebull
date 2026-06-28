@@ -35,8 +35,7 @@ def _calculate_availability_for_date(db: Session, room_type_id: int, target_date
     total_physical = db.query(Room).filter(
         Room.room_type_id == room_type_id,
         Room.branch_id == effective_branch,
-        Room.status != "Deleted",
-        Room.status != "Maintenance"
+        Room.status.notin_(["Deleted", "Maintenance", "Out of Order"])
     ).count()
 
     # Internal capacity: use the actual physical room count (non-deleted, non-maintenance)

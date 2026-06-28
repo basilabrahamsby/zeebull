@@ -48,7 +48,7 @@ def get_room_types(db: Session = Depends(get_db), branch_id: int = Depends(get_b
     
     # Calculate room count for each type
     for rt in room_types:
-        rt.room_count = db.query(Room).filter(Room.room_type_id == rt.id, Room.status != "Deleted").count()
+        rt.room_count = db.query(Room).filter(Room.room_type_id == rt.id, Room.status.notin_(["Deleted", "Maintenance", "Out of Order"])).count()
         # Ensure total_inventory matches the physical room count if that's the source of truth
         if rt.total_inventory != rt.room_count:
             rt.total_inventory = rt.room_count

@@ -1004,7 +1004,7 @@ def create_booking(
                 raise HTTPException(status_code=400, detail=f"Children exceed capacity ({max_children})")
             
         # Check Availability by Counting
-        total_rooms = db.query(Room).filter(Room.room_type_id == room_type.id, Room.branch_id == branch_id, Room.status != "Deleted").count()
+        total_rooms = db.query(Room).filter(Room.room_type_id == room_type.id, Room.branch_id == branch_id, Room.status.notin_(["Deleted", "Maintenance", "Out of Order"])).count()
         
         # Determine capacity based on source
         # Online bookings (User End, OTA) strictly respect Online Inventory limit if set.
@@ -1026,7 +1026,7 @@ def create_booking(
         assigned_overlaps = db.query(BookingRoom).join(Booking).join(Room).filter(
             Room.room_type_id == room_type.id,
             Booking.branch_id == branch_id,
-            Booking.status.in_(["Booked", "Checked-in", "Confirmed"]),
+            Booking.status.in_(["Booked", "booked", "Checked-in", "checked-in", "Confirmed", "confirmed"]),
             Booking.check_in < booking.check_out,
             Booking.check_out > booking.check_in
         ).count()
@@ -1036,7 +1036,7 @@ def create_booking(
         soft_overlaps_sum = db.query(func.sum(Booking.num_rooms)).filter(
             Booking.room_type_id == room_type.id,
             Booking.branch_id == branch_id,
-            Booking.status.in_(["Booked", "Confirmed"]), # Not 'Checked-in' usually because check-in assigns rooms
+            Booking.status.in_(["Booked", "booked", "Confirmed", "confirmed"]), # Not 'Checked-in' usually because check-in assigns rooms
             Booking.check_in < booking.check_out,
             Booking.check_out > booking.check_in,
             ~Booking.booking_rooms.any() # No assigned rooms
@@ -1109,7 +1109,7 @@ def create_booking(
             conflict = db.query(BookingRoom).join(Booking).filter(
                 BookingRoom.room_id == room_id,
                 Booking.branch_id == branch_id,
-                Booking.status.in_(["Booked", "Checked-in", "Confirmed"]),
+                Booking.status.in_(["Booked", "booked", "Checked-in", "checked-in", "Confirmed", "confirmed"]),
                 Booking.check_in < booking.check_out,
                 Booking.check_out > booking.check_in
             ).first()
