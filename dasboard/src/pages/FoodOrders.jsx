@@ -1140,6 +1140,7 @@ export default function FoodOrders() {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         const checkedInRoomIds = new Set();
+        const roomGuestNames = {};
 
         // Helper function to normalize status
         const normalizeStatus = (status) => {
@@ -1173,7 +1174,10 @@ export default function FoodOrders() {
               if ((checkInDate <= today && checkOutDate >= today) || isActuallyCheckedIn) {
                 if (booking.rooms && Array.isArray(booking.rooms)) {
                   booking.rooms.forEach(room => {
-                    if (room && room.id) checkedInRoomIds.add(room.id);
+                    if (room && room.id) {
+                      checkedInRoomIds.add(room.id);
+                      roomGuestNames[room.id] = booking.guest_name;
+                    }
                   });
                 }
               }
@@ -1200,7 +1204,10 @@ export default function FoodOrders() {
                   booking.rooms.forEach(roomLink => {
                     const room = roomLink.room || roomLink;
                     const roomId = room?.id || roomLink.room_id;
-                    if (roomId) checkedInRoomIds.add(roomId);
+                    if (roomId) {
+                      checkedInRoomIds.add(roomId);
+                      roomGuestNames[roomId] = booking.guest_name;
+                    }
                   });
                 }
               }
@@ -1226,7 +1233,10 @@ export default function FoodOrders() {
           return checkedInRoomIds.has(room.id) ||
             roomStatusNormalized === 'checkedin' ||
             roomStatusNormalized === 'occupied';
-        });
+        }).map(room => ({
+          ...room,
+          guest_name: roomGuestNames[room.id] || ''
+        }));
         setRooms(checkedInRooms);
       } catch (roomFilterError) {
         console.error("Error during room filtering:", roomFilterError);
@@ -2427,7 +2437,7 @@ export default function FoodOrders() {
                           ) : (
                             rooms.map((room) => (
                               <option key={room.id} value={room.id}>
-                                Room {room.number || room.room_number || room.id}
+                                Room {room.number || room.room_number || room.id} {room.guest_name ? `(${room.guest_name})` : ''}
                               </option>
                             ))
                           )}
