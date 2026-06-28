@@ -1219,7 +1219,6 @@ def create_booking(
 
     try:
         from app.utils.email import send_email, create_booking_confirmation_email
-        from app.utils.booking_id import format_display_id
         
         rooms_data = [{"number": br.room.number, "type": br.room.room_type.name if br.room and br.room.room_type else "Room", "price": br.room.room_type.price if br.room and br.room.room_type else 0} for br in booking_full.booking_rooms] if hasattr(booking_full, 'booking_rooms') and booking_full.booking_rooms else []
         
