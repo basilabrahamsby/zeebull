@@ -19,6 +19,7 @@ import { formatDateIST, formatDateTimeIST } from "../utils/dateUtils";
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
 import PayrollManagement from "../components/PayrollManagement";
+import SalaryAdvanceManagement from "../components/SalaryAdvanceManagement";
 import LeavePolicyManagement from "../components/LeavePolicyManagement";
 import RoleManagementTab from "../components/RoleManagementTab";
 import DailyTaskReport from "../components/DailyTaskReport";
@@ -1694,12 +1695,17 @@ const MonthlyReport = () => {
 
           <div className="bg-white p-4 rounded-lg shadow">
             <h4 className="font-semibold mb-2">Salary Calculation for the Month</h4>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
               <div>
                 <p className="font-medium text-gray-600">Base Salary</p><p className="font-bold text-lg">{formatCurrency(report.base_salary || 0)}</p>
               </div>
               <div>
                 <p className="font-medium text-red-600">Deductions (Unpaid)</p><p className="font-bold text-lg text-red-500">- {formatCurrency(report.deductions || 0)}</p>
+              </div>
+              <div>
+                <p className="font-medium text-amber-600">Deductions (Advance)</p>
+                <p className="font-bold text-lg text-amber-500">- {formatCurrency(report.advance_deductions || 0)}</p>
+                <p className="text-xs text-gray-500">({report.advance_count || 0} advances)</p>
               </div>
               <div>
                 <p className="font-medium text-blue-600">Unused Leave Bonus</p>
@@ -2498,6 +2504,7 @@ const EmployeeManagement = () => {
     { id: 'attendance', label: 'Attendance', icon: <Clock size={18} />, permission: 'employee_attendance:view' },
     { id: 'daily-tasks', label: 'Daily Task Report', icon: <CheckSquare size={18} />, permission: 'employee_management:view' },
     { id: 'leave', label: 'Leave Mgt', icon: <UserCheck size={18} />, permission: 'employee_leave:view' },
+    { id: 'salary-advance', label: 'Salary Advance', icon: <DollarSign size={18} />, permission: 'employee_management:view' },
     { id: 'payroll', label: 'Payroll', icon: <DollarSign size={18} />, permission: 'employee_management:view' }, // Payroll usually under employee_management or special perm
   ].filter(tab => hasPermission(tab.permission) || isAdmin);
 
@@ -2523,6 +2530,7 @@ const EmployeeManagement = () => {
       case 'overview': return <EmployeeOverview />;
       case 'manage-employees': return <EmployeeListAndForm />;
       case 'payroll': return <PayrollManagement />;
+      case 'salary-advance': return <SalaryAdvanceManagement />;
       case 'report': return <UserHistory />;
       case 'leave': return <LeaveManagement />;
       case 'attendance': return <AttendanceTracking />;

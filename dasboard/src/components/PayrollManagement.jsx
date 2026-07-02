@@ -12,8 +12,10 @@ const PayrollManagement = () => {
     // Form State
     const [month, setMonth] = useState(new Date().getMonth() + 1);
     const [year, setYear] = useState(new Date().getFullYear());
-    const [allowances, setAllowances] = useState(0);
-    const [deductions, setDeductions] = useState(0);
+    const [customAllowances, setCustomAllowances] = useState(0);
+    const [leaveBonus, setLeaveBonus] = useState(0);
+    const [unpaidDeductions, setUnpaidDeductions] = useState(0);
+    const [advanceDeductions, setAdvanceDeductions] = useState(0);
     const [notes, setNotes] = useState("");
     const [calcLoading, setCalcLoading] = useState(false);
 
@@ -31,12 +33,16 @@ const PayrollManagement = () => {
         const exist = paymentHistory.find(p => p.month_number == month && p.year == year);
 
         if (exist) {
-            setAllowances(exist.allowances);
-            setDeductions(exist.deductions);
+            setCustomAllowances(exist.allowances);
+            setUnpaidDeductions(exist.deductions);
+            setLeaveBonus(0);
+            setAdvanceDeductions(0);
             setNotes(exist.notes || "");
         } else {
-            setAllowances(0);
-            setDeductions(0);
+            setCustomAllowances(0);
+            setUnpaidDeductions(0);
+            setLeaveBonus(0);
+            setAdvanceDeductions(0);
             setNotes("");
         }
     }, [month, year, paymentHistory, processFormUpdate]);
@@ -89,7 +95,9 @@ const PayrollManagement = () => {
         try {
             const res = await api.get(`/attendance/monthly-report/${selectedEmployee.id}?month=${month}&year=${year}`);
             if (res.data) {
-                setDeductions(res.data.deductions || 0);
+                setUnpaidDeductions(res.data.deductions || 0);
+                setAdvanceDeductions(res.data.advance_deductions || 0);
+                setLeaveBonus(res.data.leave_encashment_amount || 0);
             }
         } catch (e) {
             console.error(e);
@@ -111,8 +119,8 @@ const PayrollManagement = () => {
                 year: parseInt(year),
                 month_number: parseInt(month),
                 basic_salary: parseFloat(basic),
-                allowances: parseFloat(allowances),
-                deductions: parseFloat(deductions),
+                allowances: parseFloat(customAllowances) + parseFloat(leaveBonus),
+                deductions: parseFloat(unpaidDeductions) + parseFloat(advanceDeductions),
                 payment_date: new Date().toISOString().split('T')[0],
                 payment_method: "Bank Transfer",
                 notes: notes
@@ -130,7 +138,7 @@ const PayrollManagement = () => {
         }
     };
 
-    const netSalary = (selectedEmployee?.salary || 0) + parseFloat(allowances || 0) - parseFloat(deductions || 0);
+    const netSalary = (selectedEmployee?.salary || 0) + parseFloat(customAllowances || 0) + parseFloat(leaveBonus || 0) - parseFloat(unpaidDeductions || 0) - parseFloat(advanceDeductions || 0);
 
     return (
         <div className="bg-white rounded-xl shadow p-6">
@@ -213,20 +221,41 @@ const PayrollManagement = () => {
                                     </div>
                                     <input
                                         type="number"
-                                        value={deductions}
-                                        onChange={e => setDeductions(e.target.value)}
+                                        value={unpaidDeductions}
+                                        onChange={e => setUnpaidDeductions(e.target.value)}
                                         className="w-full border border-gray-300 p-2 rounded-lg text-red-600 font-bold focus:ring-2 focus:ring-red-200 outline-none"
                                     />
                                 </div>
 
                                 <div>
-                                    <label className="text-xs font-semibold text-gray-600 mb-1 block">Allowances (Bonus, etc.)</label>
+                                    <label className="text-xs font-semibold text-gray-600 mb-1 block">Deductions (Salary Advance)</label>
                                     <input
                                         type="number"
-                                        value={allowances}
-                                        onChange={e => setAllowances(e.target.value)}
-                                        className="w-full border border-gray-300 p-2 rounded-lg text-green-600 font-bold focus:ring-2 focus:ring-green-200 outline-none"
+                                        value={advanceDeductions}
+                                        onChange={e => setAdvanceDeductions(e.target.value)}
+                                        className="w-full border border-gray-300 p-2 rounded-lg text-amber-600 font-bold focus:ring-2 focus:ring-amber-200 outline-none"
                                     />
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="text-xs font-semibold text-gray-600 mb-1 block">Leave Bonus</label>
+                                        <input
+                                            type="number"
+                                            disabled
+                                            value={leaveBonus}
+                                            className="w-full border border-gray-200 bg-gray-50 p-2 rounded-lg text-blue-600 font-bold outline-none"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-semibold text-gray-600 mb-1 block">Custom Allowances</label>
+                                        <input
+                                            type="number"
+                                            value={customAllowances}
+                                            onChange={e => setCustomAllowances(e.target.value)}
+                                            className="w-full border border-gray-300 p-2 rounded-lg text-green-600 font-bold focus:ring-2 focus:ring-green-200 outline-none"
+                                        />
+                                    </div>
                                 </div>
 
                                 <div>

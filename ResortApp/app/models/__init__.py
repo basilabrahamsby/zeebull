@@ -10,6 +10,7 @@ from .expense import Expense
 from .checkout import Checkout, CheckoutRequest
 from .employee import Employee, Attendance, Leave, WorkingLog
 from .salary_payment import SalaryPayment
+from .salary_advance import SalaryAdvance
 from .employee_inventory import EmployeeInventoryAssignment
 from .settings import SystemSetting
 from .food_category import FoodCategory

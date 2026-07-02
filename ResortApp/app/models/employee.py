@@ -33,6 +33,7 @@ class Employee(Base):
     attendances = relationship("Attendance", back_populates="employee", cascade="all, delete-orphan")
     working_logs = relationship("WorkingLog", back_populates="employee", cascade="all, delete-orphan")
     salary_payments = relationship("SalaryPayment", back_populates="employee", cascade="all, delete-orphan")
+    salary_advances = relationship("SalaryAdvance", back_populates="employee", cascade="all, delete-orphan")
     
     # Newly added for full cleanup
     assigned_services = relationship("AssignedService", back_populates="employee", cascade="all, delete-orphan")

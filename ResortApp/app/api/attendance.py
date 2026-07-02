@@ -12,6 +12,7 @@ import pytz
 from calendar import monthrange
 from app.utils.auth import get_db, get_current_user
 from app.models.employee import Attendance, WorkingLog, Employee, Leave
+from app.models.salary_advance import SalaryAdvance
 from app.models.settings import SystemSetting
 from app.models.user import User
 from app.utils.branch_scope import get_branch_id
@@ -103,6 +104,8 @@ class MonthlyReport(BaseModel):
     sick_leave_balance: int
     base_salary: float
     deductions: float
+    advance_deductions: float  # Total salary advances to be deducted this month
+    advance_count: int         # Number of advance records for this month
     net_salary: float
 
 class ClockInCreate(BaseModel):
@@ -519,8 +522,18 @@ def get_monthly_report(employee_id: int, year: int, month: int, db: Session = De
     paid_leave_limit = policy.get("paid_leave_monthly", 4)
     unused_paid_leaves = max(0, paid_leave_limit - paid_leaves_taken_month)
     leave_encashment_amount = per_day_salary * unused_paid_leaves
+
+    # Salary Advances deductible this month
+    advances = db.query(SalaryAdvance).filter(
+        SalaryAdvance.employee_id == employee_id,
+        SalaryAdvance.deduct_year == year,
+        SalaryAdvance.deduct_month == month,
+        SalaryAdvance.status == "pending"
+    ).all()
+    advance_deductions = sum(a.amount for a in advances)
+    advance_count = len(advances)
     
-    net_salary = base_salary - deductions + leave_encashment_amount
+    net_salary = base_salary - deductions + leave_encashment_amount - advance_deductions
 
 
     return MonthlyReport(
@@ -538,7 +551,10 @@ def get_monthly_report(employee_id: int, year: int, month: int, db: Session = De
         total_sick_leaves_year=total_sick_leaves_year,
         paid_leave_balance=total_paid_leaves_year - paid_leaves_used_year,
         sick_leave_balance=total_sick_leaves_year - sick_leaves_used_year,
-        base_salary=base_salary, deductions=round(deductions, 2), net_salary=round(net_salary, 2)
+        base_salary=base_salary, deductions=round(deductions, 2),
+        advance_deductions=round(advance_deductions, 2),
+        advance_count=advance_count,
+        net_salary=round(net_salary, 2)
     )
 
 

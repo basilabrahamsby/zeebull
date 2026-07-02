@@ -687,6 +687,20 @@ def create_salary_payment(
         SalaryPayment.year == payment.year
     ).first()
 
+    # Mark pending advances for this month as deducted
+    try:
+        from app.models.salary_advance import SalaryAdvance
+        advances = db.query(SalaryAdvance).filter(
+            SalaryAdvance.employee_id == employee_id,
+            SalaryAdvance.deduct_year == payment.year,
+            SalaryAdvance.deduct_month == payment.month_number,
+            SalaryAdvance.status == "pending"
+        ).all()
+        for adv in advances:
+            adv.status = "deducted"
+    except Exception as e:
+        print(f"Failed to auto-mark salary advances as deducted: {e}")
+
     if existing_payment:
         existing_payment.basic_salary = payment.basic_salary
         existing_payment.allowances = payment.allowances
