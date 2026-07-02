@@ -842,10 +842,12 @@ def get_or_create_guest_user(db: Session, email: str, mobile: str, name: str, br
     
     # If user exists, return the user_id
     if user:
-        # Update name if provided and different
+        # Update name if provided and different (Only for guests, do NOT overwrite staff/admin names)
         if name and user.name != name:
-            user.name = name
-            db.commit()
+            role_obj = db.query(Role).filter(Role.id == user.role_id).first()
+            if role_obj and role_obj.name == "guest":
+                user.name = name
+                db.commit()
         return user.id
     
     # If user doesn't exist, create a new guest user

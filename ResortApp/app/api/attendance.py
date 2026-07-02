@@ -5,6 +5,7 @@ from sqlalchemy import func
 
 from typing import List, Optional, Any, Dict
 from datetime import date, time, datetime, timedelta
+import datetime as dt
 from pydantic import BaseModel
 import pytz
 
@@ -64,6 +65,12 @@ class WorkingLogCreate(BaseModel):
     latitude: Optional[float] = None
     longitude: Optional[float] = None
 
+class WorkingLogUpdate(BaseModel):
+    check_in_time: Optional[time] = None
+    check_out_time: Optional[time] = None
+    date: Optional[dt.date] = None
+    location: Optional[str] = None
+
 class HolidayItem(BaseModel):
     date: str
     name: str
@@ -81,11 +88,13 @@ class MonthlyReport(BaseModel):
     month: int
     year: int
     total_days: int
-    present_days: int
-    absent_days: int
+    present_days: int      # Full day: >= 8 hrs
+    half_days: int         # Half day: 4-8 hrs
+    partial_days: int      # Partial: > 0 and < 4 hrs (only hours count)
+    absent_days: float
     paid_leaves_taken: int
     sick_leaves_taken: int
-    unpaid_leaves: int
+    unpaid_leaves: float
     total_paid_leaves_year: int
     total_sick_leaves_year: int
     paid_leave_balance: int
@@ -353,6 +362,27 @@ def update_completed_tasks(log_id: int, tasks_update: TasksUpdate, db: Session =
     
     return log_data
 
+@router.put("/work-logs/{log_id}", response_model=WorkingLogRecord)
+def update_working_log(log_id: int, log_update: WorkingLogUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    _role = current_user.role.name.lower().replace(' ', '_').replace('-', '_')
+    if not (getattr(current_user, "is_superadmin", False) or _role in ['super_admin', 'superadmin']):
+        raise HTTPException(status_code=403, detail="Only super administrators can edit clock in/out times.")
+        
+    db_log = db.query(WorkingLog).filter(WorkingLog.id == log_id).first()
+    if not db_log:
+        raise HTTPException(status_code=404, detail="Working log not found")
+        
+    update_data = log_update.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(db_log, key, value)
+        
+    db.commit()
+    db.refresh(db_log)
+    
+    log_data = WorkingLogRecord.model_validate(db_log)
+    log_data.duration_hours = _calculate_duration(db_log.date, db_log.check_in_time, db_log.check_out_time)
+    return log_data
+
 @router.post("/work-logs/{log_id}/approve", response_model=WorkingLogRecord)
 def approve_working_log_tasks(log_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     # Restrict to admins/managers (handle all common role name formats)
@@ -403,19 +433,19 @@ def get_monthly_report(employee_id: int, year: int, month: int, db: Session = De
     
     daily_hours = {}
     for log in working_logs:
-        duration = 0
-        if log.check_in_time and log.check_out_time:
-             # Calculate duration
-             start_dt = datetime.combine(log.date, log.check_in_time)
-             end_dt = datetime.combine(log.date, log.check_out_time)
-             if end_dt > start_dt:
-                 duration = (end_dt - start_dt).total_seconds() / 3600
-        
+        # Only count completed sessions (both clock-in and clock-out exist)
+        duration = _calculate_duration(log.date, log.check_in_time, log.check_out_time) or 0
         d_str = str(log.date)
         daily_hours[d_str] = daily_hours.get(d_str, 0) + duration
         
-    # Count days with at least 4 hours of work as "Present" (Half day or Full day)
-    present_days = sum(1 for hours in daily_hours.values() if hours >= 4)
+    # Three-tier attendance classification:
+    #   >= 8 hrs  -> Full Day (1.0 present day)
+    #   4-8 hrs   -> Half Day (0.5 present day)
+    #   0-4 hrs   -> Partial  (only the actual hours count, i.e. hours/8 of a day)
+    present_days = sum(1 for hours in daily_hours.values() if hours >= 8)
+    half_days    = sum(1 for hours in daily_hours.values() if 4 <= hours < 8)
+    partial_days = sum(1 for hours in daily_hours.values() if 0 < hours < 4)
+    partial_hours_total = sum(hours for hours in daily_hours.values() if 0 < hours < 4)
 
     # --- Leave Calculation for the Month ---
     approved_leaves_q = db.query(Leave).filter(
@@ -470,10 +500,13 @@ def get_monthly_report(employee_id: int, year: int, month: int, db: Session = De
     sick_leaves_used_year = sum([(l.to_date - l.from_date).days + 1 for l in approved_leaves_year if l.leave_type == 'Sick'])
 
     # --- Final Report ---
-    # Assuming non-working days are not tracked. Absent days are total days minus present and on-leave days.
-    # This is a simplification; a real system would exclude weekends/holidays.
-    absent_days = total_days_in_month - present_days - paid_leaves_taken_month - sick_leaves_taken_month
-    unpaid_leaves = max(0, absent_days)
+    # Effective present days:
+    #   Full days  = present_days × 1.0
+    #   Half days  = half_days × 0.5
+    #   Partial    = partial_hours_total / 8  (only actual hours credit, rest is absent)
+    effective_present = present_days + (half_days * 0.5) + (partial_hours_total / 8)
+    absent_days = total_days_in_month - effective_present - paid_leaves_taken_month - sick_leaves_taken_month
+    unpaid_leaves = max(0.0, absent_days)
 
     # --- Salary Calculation ---
     base_salary = employee.salary or 0.0
@@ -486,12 +519,19 @@ def get_monthly_report(employee_id: int, year: int, month: int, db: Session = De
 
 
     return MonthlyReport(
-        month=month, year=year, total_days=total_days_in_month, present_days=present_days,
-        absent_days=unpaid_leaves, paid_leaves_taken=paid_leaves_taken_month, sick_leaves_taken=sick_leaves_taken_month,
-        unpaid_leaves=unpaid_leaves, total_paid_leaves_year=total_paid_leaves_year, total_sick_leaves_year=total_sick_leaves_year,
+        month=month, year=year, total_days=total_days_in_month,
+        present_days=present_days,
+        half_days=half_days,
+        partial_days=partial_days,
+        absent_days=round(unpaid_leaves, 2),
+        paid_leaves_taken=paid_leaves_taken_month,
+        sick_leaves_taken=sick_leaves_taken_month,
+        unpaid_leaves=round(unpaid_leaves, 2),
+        total_paid_leaves_year=total_paid_leaves_year,
+        total_sick_leaves_year=total_sick_leaves_year,
         paid_leave_balance=total_paid_leaves_year - paid_leaves_used_year,
         sick_leave_balance=total_sick_leaves_year - sick_leaves_used_year,
-        base_salary=base_salary, deductions=deductions, net_salary=net_salary
+        base_salary=base_salary, deductions=round(deductions, 2), net_salary=round(net_salary, 2)
     )
 
 
@@ -520,12 +560,8 @@ def get_aggregate_utilization(db: Session = Depends(get_db), current_user: Any =
         
         total_month_hours = 0
         for log in logs:
-            if log.check_in_time and log.check_out_time:
-                # Direct subtraction of time objects isn't supported, combine with dummy date
-                start_dt = datetime.combine(get_ist_today().date(), log.check_in_time)
-                end_dt = datetime.combine(get_ist_today().date(), log.check_out_time)
-                if end_dt > start_dt:
-                    total_month_hours += (end_dt - start_dt).total_seconds() / 3600
+            duration = _calculate_duration(log.date, log.check_in_time, log.check_out_time) or 0
+            total_month_hours += duration
         
         results.append({
             "month": start_date.strftime("%b"),

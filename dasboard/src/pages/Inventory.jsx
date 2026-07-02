@@ -805,6 +805,7 @@ const Inventory = () => {
   const [loading, setLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [showInactiveItems, setShowInactiveItems] = useState(false);
 
   // Items state
   const [items, setItems] = useState([]);
@@ -1285,7 +1286,7 @@ const Inventory = () => {
           API.get("/inventory/categories?limit=1000"),
           API.get("/inventory/vendors?limit=1000"),
           API.get("/inventory/locations?limit=10000"),
-          API.get("/inventory/items?limit=1000"),
+          API.get(`/inventory/items?limit=1000&active_only=${!showInactiveItems}`),
           API.get("/inventory/purchases?limit=1000"),
           API.get("/inventory/waste-logs?limit=1000"),
         ]);
@@ -1300,13 +1301,13 @@ const Inventory = () => {
       }
     };
     fetchEssentialData();
-  }, [activeBranchId]);
+  }, [activeBranchId, showInactiveItems]);
 
   // Optimized: Refresh tab-specific data when tab changes (optional, keeps data fresh)
 
   useEffect(() => {
     fetchData();
-  }, [activeTab, activeBranchId]);
+  }, [activeTab, activeBranchId, showInactiveItems]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -1315,7 +1316,7 @@ const Inventory = () => {
       const limit = (activeTab === "locations" || activeTab === "transactions") ? 5000 : 1000; // Increased limit for transactions to show full history
 
       if (activeTab === "items") {
-        const res = await API.get(`/inventory/items?limit=${limit}`);
+        const res = await API.get(`/inventory/items?limit=${limit}&active_only=${!showInactiveItems}`);
         setItems(res.data || []);
       } else if (activeTab === "categories") {
         // Always fetch categories to ensure fresh data after add/edit
@@ -1437,7 +1438,7 @@ const Inventory = () => {
     } finally {
       setLoading(false);
     }
-  }, [activeTab, categories.length, vendors.length, locations.length, selectedLocationStock, fetchAssetMappings]);
+  }, [activeTab, categories.length, vendors.length, locations.length, selectedLocationStock, fetchAssetMappings, showInactiveItems]);
 
   const fetchTransfers = async () => {
     try {
@@ -2959,6 +2960,21 @@ const Inventory = () => {
                 </button>
               )}
             </div>
+
+            {activeTab === "items" && (
+              <div className="mb-4 flex items-center gap-3 bg-white hover:bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 w-fit shadow-sm transition-all duration-200">
+                <input
+                  type="checkbox"
+                  id="showInactiveItems"
+                  checked={showInactiveItems}
+                  onChange={(e) => setShowInactiveItems(e.target.checked)}
+                  className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500 cursor-pointer transition-colors"
+                />
+                <label htmlFor="showInactiveItems" className="text-sm font-semibold text-gray-700 hover:text-gray-900 cursor-pointer select-none">
+                  Show Inactive / Deactivated Items
+                </label>
+              </div>
+            )}
 
             {/* Content */}
             {loading ? (

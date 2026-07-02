@@ -52,7 +52,7 @@ const ItemsTable = ({ items, categories, onDelete, onEdit, onViewHistory, onMark
                         </tr>
                     ) : (
                         items.map((item) => (
-                            <tr key={item.id} className="hover:bg-gray-50">
+                            <tr key={item.id} className={`hover:bg-gray-50 ${!item.is_active ? 'opacity-60 bg-gray-50' : ''}`}>
                                 <td className="px-4 py-3 text-sm font-medium text-gray-900">
                                     {item.name}
                                 </td>
@@ -90,7 +90,11 @@ const ItemsTable = ({ items, categories, onDelete, onEdit, onViewHistory, onMark
                                     {item.unit_price != null ? formatCurrency(item.current_stock * item.unit_price) : "-"}
                                 </td>
                                 <td className="px-4 py-3 text-sm">
-                                    {item.is_low_stock ? (
+                                    {!item.is_active ? (
+                                        <span className="px-2 py-1 text-xs font-semibold text-gray-800 bg-gray-100 rounded-full border border-gray-200">
+                                            Inactive
+                                        </span>
+                                    ) : item.is_low_stock ? (
                                         <span className="px-2 py-1 text-xs font-semibold text-red-800 bg-red-100 rounded-full">
                                             Low Stock
                                         </span>

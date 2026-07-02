@@ -663,6 +663,7 @@ const AttendanceTracking = () => {
   const [workLogs, setWorkLogs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showManualEntryModal, setShowManualEntryModal] = useState(false);
+  const [editingLog, setEditingLog] = useState(null);
   const [message, setMessage] = useState({ text: '', type: '' });
   const [bannerMessage, setBannerMessage] = useState({ type: null, text: "" });
 
@@ -844,6 +845,28 @@ const AttendanceTracking = () => {
     }
   };
 
+  const handleUpdateLog = async (logId, updatedData) => {
+    try {
+      const response = await api.put(`/attendance/work-logs/${logId}`, updatedData);
+      setWorkLogs(workLogs.map(log => log.id === logId ? response.data : log).sort((a, b) => new Date(b.date) - new Date(a.date) || b.id - a.id));
+      showMessage("Attendance log updated successfully.", "success");
+      setEditingLog(null);
+    } catch (err) {
+      console.error("Failed to update attendance log", err);
+      let errorMsg = "Failed to update attendance log.";
+      if (err.response?.data?.detail) {
+        if (Array.isArray(err.response.data.detail)) {
+          errorMsg = err.response.data.detail.map(d => `${d.loc.join('.')}: ${d.msg}`).join(', ');
+        } else if (typeof err.response.data.detail === 'string') {
+          errorMsg = err.response.data.detail;
+        } else {
+          errorMsg = JSON.stringify(err.response.data.detail);
+        }
+      }
+      showMessage(errorMsg, "error");
+    }
+  };
+
   const dailyAttendance = useMemo(() => {
     const dailySummary = workLogs.reduce((acc, log) => {
       const date = log.date;
@@ -875,13 +898,13 @@ const AttendanceTracking = () => {
         statusDescription = 'Clocked In (Session in progress)';
       } else if (totalHours >= 8) {
         status = 'Present';
-        statusDescription = 'Full Day Present (8+ hours)';
+        statusDescription = 'Full Day (8+ hours)';
       } else if (totalHours >= 4 && totalHours < 8) {
         status = 'Half Day';
-        statusDescription = 'Half Day (4-8 hours)';
+        statusDescription = `Half Day (${totalHours.toFixed(2)} hrs – 4 to 8 hours)`;
       } else if (totalHours > 0 && totalHours < 4) {
         status = 'Partial';
-        statusDescription = `Partial Day (${totalHours.toFixed(2)} hours)`;
+        statusDescription = `Partial (${totalHours.toFixed(2)} hrs – less than 4 hours, only hours counted)`;
       } else {
         status = 'Absent';
         statusDescription = 'No attendance recorded';
@@ -1190,6 +1213,7 @@ const AttendanceTracking = () => {
                                           <th className="py-2 px-3 text-left font-semibold text-gray-700 border-b">Duration</th>
                                           <th className="py-2 px-3 text-left font-semibold text-gray-700 border-b">Tasks Done</th>
                                           <th className="py-2 px-3 text-left font-semibold text-gray-700 border-b">Status</th>
+                                          {isSuperadmin && <th className="py-2 px-3 text-left font-semibold text-gray-700 border-b">Actions</th>}
                                         </tr>
                                       </thead>
                                       <tbody>
@@ -1281,6 +1305,19 @@ const AttendanceTracking = () => {
                                                   </span>
                                                 )}
                                               </td>
+                                              {isSuperadmin && (
+                                                <td className="py-2 px-3">
+                                                  <button 
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      setEditingLog(log);
+                                                    }}
+                                                    className="text-indigo-600 hover:text-indigo-900 font-bold hover:underline"
+                                                  >
+                                                    Edit
+                                                  </button>
+                                                </td>
+                                              )}
                                             </tr>
                                           );
                                         }) : (
@@ -1312,6 +1349,13 @@ const AttendanceTracking = () => {
           employees={employees}
           onClose={() => setShowManualEntryModal(false)}
           onSubmit={handleManualEntry}
+        />
+      )}
+      {editingLog && (
+        <EditAttendanceModal 
+          log={editingLog}
+          onClose={() => setEditingLog(null)}
+          onSubmit={handleUpdateLog}
         />
       )}
     </div>
@@ -1437,6 +1481,120 @@ const ManualAttendanceModal = ({ employees, onClose, onSubmit }) => {
   );
 };
 
+const EditAttendanceModal = ({ log, onClose, onSubmit }) => {
+  const [formData, setFormData] = useState({
+    date: log.date || '',
+    check_in_time: log.check_in_time || '09:00:00',
+    check_out_time: log.check_out_time || '',
+    location: log.location || 'Office'
+  });
+
+  const handleChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    const dataToSend = {
+      date: formData.date,
+      check_in_time: formData.check_in_time,
+      check_out_time: formData.check_out_time || null,
+      location: formData.location
+    };
+    onSubmit(log.id, dataToSend);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden border border-gray-100"
+      >
+        <div className="bg-indigo-600 p-5 text-white flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-black leading-tight">Edit Attendance</h3>
+            <p className="text-[10px] text-indigo-100 font-bold uppercase tracking-widest mt-0.5">Super Admin Override</p>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-white/20 rounded-full transition-colors">
+            <Plus size={20} className="rotate-45" />
+          </button>
+        </div>
+        
+        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+          <div className="space-y-1">
+            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Date</label>
+            <input 
+              type="date" 
+              name="date" 
+              value={formData.date} 
+              onChange={handleChange} 
+              className="w-full bg-gray-50 border-gray-200 rounded-xl p-3 text-sm font-bold focus:ring-2 focus:ring-indigo-500 transition-all"
+              required 
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Check-in</label>
+              <input 
+                type="time" 
+                step="1"
+                name="check_in_time" 
+                value={formData.check_in_time} 
+                onChange={handleChange} 
+                className="w-full bg-gray-50 border-gray-200 rounded-xl p-3 text-sm font-bold focus:ring-2 focus:ring-indigo-500 transition-all"
+                required 
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Check-out</label>
+              <input 
+                type="time" 
+                step="1"
+                name="check_out_time" 
+                value={formData.check_out_time} 
+                onChange={handleChange} 
+                className="w-full bg-gray-50 border-gray-200 rounded-xl p-3 text-sm font-bold focus:ring-2 focus:ring-indigo-500 transition-all"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Location</label>
+            <select 
+              name="location" 
+              value={formData.location} 
+              onChange={handleChange} 
+              className="w-full bg-gray-50 border-gray-200 rounded-xl p-3 text-sm font-bold focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer"
+            >
+              <option>Office</option>
+              <option>Remote</option>
+              <option>On-Site</option>
+            </select>
+          </div>
+
+          <div className="pt-2 flex gap-3">
+            <button 
+              type="button" 
+              onClick={onClose}
+              className="flex-1 py-3 bg-gray-100 text-gray-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-200 transition-all"
+            >
+              Cancel
+            </button>
+            <button 
+              type="submit" 
+              className="flex-1 py-3 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95"
+            >
+              Update
+            </button>
+          </div>
+        </form>
+      </motion.div>
+    </div>
+  );
+};
+
 const MonthlyReport = () => {
   const [employees, setEmployees] = useState([]);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
@@ -1511,10 +1669,12 @@ const MonthlyReport = () => {
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
           <h3 className="text-xl font-bold">Monthly Report for {report.year && report.month ? new Date(report.year, report.month - 1).toLocaleString('default', { month: 'long', year: 'numeric' }) : date}</h3>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
             <ReportCard title="Total Days" value={report.total_days || 0} colorClass="bg-blue-100 text-blue-800" />
-            <ReportCard title="Present Days" value={report.present_days || 0} colorClass="bg-green-100 text-green-800" />
-            <ReportCard title="Paid Leaves" value={report.paid_leaves_taken || 0} colorClass="bg-yellow-100 text-yellow-800" />
+            <ReportCard title="Full Days" value={report.present_days || 0} colorClass="bg-green-100 text-green-800" />
+            <ReportCard title="Half Days" value={report.half_days || 0} colorClass="bg-yellow-100 text-yellow-800" />
+            <ReportCard title="Partial Days" value={report.partial_days || 0} colorClass="bg-orange-100 text-orange-800" />
+            <ReportCard title="Paid Leaves" value={report.paid_leaves_taken || 0} colorClass="bg-indigo-100 text-indigo-800" />
             <ReportCard title="Unpaid/Absent" value={report.unpaid_leaves || 0} colorClass="bg-red-100 text-red-800" />
           </div>
 

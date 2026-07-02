@@ -4418,11 +4418,11 @@ export default function ReportsDashboard() {
                           </div>
                           <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-200">
                             <p className="text-sm font-medium">Unadjusted</p>
-                            <p className="text-xl font-bold">₹{gstReportData.unadjusted_advance?.toFixed(2) || "0.00"}</p>
+                            <p className="text-xl font-bold">₹{gstReportData.total_advance_received?.toFixed(2) || "0.00"}</p>
                           </div>
                           <div className="bg-red-50 rounded-lg p-4 border border-red-200">
                             <p className="text-sm font-medium">Tax Liability</p>
-                            <p className="text-xl font-bold">₹{gstReportData.tax_liability_on_advance?.toFixed(2) || "0.00"}</p>
+                            <p className="text-xl font-bold">₹{gstReportData.total_tax_liability?.toFixed(2) || "0.00"}</p>
                           </div>
                         </div>
                         <div className="overflow-x-auto">
@@ -4443,9 +4443,9 @@ export default function ReportsDashboard() {
                                   <td className="p-2 border">{item.receipt_date}</td>
                                   <td className="p-2 border">{item.booking_id}</td>
                                   <td className="p-2 border">{item.guest_name}</td>
-                                  <td className="p-2 border text-right">₹{item.advance_amount?.toFixed(2)}</td>
+                                  <td className="p-2 border text-right">₹{item.gross_advance_received?.toFixed(2)}</td>
                                   <td className="p-2 border">{item.invoice_raised ? "Yes" : "No"}</td>
-                                  <td className="p-2 border text-right">₹{item.unadjusted_advance?.toFixed(2)}</td>
+                                  <td className="p-2 border text-right">₹{item.gross_advance_received?.toFixed(2)}</td>
                                 </tr>
                               ))}
                             </tbody>

@@ -139,18 +139,9 @@ def create_booking_confirmation_email(
         if stay_nights:
             charges_html += f'<div class="detail-row"><span class="detail-label">Stay Duration:</span><span class="detail-value">{stay_nights} night(s)</span></div>'
         
-        if booking_type == 'package' and package_charges:
-            charges_html += f'<div class="detail-row"><span class="detail-label">Package Charges:</span><span class="detail-value">Rs.{package_charges:,.2f}</span></div>'
-        elif room_charges:
-            charges_html += f'<div class="detail-row"><span class="detail-label">Room Charges:</span><span class="detail-value">Rs.{room_charges:,.2f}</span></div>'
-        
-        if total_amount:
-            # Calculate tax (5%)
-            tax = total_amount * 0.05
-            grand_total = total_amount + tax
-            charges_html += f'<div class="detail-row"><span class="detail-label">Subtotal:</span><span class="detail-value">Rs.{total_amount:,.2f}</span></div>'
-            charges_html += f'<div class="detail-row"><span class="detail-label">Tax (5%):</span><span class="detail-value">Rs.{tax:,.2f}</span></div>'
-            charges_html += f'<div class="detail-row" style="border-top: 2px solid #f59e0b; padding-top: 15px; margin-top: 15px;"><span class="detail-label" style="font-size: 18px;">Grand Total:</span><span class="detail-value" style="font-size: 18px; color: #f59e0b; font-weight: bold;">Rs.{grand_total:,.2f}</span></div>'
+        final_amount = total_amount or package_charges or room_charges
+        if final_amount:
+            charges_html += f'<div class="detail-row" style="border-top: 2px solid #f59e0b; padding-top: 15px; margin-top: 15px;"><span class="detail-label" style="font-size: 18px;">Total Amount:</span><span class="detail-value" style="font-size: 18px; color: #f59e0b; font-weight: bold;">Rs.{final_amount:,.2f}</span></div>'
         
         charges_html += '</div>'
     
