@@ -68,7 +68,7 @@ def create_salary_advance(
 
     new_advance = SalaryAdvance(
         employee_id=advance.employee_id,
-        branch_id=branch_id,
+        branch_id=branch_id if branch_id is not None else employee.branch_id,
         amount=advance.amount,
         date=advance.date,
         reason=advance.reason,
