@@ -75,7 +75,7 @@ def create_salary_advance(
         deduct_month=advance.deduct_month,
         deduct_year=advance.deduct_year,
         payment_method=advance.payment_method,
-        issued_by=advance.issued_by or current_user.username,
+        issued_by=advance.issued_by or current_user.name or current_user.email,
         notes=advance.notes,
         status="pending"
     )
