@@ -95,6 +95,8 @@ class MonthlyReport(BaseModel):
     paid_leaves_taken: int
     sick_leaves_taken: int
     unpaid_leaves: float
+    unused_paid_leaves: int    # Unused monthly paid leaves
+    leave_encashment_amount: float # Extra salary credited for unused leaves
     total_paid_leaves_year: int
     total_sick_leaves_year: int
     paid_leave_balance: int
@@ -510,12 +512,15 @@ def get_monthly_report(employee_id: int, year: int, month: int, db: Session = De
 
     # --- Salary Calculation ---
     base_salary = employee.salary or 0.0
-    if total_days_in_month > 0:
-        per_day_salary = base_salary / total_days_in_month
-        deductions = per_day_salary * unpaid_leaves
-    else:
-        deductions = 0
-    net_salary = base_salary - deductions
+    per_day_salary = base_salary / total_days_in_month if total_days_in_month > 0 else 0.0
+    deductions = per_day_salary * unpaid_leaves
+    
+    # Leave Encashment: if employee has not used their monthly paid leave, add the amount to their salary
+    paid_leave_limit = policy.get("paid_leave_monthly", 4)
+    unused_paid_leaves = max(0, paid_leave_limit - paid_leaves_taken_month)
+    leave_encashment_amount = per_day_salary * unused_paid_leaves
+    
+    net_salary = base_salary - deductions + leave_encashment_amount
 
 
     return MonthlyReport(
@@ -527,6 +532,8 @@ def get_monthly_report(employee_id: int, year: int, month: int, db: Session = De
         paid_leaves_taken=paid_leaves_taken_month,
         sick_leaves_taken=sick_leaves_taken_month,
         unpaid_leaves=round(unpaid_leaves, 2),
+        unused_paid_leaves=unused_paid_leaves,
+        leave_encashment_amount=round(leave_encashment_amount, 2),
         total_paid_leaves_year=total_paid_leaves_year,
         total_sick_leaves_year=total_sick_leaves_year,
         paid_leave_balance=total_paid_leaves_year - paid_leaves_used_year,

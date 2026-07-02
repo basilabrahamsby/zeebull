@@ -1694,12 +1694,17 @@ const MonthlyReport = () => {
 
           <div className="bg-white p-4 rounded-lg shadow">
             <h4 className="font-semibold mb-2">Salary Calculation for the Month</h4>
-            <div className="grid grid-cols-3 gap-4 text-center">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
               <div>
                 <p className="font-medium text-gray-600">Base Salary</p><p className="font-bold text-lg">{formatCurrency(report.base_salary || 0)}</p>
               </div>
               <div>
                 <p className="font-medium text-red-600">Deductions (Unpaid)</p><p className="font-bold text-lg text-red-500">- {formatCurrency(report.deductions || 0)}</p>
+              </div>
+              <div>
+                <p className="font-medium text-blue-600">Unused Leave Bonus</p>
+                <p className="font-bold text-lg text-blue-500">+ {formatCurrency(report.leave_encashment_amount || 0)}</p>
+                <p className="text-xs text-gray-500">({report.unused_paid_leaves || 0} unused paid leaves)</p>
               </div>
               <div>
                 <p className="font-medium text-green-600">Net Salary</p><p className="font-bold text-xl text-green-700">{formatCurrency(report.net_salary || 0)}</p>
