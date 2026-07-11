@@ -772,3 +772,135 @@ def create_salary_journal_entry(
 
     je = create_journal_entry(db, entry, branch_id=branch_id, created_by=created_by)
     return je.id
+
+
+def create_salary_advance_journal_entry(
+    db: Session,
+    advance_id: int,
+    amount: float,
+    employee_name: str,
+    payment_method: str,
+    branch_id: int,
+    created_by: Optional[int] = None
+) -> int:
+    """
+    Create journal entry when a salary advance is ISSUED to an employee.
+    Debit:  Staff Loans & Advances  (Current Asset – money owed back by employee)
+    Credit: Cash in Hand / Bank Account  (money going out)
+    """
+    # Credit ledger – cash or bank depending on payment method
+    if is_bank_ledger_method(payment_method):
+        credit_ledger = find_ledger_by_name(db, "Bank Account - Main", branch_id=branch_id, module="General")
+    else:
+        credit_ledger = find_ledger_by_name(db, "Cash in Hand", branch_id=branch_id, module="General")
+
+    if not credit_ledger:
+        credit_ledger = find_ledger_by_name(db, "Cash in Hand", branch_id=branch_id) or \
+                        find_ledger_by_name(db, "Bank Account - Main", branch_id=branch_id)
+
+    # Debit ledger – Staff Loans & Advances (asset)
+    debit_ledger = (
+        find_ledger_by_name(db, "Staff Loans & Advances", branch_id=branch_id) or
+        find_ledger_by_name(db, "Staff Loans and Advances", branch_id=branch_id) or
+        find_ledger_by_name(db, "Employee Advances", branch_id=branch_id) or
+        find_ledger_by_name(db, "Loans & Advances to Staff", branch_id=branch_id)
+    )
+
+    if not debit_ledger or not credit_ledger:
+        print(f"[WARNING] Salary advance ledgers not found (advance #{advance_id}). Skipping journal entry.")
+        return None
+
+    lines = [
+        JournalEntryLineCreateInEntry(
+            debit_ledger_id=debit_ledger.id,
+            credit_ledger_id=None,
+            amount=amount,
+            description=f"Salary advance issued to {employee_name}"
+        ),
+        JournalEntryLineCreateInEntry(
+            debit_ledger_id=None,
+            credit_ledger_id=credit_ledger.id,
+            amount=amount,
+            description=f"Paid via {payment_method}"
+        )
+    ]
+
+    entry = JournalEntryCreate(
+        entry_date=datetime.now(timezone.utc),
+        reference_type="salary_advance",
+        reference_id=advance_id,
+        description=f"Salary Advance - {employee_name}",
+        notes=f"Advance #{advance_id}, Method: {payment_method}",
+        lines=lines
+    )
+
+    try:
+        je = create_journal_entry(db, entry, branch_id=branch_id, created_by=created_by)
+        print(f"[INFO] Salary advance journal entry {je.entry_number} created for advance #{advance_id}")
+        return je.id
+    except Exception as e:
+        print(f"[ERROR] Failed to create salary advance journal entry: {str(e)}")
+        return None
+
+
+def create_salary_advance_deduction_journal_entry(
+    db: Session,
+    advance_id: int,
+    amount: float,
+    employee_name: str,
+    branch_id: int,
+    created_by: Optional[int] = None
+) -> int:
+    """
+    Create journal entry when a salary advance is DEDUCTED from salary (recouped).
+    Debit:  Salaries & Wages (salary expense increases by advance amount)
+    Credit: Staff Loans & Advances (asset is cleared – advance recovered)
+    """
+    debit_ledger = (
+        find_ledger_by_name(db, "Salaries & Wages", branch_id=branch_id) or
+        find_ledger_by_name(db, "Salary Expense", branch_id=branch_id) or
+        find_ledger_by_name(db, "Salaries", branch_id=branch_id)
+    )
+
+    credit_ledger = (
+        find_ledger_by_name(db, "Staff Loans & Advances", branch_id=branch_id) or
+        find_ledger_by_name(db, "Staff Loans and Advances", branch_id=branch_id) or
+        find_ledger_by_name(db, "Employee Advances", branch_id=branch_id) or
+        find_ledger_by_name(db, "Loans & Advances to Staff", branch_id=branch_id)
+    )
+
+    if not debit_ledger or not credit_ledger:
+        print(f"[WARNING] Salary advance deduction ledgers not found (advance #{advance_id}). Skipping journal entry.")
+        return None
+
+    lines = [
+        JournalEntryLineCreateInEntry(
+            debit_ledger_id=debit_ledger.id,
+            credit_ledger_id=None,
+            amount=amount,
+            description=f"Salary advance deducted from {employee_name}'s salary"
+        ),
+        JournalEntryLineCreateInEntry(
+            debit_ledger_id=None,
+            credit_ledger_id=credit_ledger.id,
+            amount=amount,
+            description=f"Staff Loans & Advances recovered - Advance #{advance_id}"
+        )
+    ]
+
+    entry = JournalEntryCreate(
+        entry_date=datetime.now(timezone.utc),
+        reference_type="salary_advance_deduction",
+        reference_id=advance_id,
+        description=f"Salary Advance Recovered - {employee_name}",
+        notes=f"Advance #{advance_id} deducted from salary",
+        lines=lines
+    )
+
+    try:
+        je = create_journal_entry(db, entry, branch_id=branch_id, created_by=created_by)
+        print(f"[INFO] Salary advance deduction journal entry {je.entry_number} for advance #{advance_id}")
+        return je.id
+    except Exception as e:
+        print(f"[ERROR] Failed to create advance deduction journal entry: {str(e)}")
+        return None

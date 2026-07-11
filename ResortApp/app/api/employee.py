@@ -138,7 +138,7 @@ def add_employee(
     )
 
 
-def _list_employees_impl(db: Session, current_user: User, branch_id: int, skip: int = 0, limit: int = 20):
+def _list_employees_impl(db: Session, current_user: User, branch_id: int, skip: int = 0, limit: int = 20, active_only: bool = None):
 
     """Helper function for list_employees with status calculation"""
     if limit > 1000:
@@ -146,7 +146,7 @@ def _list_employees_impl(db: Session, current_user: User, branch_id: int, skip: 
     if limit < 1:
         limit = 20
         
-    employees = crud_employee.get_employees(db, branch_id=branch_id, skip=skip, limit=limit)
+    employees = crud_employee.get_employees(db, branch_id=branch_id, skip=skip, limit=limit, active_only=active_only)
 
     
     # Calculate status logic
@@ -224,6 +224,7 @@ def _list_employees_impl(db: Session, current_user: User, branch_id: int, skip: 
             "image_url": emp.image_url,
             "user_id": emp.user_id,
             "daily_tasks": emp.daily_tasks,
+            "is_active": emp.is_active,
             "status": status,
             "current_status": status.replace("_", " ").title(),
             "is_clocked_in": status == "on_duty",
@@ -239,9 +240,10 @@ def list_employees(
     current_user: User = Depends(get_current_user),
     skip: int = 0,
     limit: int = 20,
+    active_only: bool = None,
     branch_id: int = Depends(get_branch_id)
 ):
-    return _list_employees_impl(db, current_user, branch_id, skip, limit)
+    return _list_employees_impl(db, current_user, branch_id, skip, limit, active_only)
 
 
 @router.get("/leave-policy")
@@ -512,9 +514,12 @@ def update_employee(
         print(f"DEBUG: Updating password for user {employee.user.email}")
         employee.user.hashed_password = auth.get_password_hash(password)
 
-    if is_active is not None and employee.user:
-        print(f"DEBUG: Updating is_active to {is_active} for user {employee.user.email}")
-        employee.user.is_active = is_active.lower() == "true"
+    if is_active is not None:
+        is_active_bool = is_active.lower() == "true"
+        print(f"DEBUG: Updating is_active to {is_active_bool} for employee {employee.id}")
+        employee.is_active = is_active_bool
+        if employee.user:
+            employee.user.is_active = is_active_bool
 
     db.commit()
     db.refresh(employee)
@@ -577,11 +582,14 @@ def delete_employee(employee_id: int, db: Session = Depends(get_db), current_use
         } if employee.user else None
     }
     
-    deleted_employee = crud_employee.delete_employee(db, employee_id)
-
-    if not deleted_employee:
-        raise HTTPException(status_code=404, detail="Employee not found")
-    return {"message": "Employee deleted successfully", "employee": employee_dict}
+    employee.is_active = False
+    if employee.user:
+        employee.user.is_active = False
+        
+    db.commit()
+    db.refresh(employee)
+    
+    return {"message": "Employee soft-deleted successfully", "employee": employee_dict}
 
 
 
@@ -754,3 +762,31 @@ def create_salary_payment(
         db.rollback()
 
     return new_payment
+
+
+@router.post("/migrate/add-is-active-column")
+def migrate_add_is_active_column(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Migration endpoint: Add is_active column to employees table if it doesn't exist."""
+    try:
+        # Check if column already exists
+        check_sql = text("""
+            SELECT column_name FROM information_schema.columns 
+            WHERE table_name='employees' AND column_name='is_active'
+        """)
+        result = db.execute(check_sql).fetchone()
+        
+        if result:
+            return {"status": "skipped", "message": "is_active column already exists on employees table"}
+        
+        # Add the column with default TRUE (all existing employees are active)
+        add_sql = text("""
+            ALTER TABLE employees 
+            ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT TRUE
+        """)
+        db.execute(add_sql)
+        db.commit()
+        
+        return {"status": "success", "message": "is_active column added to employees table. All existing employees set to active (true)."}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Migration failed: {str(e)}")

@@ -523,12 +523,11 @@ def get_monthly_report(employee_id: int, year: int, month: int, db: Session = De
     unused_paid_leaves = max(0, paid_leave_limit - paid_leaves_taken_month)
     leave_encashment_amount = per_day_salary * unused_paid_leaves
 
-    # Salary Advances deductible this month
+    # Salary Advances deductible this month (both pending and already deducted for this target month)
     advances = db.query(SalaryAdvance).filter(
         SalaryAdvance.employee_id == employee_id,
         SalaryAdvance.deduct_year == year,
-        SalaryAdvance.deduct_month == month,
-        SalaryAdvance.status == "pending"
+        SalaryAdvance.deduct_month == month
     ).all()
     advance_deductions = sum(a.amount for a in advances)
     advance_count = len(advances)

@@ -13,10 +13,14 @@ def create_employee(db: Session, emp: EmployeeCreate):
 def get_role_by_name(db: Session, role_name: str):
     return db.query(Role).filter(Role.name == role_name).first()
 
-def get_employees(db: Session, branch_id=None, skip: int = 0, limit: int = 100):
+def get_employees(db: Session, branch_id=None, skip: int = 0, limit: int = 100, active_only: bool = None):
     q = db.query(Employee)
     if branch_id is not None:
         q = q.filter(Employee.branch_id == branch_id)
+    if active_only is True:
+        q = q.filter(Employee.is_active == True)
+    elif active_only is False:
+        q = q.filter(Employee.is_active == False)
     return q.offset(skip).limit(limit).all()
 
 

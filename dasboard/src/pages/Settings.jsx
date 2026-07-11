@@ -22,7 +22,10 @@ export default function Settings() {
         gst_slab_rate_1: "5",
         gst_slab_rate_2: "12",
         gst_slab_rate_3: "18",
-        gst_inclusive: "false"
+        gst_inclusive: "false",
+        mobile_app_min_version: "1.2.1",
+        mobile_app_play_store_url: "https://play.google.com/store/apps/details?id=com.teqmates.zeebull_employee",
+        mobile_app_force_update: "true"
     });
     const [settingsLoading, setSettingsLoading] = useState(false);
 
@@ -82,6 +85,36 @@ export default function Settings() {
         } catch (error) {
             console.error("Error saving timezone:", error);
             alert("Failed to save Timezone");
+        }
+    };
+
+    // Save Mobile App settings
+    const handleSaveMobileSettings = async (e) => {
+        e.preventDefault();
+        try {
+            setSettingsLoading(true);
+            await api.post("settings/", {
+                key: "mobile_app_min_version",
+                value: settings.mobile_app_min_version,
+                description: "Minimum required mobile app version"
+            });
+            await api.post("settings/", {
+                key: "mobile_app_play_store_url",
+                value: settings.mobile_app_play_store_url,
+                description: "Google Play Store URL"
+            });
+            await api.post("settings/", {
+                key: "mobile_app_force_update",
+                value: settings.mobile_app_force_update,
+                description: "Enable force update checker"
+            });
+            alert("Mobile app settings saved successfully!");
+        } catch (error) {
+            console.error("Error saving mobile settings:", error);
+            alert("Failed to save mobile app settings");
+        } finally {
+            setSettingsLoading(false);
+            fetchSettings();
         }
     };
 
@@ -315,6 +348,66 @@ export default function Settings() {
                                     >
                                         <Save size={18} />
                                         Save Timezone
+                                    </button>
+                                </form>
+                            )}
+                        </div>
+
+                        {/* Mobile App Settings Section */}
+                        <div className="bg-white rounded-lg shadow p-6">
+                            <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+                                <Zap className="text-indigo-600" size={20} />
+                                Mobile App Configuration
+                            </h2>
+                            {settingsLoading ? (
+                                <div className="text-center py-4">Loading...</div>
+                            ) : (
+                                <form onSubmit={handleSaveMobileSettings} className="space-y-4">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-medium mb-2 text-gray-700">Minimum Required App Version</label>
+                                            <input
+                                                type="text"
+                                                value={settings.mobile_app_min_version || ""}
+                                                onChange={(e) => setSettings({ ...settings, mobile_app_min_version: e.target.value })}
+                                                placeholder="e.g. 1.2.1"
+                                                className="w-full border rounded px-4 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white text-gray-900"
+                                            />
+                                            <p className="text-xs text-gray-500 mt-1">
+                                                Users running versions below this will be blocked and forced to update.
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium mb-2 text-gray-700">Force Update Blocker</label>
+                                            <select
+                                                value={settings.mobile_app_force_update || "true"}
+                                                onChange={(e) => setSettings({ ...settings, mobile_app_force_update: e.target.value })}
+                                                className="w-full border rounded px-4 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white text-gray-900"
+                                            >
+                                                <option value="true">Enabled (Blocks older apps)</option>
+                                                <option value="false">Disabled (Optional updates)</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium mb-2 text-gray-700">Play Store Link / URL</label>
+                                        <input
+                                            type="text"
+                                            value={settings.mobile_app_play_store_url || ""}
+                                            onChange={(e) => setSettings({ ...settings, mobile_app_play_store_url: e.target.value })}
+                                            placeholder="Google Play Store app URL"
+                                            className="w-full border rounded px-4 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white text-gray-900"
+                                        />
+                                        <p className="text-xs text-gray-500 mt-1">
+                                            The direct URL for redirecting users to update the employee app.
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="submit"
+                                        className="px-6 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 flex items-center gap-2 transition-colors"
+                                    >
+                                        <Save size={18} />
+                                        Save Mobile App Settings
                                     </button>
                                 </form>
                             )}

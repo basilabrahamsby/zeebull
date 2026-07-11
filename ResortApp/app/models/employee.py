@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Date, ForeignKey, DateTime, Time
+from sqlalchemy import Column, Integer, String, Float, Date, ForeignKey, DateTime, Time, Boolean
 from sqlalchemy.orm import relationship, declarative_base
 from app.database import Base # Assuming you have a Base instance
 
@@ -12,6 +12,7 @@ class Employee(Base):
     join_date = Column(Date)
     image_url = Column(String, nullable=True) # ✅ Changed 'image' to 'image_url' for clarity
     daily_tasks = Column(String, nullable=True) # JSON or Text representing daily task list
+    is_active = Column(Boolean, default=True, nullable=False, server_default='true')  # soft-delete flag
 
     # Leave balances (total allocated per year)
     paid_leave_balance = Column(Integer, default=12)

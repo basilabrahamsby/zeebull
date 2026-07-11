@@ -50,7 +50,7 @@ const PayrollManagement = () => {
     const loadEmployees = async () => {
         setLoading(true);
         try {
-            const res = await api.get('/employees');
+            const res = await api.get('/employees?active_only=true');
             setEmployees(res.data || []);
         } catch (e) {
             console.error("Failed to load employees", e);

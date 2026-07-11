@@ -694,7 +694,12 @@ class _ManagerCheckoutWorkflowState extends State<ManagerCheckoutWorkflow> {
 
   Future<void> _handlePdfExport({bool isDownload = false}) async {
     const storage = FlutterSecureStorage();
-    final token = await storage.read(key: AppConstants.tokenKey);
+    String? token;
+    try {
+      token = await storage.read(key: AppConstants.tokenKey);
+    } catch (e) {
+      print("Warning: Secure storage read failed in checkout workflow: $e");
+    }
     final roomNum = _roomController.text.trim();
     
     if (token == null) return;

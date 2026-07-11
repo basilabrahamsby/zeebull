@@ -2761,8 +2761,13 @@ def _calculate_bill_for_single_room(db: Session, room_number: str, branch_id: in
     else:
         charges.package_charges = 0
         # For regular bookings: calculate room charges. 
+        is_ota = (getattr(booking, 'external_id', None) is not None and str(booking.external_id).strip() != "") or (getattr(booking, 'source', None) and booking.source.lower() not in ["direct", "walk-in", "walkin", "walk_in"])
+        if is_ota and getattr(booking, 'total_amount', 0) > 0:
+            num_rooms = getattr(booking, 'num_rooms', 1) or 1
+            charges.room_charges = booking.total_amount / num_rooms
+            print(f"[DEBUG-BILL] OTA Booking: Using pre-calculated OTA Room Charges {charges.room_charges}")
         # PRIORITY: Use custom room_rate from booking if set (overrides dynamic pricing)
-        if getattr(booking, 'room_rate', 0) > 0:
+        elif getattr(booking, 'room_rate', 0) > 0:
             charges.room_charges = booking.room_rate * stay_days
             print(f"[DEBUG-BILL] Using Custom Room Rate: {booking.room_rate} * {stay_days} days = {charges.room_charges}")
         else:
@@ -3645,18 +3650,23 @@ def _calculate_bill_for_entire_booking(db: Session, room_number: str, branch_id:
         charges.package_charges = 0
         # For regular bookings: calculate total room charges from ALL rooms using dynamic pricing
         total_room_cost = 0.0
-        for room in all_rooms:
-            # Match the single-room pricing logic exactly: 
-            # PRIORITY: Use custom room_rate from booking if set
-            if getattr(booking, 'room_rate', 0) > 0:
-                room_cost = booking.room_rate * stay_days
-                print(f"[DEBUG-BILL-MULTI] Room {room.number}: Using Custom Rate {booking.room_rate}")
-            else:
-                dynamic_rate = calculate_dynamic_booking_price(db, room.room_type_id, booking.check_in, effective_checkout_date, room_count=1)
-                room_cost = dynamic_rate or ((room.price or 0) * stay_days)
-                print(f"[DEBUG-BILL-MULTI] Room {room.number} (Type ID: {room.room_type_id}): Dynamic={dynamic_rate}, Final={room_cost}")
-            
-            total_room_cost += room_cost
+        is_ota = (getattr(booking, 'external_id', None) is not None and str(booking.external_id).strip() != "") or (getattr(booking, 'source', None) and booking.source.lower() not in ["direct", "walk-in", "walkin", "walk_in"])
+        if is_ota and getattr(booking, 'total_amount', 0) > 0:
+            total_room_cost = booking.total_amount
+            print(f"[DEBUG-BILL-MULTI] OTA Booking {booking.display_id}: Using pre-calculated OTA Total Amount {booking.total_amount}")
+        else:
+            for room in all_rooms:
+                # Match the single-room pricing logic exactly: 
+                # PRIORITY: Use custom room_rate from booking if set
+                if getattr(booking, 'room_rate', 0) > 0:
+                    room_cost = booking.room_rate * stay_days
+                    print(f"[DEBUG-BILL-MULTI] Room {room.number}: Using Custom Rate {booking.room_rate}")
+                else:
+                    dynamic_rate = calculate_dynamic_booking_price(db, room.room_type_id, booking.check_in, effective_checkout_date, room_count=1)
+                    room_cost = dynamic_rate or ((room.price or 0) * stay_days)
+                    print(f"[DEBUG-BILL-MULTI] Room {room.number} (Type ID: {room.room_type_id}): Dynamic={dynamic_rate}, Final={room_cost}")
+                
+                total_room_cost += room_cost
             
         charges.room_charges = total_room_cost
     
@@ -4245,7 +4255,8 @@ def _calculate_bill_for_entire_booking(db: Session, room_number: str, branch_id:
     total_room_nights = stay_days * len(all_rooms) if not is_package else stay_days
     from app.utils.settings_helpers import get_gst_settings
     gst_settings_local = get_gst_settings(db, branch_id)
-    is_inclusive = getattr(booking, 'rate_plan_code', None) == 'TAX_INCLUSIVE' or gst_settings_local.get("gst_inclusive", False)
+    is_ota = (getattr(booking, 'external_id', None) is not None and str(booking.external_id).strip() != "") or (getattr(booking, 'source', None) and booking.source.lower() not in ["direct", "walk-in", "walkin", "walk_in"])
+    is_inclusive = is_ota or getattr(booking, 'rate_plan_code', None) == 'TAX_INCLUSIVE' or gst_settings_local.get("gst_inclusive", False)
     gst_breakdown = calculate_gst_breakdown(
         db=db,
         branch_id=branch_id,
@@ -4333,7 +4344,8 @@ def get_bill_for_booking(room_number: str, checkout_mode: str = "multiple", db: 
         
         from app.utils.settings_helpers import get_gst_settings
         gst_settings = get_gst_settings(db, branch_id)
-        global_is_inclusive = getattr(bill_data["booking"], 'rate_plan_code', None) == 'TAX_INCLUSIVE' or gst_settings.get("gst_inclusive", False)
+        is_ota = (getattr(bill_data["booking"], 'external_id', None) is not None and str(bill_data["booking"].external_id).strip() != "") or (getattr(bill_data["booking"], 'source', None) and bill_data["booking"].source.lower() not in ["direct", "walk-in", "walkin", "walk_in"])
+        global_is_inclusive = is_ota or getattr(bill_data["booking"], 'rate_plan_code', None) == 'TAX_INCLUSIVE' or gst_settings.get("gst_inclusive", False)
         if global_is_inclusive:
             charges = bill_data["charges"]
             
@@ -4403,7 +4415,8 @@ def get_bill_for_booking(room_number: str, checkout_mode: str = "multiple", db: 
         
         from app.utils.settings_helpers import get_gst_settings
         gst_settings = get_gst_settings(db, branch_id)
-        global_is_inclusive = getattr(bill_data["booking"], 'rate_plan_code', None) == 'TAX_INCLUSIVE' or gst_settings.get("gst_inclusive", False)
+        is_ota = (getattr(bill_data["booking"], 'external_id', None) is not None and str(bill_data["booking"].external_id).strip() != "") or (getattr(bill_data["booking"], 'source', None) and bill_data["booking"].source.lower() not in ["direct", "walk-in", "walkin", "walk_in"])
+        global_is_inclusive = is_ota or getattr(bill_data["booking"], 'rate_plan_code', None) == 'TAX_INCLUSIVE' or gst_settings.get("gst_inclusive", False)
         if global_is_inclusive:
             charges = bill_data["charges"]
             
@@ -4741,8 +4754,9 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, backgro
             if discount_amount > 0:
                 from app.utils.settings_helpers import get_gst_settings
                 gst_settings = get_gst_settings(db, effective_branch_id)
-                global_is_inclusive = gst_settings.get("gst_inclusive", False)
-                room_is_inclusive = getattr(booking, 'rate_plan_code', None) == 'TAX_INCLUSIVE' or global_is_inclusive
+                is_ota = (getattr(booking, 'external_id', None) is not None and str(booking.external_id).strip() != "") or (getattr(booking, 'source', None) and booking.source.lower() not in ["direct", "walk-in", "walkin", "walk_in"])
+                global_is_inclusive = is_ota or gst_settings.get("gst_inclusive", False)
+                room_is_inclusive = is_ota or getattr(booking, 'rate_plan_code', None) == 'TAX_INCLUSIVE' or global_is_inclusive
                 new_gst_breakdown = calculate_gst_breakdown(
                     db=db,
                     branch_id=effective_branch_id,
@@ -4771,8 +4785,9 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, backgro
             else:
                 from app.utils.settings_helpers import get_gst_settings
                 gst_settings = get_gst_settings(db, effective_branch_id)
-                global_is_inclusive = gst_settings.get("gst_inclusive", False)
-                room_is_inclusive = getattr(booking, 'rate_plan_code', None) == 'TAX_INCLUSIVE' or global_is_inclusive
+                is_ota = (getattr(booking, 'external_id', None) is not None and str(booking.external_id).strip() != "") or (getattr(booking, 'source', None) and booking.source.lower() not in ["direct", "walk-in", "walkin", "walk_in"])
+                global_is_inclusive = is_ota or gst_settings.get("gst_inclusive", False)
+                room_is_inclusive = is_ota or getattr(booking, 'rate_plan_code', None) == 'TAX_INCLUSIVE' or global_is_inclusive
                 consumables_gst = consumables_charges * 0.05
                 tax_amount = base_gst + consumables_gst + asset_damage_gst
             
@@ -5634,8 +5649,9 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, backgro
             if discount_amount > 0:
                 from app.utils.settings_helpers import get_gst_settings
                 gst_settings = get_gst_settings(db, effective_branch_id)
-                global_is_inclusive = gst_settings.get("gst_inclusive", False)
-                room_is_inclusive = getattr(booking, 'rate_plan_code', None) == 'TAX_INCLUSIVE' or global_is_inclusive
+                is_ota = (getattr(booking, 'external_id', None) is not None and str(booking.external_id).strip() != "") or (getattr(booking, 'source', None) and booking.source.lower() not in ["direct", "walk-in", "walkin", "walk_in"])
+                global_is_inclusive = is_ota or gst_settings.get("gst_inclusive", False)
+                room_is_inclusive = is_ota or getattr(booking, 'rate_plan_code', None) == 'TAX_INCLUSIVE' or global_is_inclusive
                 new_gst_breakdown = calculate_gst_breakdown(
                     db=db,
                     branch_id=effective_branch_id,
@@ -5663,8 +5679,9 @@ def process_booking_checkout(room_number: str, request: CheckoutRequest, backgro
             else:
                 from app.utils.settings_helpers import get_gst_settings
                 gst_settings = get_gst_settings(db, effective_branch_id)
-                global_is_inclusive = gst_settings.get("gst_inclusive", False)
-                room_is_inclusive = getattr(booking, 'rate_plan_code', None) == 'TAX_INCLUSIVE' or global_is_inclusive
+                is_ota = (getattr(booking, 'external_id', None) is not None and str(booking.external_id).strip() != "") or (getattr(booking, 'source', None) and booking.source.lower() not in ["direct", "walk-in", "walkin", "walk_in"])
+                global_is_inclusive = is_ota or gst_settings.get("gst_inclusive", False)
+                room_is_inclusive = is_ota or getattr(booking, 'rate_plan_code', None) == 'TAX_INCLUSIVE' or global_is_inclusive
                 consumables_gst = total_consumables_charges * 0.05
                 tax_amount = base_gst + consumables_gst + asset_damage_gst
             

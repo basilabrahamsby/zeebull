@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:orchid_employee/presentation/widgets/responsive_container.dart';
 import 'package:provider/provider.dart';
 import 'package:orchid_employee/presentation/providers/auth_provider.dart';
 import 'package:orchid_employee/presentation/providers/management_provider.dart';
@@ -73,8 +74,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Stack(
+    return ResponsiveContainer(
+      child: Scaffold(
+        body: Stack(
         children: [
           // Premium Background Gradient
           Container(
@@ -203,7 +205,7 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ],
       ),
-    );
+    ));
   }
 
   Widget _buildTextField({

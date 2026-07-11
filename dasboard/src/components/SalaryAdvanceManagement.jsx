@@ -20,7 +20,7 @@ const SalaryAdvanceManagement = () => {
     const [notes, setNotes] = useState('');
 
     useEffect(() => {
-        api.get('/employees').then(res => {
+        api.get('/employees?active_only=true').then(res => {
             setEmployees(res.data || []);
             if (res.data && res.data.length > 0) {
                 setSelectedEmployeeId(res.data[0].id);

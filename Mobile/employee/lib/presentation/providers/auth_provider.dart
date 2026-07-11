@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:dio/dio.dart';
 import 'package:orchid_employee/data/services/api_service.dart';
 import 'package:orchid_employee/core/constants/app_constants.dart';
 import 'package:orchid_employee/core/constants/api_constants.dart';
@@ -25,7 +26,8 @@ class AuthProvider extends ChangeNotifier {
   String? _branchImage;
   List<String> _dailyTasks = [];
   String? _error;
-
+  bool _needsUpdate = false;
+  String? _playStoreUrl;
 
   AuthStatus get status => _status;
   UserRole get role => _role;
@@ -39,6 +41,8 @@ class AuthProvider extends ChangeNotifier {
   String? get branchImage => _branchImage;
   List<String> get dailyTasks => _dailyTasks;
   String? get error => _error;
+  bool get needsUpdate => _needsUpdate;
+  String? get playStoreUrl => _playStoreUrl;
 
 
   AuthProvider(this._apiService) {
@@ -47,7 +51,34 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> _init() async {
-    _token = await _storage.read(key: AppConstants.tokenKey);
+    try {
+      // Hard cap: if everything takes > 15s, bail out and show login
+      await Future.any([
+        _initInternal(),
+        Future.delayed(const Duration(seconds: 15)),
+      ]);
+    } catch (e) {
+      print("[AUTH-INIT] Error during init: $e");
+    } finally {
+      // Always leave the loading screen — never hang forever
+      if (_status == AuthStatus.unknown) {
+        _status = AuthStatus.unauthenticated;
+      }
+      notifyListeners();
+    }
+  }
+
+  Future<void> _initInternal() async {
+    await checkAppVersion();
+    try {
+      _token = await _storage.read(key: AppConstants.tokenKey);
+    } catch (e) {
+      print("Warning: Secure storage read failed: $e");
+      try {
+        await _storage.deleteAll();
+      } catch (_) {}
+      _token = null;
+    }
     if (_token != null && !JwtDecoder.isExpired(_token!)) {
       _status = AuthStatus.authenticated;
       _decodeRole(_token!);
@@ -58,6 +89,53 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> checkAppVersion() async {
+    try {
+      // Short 8s timeout — don't block the app startup on version check
+      final response = await _apiService.dio.get(
+        '/public/app-version',
+        options: Options(receiveTimeout: const Duration(seconds: 8), sendTimeout: const Duration(seconds: 8)),
+      );
+      if (response.statusCode == 200 && response.data != null) {
+        final data = response.data;
+        final minVersionStr = data['min_version']?.toString() ?? '1.2.2';
+        _playStoreUrl = data['play_store_url']?.toString();
+        // Respect the force_update flag from the backend
+        final forceUpdate = data['force_update'] == true;
+
+        const currentVersionStr = '1.2.2'; // Matches pubspec.yaml version
+
+        if (forceUpdate && _isVersionOlder(currentVersionStr, minVersionStr)) {
+          _needsUpdate = true;
+          print("⚠️ [APP-UPDATE] Force update required to version: $minVersionStr (Current: $currentVersionStr)");
+        } else {
+          _needsUpdate = false;
+          print("✅ [APP-UPDATE] No force update. force_update=$forceUpdate, current=$currentVersionStr, min=$minVersionStr");
+        }
+      }
+    } catch (e) {
+      // Never block startup due to version check failure
+      print("Warning: App version check failed (continuing): $e");
+      _needsUpdate = false;
+    }
+  }
+
+  bool _isVersionOlder(String current, String required) {
+    try {
+      List<int> currentParts = current.split('.').map((e) => int.parse(e)).toList();
+      List<int> requiredParts = required.split('.').map((e) => int.parse(e)).toList();
+      
+      for (int i = 0; i < requiredParts.length; i++) {
+        if (i >= currentParts.length) return true;
+        if (currentParts[i] < requiredParts[i]) return true;
+        if (currentParts[i] > requiredParts[i]) return false;
+      }
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
+
   Future<bool> login(String username, String password) async {
     _error = null;
     try {
@@ -66,15 +144,26 @@ class AuthProvider extends ChangeNotifier {
       print("LOGIN RESPONSE: ${response.statusCode} - ${response.data}");
 
       if (response.statusCode == 200) {
-        // Assuming response contains { "access_token": "...", "token_type": "bearer" }
         final accessToken = response.data['access_token'];
         if (accessToken != null) {
-          await _storage.write(key: AppConstants.tokenKey, value: accessToken);
+          try {
+            await _storage.write(key: AppConstants.tokenKey, value: accessToken);
+          } catch (e) {
+            print("Warning: Secure storage write failed: $e");
+            try {
+              await _storage.deleteAll();
+              await _storage.write(key: AppConstants.tokenKey, value: accessToken);
+            } catch (_) {}
+          }
           _token = accessToken;
           _status = AuthStatus.authenticated;
           _decodeRole(accessToken);
-          await _fetchEmployeeProfile();
+          // ✅ Navigate to dashboard immediately — don't wait for profile
           notifyListeners();
+          // Fetch profile silently in background after navigation
+          _fetchEmployeeProfile().catchError((e) {
+            print("Background profile fetch error (non-fatal): $e");
+          });
           return true;
         }
       }
@@ -96,7 +185,9 @@ class AuthProvider extends ChangeNotifier {
 
 
   Future<void> logout() async {
-    await _storage.delete(key: AppConstants.tokenKey);
+    try {
+      await _storage.delete(key: AppConstants.tokenKey);
+    } catch (_) {}
     _status = AuthStatus.unauthenticated;
     _role = UserRole.unknown;
     _userName = null;
@@ -135,15 +226,17 @@ class AuthProvider extends ChangeNotifier {
   }
 
   UserRole _parseRole(String? roleStr) {
-    if (roleStr == null) return UserRole.unknown;
-    roleStr = roleStr.toLowerCase();
-    if (roleStr.contains('manager') || roleStr.contains('admin')) return UserRole.manager;
+    if (roleStr == null) return UserRole.housekeeping;
+    roleStr = roleStr.toLowerCase().replaceAll(' ', '');
+    if (roleStr.contains('manager') || roleStr.contains('admin')) {
+      return UserRole.manager;
+    }
 
     if (roleStr.contains('housekeeping')) return UserRole.housekeeping;
     if (roleStr.contains('kitchen') || roleStr.contains('chef') || roleStr.contains('cook')) return UserRole.kitchen;
     if (roleStr.contains('waiter') || roleStr.contains('server') || roleStr.contains('service') || roleStr.contains('room')) return UserRole.waiter;
     if (roleStr.contains('maintenance')) return UserRole.maintenance;
-    return UserRole.unknown;
+    return UserRole.housekeeping; // Redirect unknown to housekeeping
   }
 
   Future<void> refreshProfile() async {

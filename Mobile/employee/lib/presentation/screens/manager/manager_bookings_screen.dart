@@ -1042,7 +1042,12 @@ class _ManagerBookingsScreenState extends State<ManagerBookingsScreen> with Sing
   Future<void> _handlePdfExport(String roomNumber, String? branchId) async {
     if (roomNumber.isEmpty) return;
     const storage = FlutterSecureStorage();
-    final token = await storage.read(key: AppConstants.tokenKey);
+    String? token;
+    try {
+      token = await storage.read(key: AppConstants.tokenKey);
+    } catch (e) {
+      print("Warning: Secure storage read failed in bookings screen: $e");
+    }
     if (token == null) return;
     
     final url = "${ApiConstants.baseUrl}/bill/$roomNumber/print?token=$token&branch_id=${branchId ?? ''}";

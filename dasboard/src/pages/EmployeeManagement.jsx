@@ -42,7 +42,7 @@ const EmployeeOverview = () => {
 
 
   useEffect(() => {
-    api.get('/employees').then(res => {
+    api.get('/employees?active_only=true').then(res => {
       setEmployees(res.data || []);
       if (res.data && res.data.length > 0) {
         setSelectedEmployeeId(res.data[0].id);
@@ -401,37 +401,24 @@ const UserHistory = () => {
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        // Fetch both users and employees to show all users including admins
-        const [usersRes, employeesRes] = await Promise.all([
-          api.get("/users/"),
-          api.get("/employees")
-        ]);
-
-        const users = usersRes.data || [];
+        // Only fetch active employees (not guests or purchase manager system accounts)
+        const employeesRes = await api.get("/employees?skip=0&limit=1000&active_only=true");
         const employees = employeesRes.data || [];
 
-        // Create a map of employees by user_id for quick lookup
-        const employeeMap = new Map();
-        employees.forEach(emp => {
-          if (emp.user_id) {
-            employeeMap.set(emp.user_id, emp);
-          }
-        });
-
-        // Combine users with their employee data
-        const combinedUsers = users.map(user => ({
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          role: user.role?.name || 'Unknown',
-          phone: user.phone,
-          is_active: user.is_active,
-          // Add employee-specific data if available
-          salary: employeeMap.get(user.id)?.salary || null,
-          join_date: employeeMap.get(user.id)?.join_date || null,
-          image_url: employeeMap.get(user.id)?.image_url || null,
-          has_employee_record: employeeMap.has(user.id)
-        }));
+        // Only show users who are actual employees (have an employee record)
+        const combinedUsers = employees.map(emp => ({
+          id: emp.user_id || emp.id,
+          employee_id: emp.id,
+          name: emp.name,
+          email: emp.email,
+          role: emp.role || emp.designation || 'Staff',
+          phone: emp.phone,
+          is_active: emp.is_active,
+          salary: emp.salary || null,
+          join_date: emp.join_date || null,
+          image_url: emp.image_url || null,
+          has_employee_record: true
+        })).filter(u => u.id); // ensure valid user_id
 
         setUsers(combinedUsers);
       } catch (err) {
@@ -477,7 +464,7 @@ const UserHistory = () => {
             <option value="">-- Select a User --</option>
             {users.map((user) => (
               <option key={user.id} value={user.id}>
-                {user.name} ({user.role}) {!user.has_employee_record ? '(Admin)' : ''}
+                {user.name} ({user.role})
               </option>
             ))}
           </select>
@@ -528,7 +515,7 @@ const LeaveManagement = () => {
   });
 
   useEffect(() => {
-    api.get('/employees').then(res => setEmployees(res.data));
+    api.get('/employees?active_only=true').then(res => setEmployees(res.data));
   }, []);
 
   useEffect(() => {
@@ -684,7 +671,7 @@ const AttendanceTracking = () => {
   const [previewUrl, setPreviewUrl] = useState(null);
 
   useEffect(() => {
-    api.get('/employees').then(res => setEmployees(res.data));
+    api.get('/employees?active_only=true').then(res => setEmployees(res.data));
   }, []);
 
   useEffect(() => {
@@ -1236,16 +1223,27 @@ const AttendanceTracking = () => {
                                                 </span>
                                               </td>
                                               <td className="py-2 px-3">
-                                                {log.clock_in_image ? (
-                                                  <button 
-                                                    onClick={() => window.open(getImageUrl(log.clock_in_image), '_blank')}
-                                                    className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-800 font-extrabold hover:underline"
-                                                  >
-                                                    <Camera size={12} /> View Photo
-                                                  </button>
-                                                ) : (
-                                                  <span className="text-gray-400">-</span>
-                                                )}
+                                                <div className="flex flex-col gap-1">
+                                                  {log.clock_in_image ? (
+                                                    <button 
+                                                      onClick={() => window.open(getImageUrl(log.clock_in_image), '_blank')}
+                                                      className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-800 font-semibold hover:underline whitespace-nowrap"
+                                                    >
+                                                      <Camera size={12} /> Check-in Photo
+                                                    </button>
+                                                  ) : null}
+                                                  {log.clock_out_image ? (
+                                                    <button 
+                                                      onClick={() => window.open(getImageUrl(log.clock_out_image), '_blank')}
+                                                      className="inline-flex items-center gap-1 text-emerald-600 hover:text-emerald-800 font-semibold hover:underline whitespace-nowrap"
+                                                    >
+                                                      <Camera size={12} /> Check-out Photo
+                                                    </button>
+                                                  ) : null}
+                                                  {!log.clock_in_image && !log.clock_out_image && (
+                                                    <span className="text-gray-400">-</span>
+                                                  )}
+                                                </div>
                                               </td>
                                               <td className="py-2 px-3">
                                                 {hours > 0 ? (
@@ -1605,7 +1603,7 @@ const MonthlyReport = () => {
   const [date, setDate] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM format
 
   useEffect(() => {
-    api.get('/employees').then(res => setEmployees(res.data));
+    api.get('/employees?active_only=true').then(res => setEmployees(res.data));
   }, []);
 
   useEffect(() => {
@@ -1786,7 +1784,7 @@ const StatusOverview = () => {
   );
 };
 
-const EmployeeListAndForm = () => {
+const EmployeeListAndForm = ({ showInactiveOnly = false }) => {
   const [employees, setEmployees] = useState([]);
   const [roles, setRoles] = useState([]);
   const [form, setForm] = useState({ name: "", role: "", salary: "", join_date: "", email: "", phone: "", password: "", daily_tasks: [], image: null });
@@ -1805,7 +1803,7 @@ const EmployeeListAndForm = () => {
   useEffect(() => {
     fetchEmployees();
     fetchRoles();
-  }, []);
+  }, [showInactiveOnly]);
 
   const authHeader = () => ({ 
     headers: { 
@@ -1816,10 +1814,11 @@ const EmployeeListAndForm = () => {
 
   const fetchEmployees = async () => {
     try {
-      // Fetch both users and employees to show all users including admins
+      // For Directory tab: active_only=true; For Former Staff tab: active_only=false
+      const activeParam = showInactiveOnly ? 'false' : 'true';
       const [usersRes, employeesRes] = await Promise.all([
         api.get("/users/?skip=0&limit=1000", authHeader()),
-        api.get("/employees?skip=0&limit=1000", authHeader())
+        api.get(`/employees?skip=0&limit=1000&active_only=${activeParam}`, authHeader())
       ]);
 
       const users = usersRes.data || [];
@@ -1840,7 +1839,11 @@ const EmployeeListAndForm = () => {
           const isGuest = roleName === 'guest' || roleName === 'guest user';
           const hasEmpRecord = employeeMap.has(user.id);
           const isAdmin = user.email === 'admin@orchid.com';
-          
+          // For Former Staff tab (showInactiveOnly): show only inactive
+          // For Directory tab (!showInactiveOnly): skip admin-only users, show active
+          if (showInactiveOnly) {
+            return !isGuest && hasEmpRecord;
+          }
           return !isGuest && (hasEmpRecord || isAdmin);
         }) // Hide guest users and users without employee records (except admin)
         .map(user => {
@@ -1852,7 +1855,7 @@ const EmployeeListAndForm = () => {
             email: user.email,
             role: user.role?.name || 'Unknown',
             phone: user.phone,
-            is_active: user.is_active,
+            is_active: empData ? empData.is_active : user.is_active,
             // Add employee-specific data if available
             salary: empData?.salary || null,
             join_date: empData?.join_date || null,
@@ -2046,7 +2049,9 @@ const EmployeeListAndForm = () => {
     }
   };
 
-  const filteredEmployees = employees.filter((emp) => salaryFilter ? emp.salary >= parseFloat(salaryFilter) : true);
+  const filteredEmployees = employees
+    .filter(emp => showInactiveOnly ? !emp.is_active : emp.is_active)
+    .filter((emp) => salaryFilter ? emp.salary >= parseFloat(salaryFilter) : true);
 
   const exportToExcel = () => {
     const worksheet = XLSX.utils.json_to_sheet(filteredEmployees);
@@ -2055,9 +2060,9 @@ const EmployeeListAndForm = () => {
     XLSX.writeFile(workbook, "employees.xlsx");
   };
 
-  const totalEmployees = employees.length;
-  const avgSalary = employees.length > 0 ? Math.round(employees.reduce((acc, e) => acc + (e?.salary || 0), 0) / employees.length) : 0;
-  const rolesCount = roles.map((r) => ({ name: r.name, count: employees.filter((e) => e.role === r.name).length, trend: Array.from({ length: 30 }, () => Math.floor(Math.random() * 10000)) }));
+  const totalEmployees = employees.filter(e => showInactiveOnly ? !e.is_active : e.is_active).length;
+  const avgSalary = totalEmployees > 0 ? Math.round(employees.filter(e => showInactiveOnly ? !e.is_active : e.is_active).reduce((acc, e) => acc + (e?.salary || 0), 0) / totalEmployees) : 0;
+  const rolesCount = roles.map((r) => ({ name: r.name, count: employees.filter(e => showInactiveOnly ? !e.is_active : e.is_active).filter((e) => e.role === r.name).length, trend: Array.from({ length: 30 }, () => Math.floor(Math.random() * 10000)) }));
   const kpiData = [{ label: "Total Employees", value: totalEmployees, color: "#4f46e5", trend: employees.map(e => e?.salary || 0) }, { label: "Avg Salary", value: avgSalary, color: "#16a34a", trend: employees.map(e => e?.salary || 0) }, ...rolesCount.map(r => ({ label: r.name, value: r.count, color: "#f59e0b", trend: r.trend }))];
 
   return (
@@ -2067,7 +2072,7 @@ const EmployeeListAndForm = () => {
         <div className="bg-gradient-to-br from-indigo-600 to-blue-700 p-6 rounded-2xl shadow-lg text-white">
           <p className="text-xs font-black uppercase tracking-widest opacity-80 mb-1">Onboarded Talent</p>
           <div className="flex items-center justify-between">
-            <h4 className="text-4xl font-black">{employees.length}</h4>
+            <h4 className="text-4xl font-black">{showInactiveOnly ? employees.filter(e => !e.is_active).length : employees.filter(e => e.is_active).length}</h4>
             <div className="p-3 bg-white/20 rounded-xl backdrop-blur-md">
               <Users size={24} />
             </div>
@@ -2080,7 +2085,7 @@ const EmployeeListAndForm = () => {
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
           <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Financial Commitment</p>
           <h4 className="text-3xl font-black text-gray-800">
-            {formatCurrency(employees.reduce((acc, e) => acc + (e?.salary || 0), 0))}
+            {formatCurrency(employees.filter(e => showInactiveOnly ? !e.is_active : e.is_active).reduce((acc, e) => acc + (e?.salary || 0), 0))}
           </h4>
           <p className="text-[10px] mt-4 font-bold text-gray-400">Total Monthly Salary Burden</p>
         </div>
@@ -2089,30 +2094,33 @@ const EmployeeListAndForm = () => {
           <div>
             <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Operational Capacity</p>
             <div className="flex -space-x-2 mt-2">
-              {employees.slice(0, 5).map((e, i) => (
+              {employees.filter(e => showInactiveOnly ? !e.is_active : e.is_active).slice(0, 5).map((e, i) => (
                 <div key={i} className="w-8 h-8 rounded-full border-2 border-white bg-gray-200 flex items-center justify-center text-[10px] font-black overflow-hidden shadow-sm">
                   {e.image_url ? <img src={`${mediaBaseUrl}/${e.image_url}`} className="w-full h-full object-cover" /> : e.name.charAt(0)}
                 </div>
               ))}
-              {employees.length > 5 && (
+              {employees.filter(e => showInactiveOnly ? !e.is_active : e.is_active).length > 5 && (
                 <div className="w-8 h-8 rounded-full border-2 border-white bg-gray-900 text-white flex items-center justify-center text-[10px] font-black shadow-sm">
-                  +{employees.length - 5}
+                  +{employees.filter(e => showInactiveOnly ? !e.is_active : e.is_active).length - 5}
                 </div>
               )}
             </div>
           </div>
-          <button
-            onClick={() => { setEditId(null); resetForm(); }}
-            className="w-full mt-4 py-2 bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest rounded-lg hover:bg-blue-700 shadow-lg shadow-blue-100"
-          >
-            Onboard New Staff
-          </button>
+          {!showInactiveOnly && (
+            <button
+              onClick={() => { setEditId(null); resetForm(); }}
+              className="w-full mt-4 py-2 bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest rounded-lg hover:bg-blue-700 shadow-lg shadow-blue-100"
+            >
+              Onboard New Staff
+            </button>
+          )}
         </div>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
         {/* Form Panel */}
-        <div className="xl:col-span-1">
+        {!showInactiveOnly ? (
+          <div className="xl:col-span-1">
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 sticky top-6">
             <h3 className="text-lg font-black text-gray-800 mb-6 flex items-center gap-2">
               <div className="w-2 h-6 bg-orange-500 rounded-full"></div>
@@ -2230,9 +2238,10 @@ const EmployeeListAndForm = () => {
             </form>
           </div>
         </div>
+        ) : null}
 
         {/* Directory List Panel */}
-        <div className="xl:col-span-2 space-y-4">
+        <div className={showInactiveOnly ? "xl:col-span-3 space-y-4" : "xl:col-span-2 space-y-4"}>
           <div className="bg-white p-4 items-center rounded-2xl shadow-sm border border-gray-100 flex justify-between">
             <div className="relative flex-1 max-w-sm">
               <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -2497,6 +2506,7 @@ const EmployeeManagement = () => {
   const generalTabs = [
     { id: 'overview', label: 'Overview', icon: <TrendingUp size={18} />, permission: 'employee_management:view' },
     { id: 'manage-employees', label: 'Directory', icon: <Users size={18} />, permission: 'employee_management:view' },
+    { id: 'inactive-employees', label: 'Former Staff', icon: <Users size={18} />, permission: 'employee_management:view' },
     { id: 'report', label: 'Activity Tracking', icon: <Search size={18} />, permission: 'reports_global:view' },
   ].filter(tab => hasPermission(tab.permission) || isAdmin);
 
@@ -2529,6 +2539,7 @@ const EmployeeManagement = () => {
     switch (activeTab) {
       case 'overview': return <EmployeeOverview />;
       case 'manage-employees': return <EmployeeListAndForm />;
+      case 'inactive-employees': return <EmployeeListAndForm showInactiveOnly={true} />;
       case 'payroll': return <PayrollManagement />;
       case 'salary-advance': return <SalaryAdvanceManagement />;
       case 'report': return <UserHistory />;

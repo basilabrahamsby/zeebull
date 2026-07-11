@@ -31,7 +31,12 @@ class ApiService {
     _dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) async {
         print("[DIO-REQ] ${options.method} ${options.baseUrl}${options.path}");
-        final token = await _storage.read(key: AppConstants.tokenKey);
+        String? token;
+        try {
+          token = await _storage.read(key: AppConstants.tokenKey);
+        } catch (e) {
+          print("Warning: Secure storage read failed in interceptor: $e");
+        }
         if (token != null) {
           options.headers['Authorization'] = 'Bearer $token';
         }

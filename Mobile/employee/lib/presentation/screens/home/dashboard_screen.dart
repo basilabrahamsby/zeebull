@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:orchid_employee/presentation/widgets/responsive_container.dart';
 import 'package:orchid_employee/presentation/providers/auth_provider.dart';
 import 'package:orchid_employee/core/constants/app_colors.dart';
 import 'package:orchid_employee/presentation/screens/housekeeping/room_list_screen.dart';
@@ -41,8 +42,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final userRole = Provider.of<AuthProvider>(context).role;
     final pages = _getPagesForRole(userRole);
 
-    return Scaffold(
-      drawer: const AppDrawer(),
+    return ResponsiveContainer(
+      child: Scaffold(
+        drawer: const AppDrawer(),
       appBar: (userRole == UserRole.kitchen || 
                userRole == UserRole.manager || 
                userRole == UserRole.housekeeping || 
@@ -98,6 +100,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             )
           : null,
+      ),
     );
   }
 

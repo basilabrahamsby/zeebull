@@ -1796,6 +1796,7 @@ def seed_chart_of_accounts(
 
         {"name": "Inventory Stock",                 "code": "1103", "group_id": gid("Current Assets"),      "module": "Inventory", "balance_type": "debit",  "opening_balance": 0},
         {"name": "Prepaid Expenses",                "code": "1104", "group_id": gid("Current Assets"),      "module": "General",   "balance_type": "debit",  "opening_balance": 0},
+        {"name": "Staff Loans & Advances",           "code": "1105", "group_id": gid("Current Assets"),      "module": "Employee",  "balance_type": "debit",  "opening_balance": 0},
         # Fixed Assets
         {"name": "Furniture & Fixtures",            "code": "1201", "group_id": gid("Fixed Assets"),        "module": "General",   "balance_type": "debit",  "opening_balance": 0},
         {"name": "Equipment",                       "code": "1202", "group_id": gid("Fixed Assets"),        "module": "General",   "balance_type": "debit",  "opening_balance": 0},
@@ -1851,4 +1852,56 @@ def seed_chart_of_accounts(
         "message": f"Seeded {len(ACCOUNT_GROUPS)} account groups and {ledger_count} ledgers for this branch.",
         "groups_created": len(ACCOUNT_GROUPS),
         "ledgers_created": ledger_count,
+    }
+
+
+@router.post("/migrate-staff-loans-ledger")
+def migrate_staff_loans_ledger(
+    db: Session = Depends(get_db),
+    branch_id: int = Depends(get_branch_id),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    One-time migration: Add 'Staff Loans & Advances' ledger to an existing branch
+    that was seeded before this ledger was added. Safe to call multiple times.
+    """
+    from app.models.account import AccountGroup, AccountLedger
+    from sqlalchemy import func
+
+    # Check if it already exists
+    existing = db.query(AccountLedger).filter(
+        AccountLedger.branch_id == branch_id,
+        func.lower(AccountLedger.name) == "staff loans & advances"
+    ).first()
+    if existing:
+        return {"status": "skipped", "message": "Staff Loans & Advances ledger already exists.", "ledger_id": existing.id}
+
+    # Find the Current Assets group
+    current_assets_group = db.query(AccountGroup).filter(
+        AccountGroup.branch_id == branch_id,
+        func.lower(AccountGroup.name) == "current assets"
+    ).first()
+    if not current_assets_group:
+        raise HTTPException(status_code=404, detail="Current Assets account group not found. Please seed the chart of accounts first.")
+
+    ledger = AccountLedger(
+        name="Staff Loans & Advances",
+        code="1105",
+        group_id=current_assets_group.id,
+        module="Employee",
+        balance_type="debit",
+        opening_balance=0,
+        branch_id=branch_id,
+        is_active=True
+    )
+    db.add(ledger)
+    db.commit()
+    db.refresh(ledger)
+
+    return {
+        "status": "created",
+        "message": "Staff Loans & Advances ledger added successfully.",
+        "ledger_id": ledger.id,
+        "ledger_name": ledger.name,
+        "code": ledger.code
     }

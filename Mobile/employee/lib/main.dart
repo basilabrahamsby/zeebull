@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:orchid_employee/presentation/widgets/responsive_container.dart';
 import 'presentation/providers/auth_provider.dart';
 import 'presentation/providers/room_provider.dart';
 import 'presentation/providers/service_request_provider.dart';
@@ -119,6 +121,9 @@ class AuthWrapper extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<AuthProvider>(
       builder: (context, auth, _) {
+        if (auth.needsUpdate) {
+          return ForceUpdateScreen(playStoreUrl: auth.playStoreUrl ?? '');
+        }
         if (auth.status == AuthStatus.unknown) {
           return const Scaffold(body: Center(child: CircularProgressIndicator()));
         }
@@ -127,5 +132,94 @@ class AuthWrapper extends StatelessWidget {
             : const LoginScreen();
       },
     );
+  }
+}
+
+class ForceUpdateScreen extends StatelessWidget {
+  final String playStoreUrl;
+  const ForceUpdateScreen({super.key, required this.playStoreUrl});
+
+  Future<void> _launchUrl() async {
+    if (playStoreUrl.isEmpty) return;
+    try {
+      final Uri url = Uri.parse(playStoreUrl);
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    } catch (e) {
+      print('Could not launch $playStoreUrl: $e');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ResponsiveContainer(
+      child: Scaffold(
+        backgroundColor: const Color(0xFF0F172A),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.03),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white.withOpacity(0.1)),
+                ),
+                child: const Icon(
+                  Icons.system_update_rounded,
+                  size: 64,
+                  color: Color(0xFF38BDF8),
+                ),
+              ),
+              const SizedBox(height: 32),
+              const Text(
+                'Update Required',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.5,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'To continue using the Zeebull Employee app, please update to the latest version from the Play Store.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.6),
+                  fontSize: 15,
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 40),
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton(
+                  onPressed: _launchUrl,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF38BDF8),
+                    foregroundColor: const Color(0xFF0F172A),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: const Text(
+                    'UPDATE NOW',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ));
   }
 }

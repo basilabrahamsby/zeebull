@@ -52,6 +52,35 @@ class PublicPackageBookingOut(BaseModel):
     class Config: from_attributes = True
 
 
+# Schemas for App Version
+class AppVersionCheck(BaseModel):
+    min_version: str
+    latest_version: str
+    play_store_url: str
+    force_update: bool
+
+@router.get("/app-version", response_model=AppVersionCheck)
+def get_app_version(db: Session = Depends(get_db)):
+    """Get the minimum required app version and Play Store URL for force updates"""
+    from app.models.settings import SystemSetting
+    
+    # Query database settings (branch_id=None for global app version settings)
+    min_version_setting = db.query(SystemSetting).filter(SystemSetting.key == "mobile_app_min_version", SystemSetting.branch_id == None).first()
+    play_store_url_setting = db.query(SystemSetting).filter(SystemSetting.key == "mobile_app_play_store_url", SystemSetting.branch_id == None).first()
+    force_update_setting = db.query(SystemSetting).filter(SystemSetting.key == "mobile_app_force_update", SystemSetting.branch_id == None).first()
+
+    min_version = min_version_setting.value if min_version_setting else "1.2.1"
+    play_store_url = play_store_url_setting.value if play_store_url_setting else "https://play.google.com/store/apps/details?id=com.teqmates.zeebull_employee"
+    force_update = (force_update_setting.value.lower() == "true") if force_update_setting else True
+
+    return AppVersionCheck(
+        min_version=min_version,
+        latest_version=min_version,
+        play_store_url=play_store_url,
+        force_update=force_update
+    )
+
+
 # Public Branches endpoint
 @router.get("/branches")
 def get_public_branches(db: Session = Depends(get_db)):

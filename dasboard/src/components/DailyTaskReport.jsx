@@ -13,8 +13,8 @@ const DailyTaskReport = () => {
     const isAdminOrManager = isSuperadmin || ['super_admin', 'superadmin', 'admin', 'manager'].includes(userRole);
 
     useEffect(() => {
-        // Fetch employees once
-        api.get("/employees?skip=0&limit=1000", {
+        // Fetch active employees once
+        api.get("/employees?skip=0&limit=1000&active_only=true", {
             headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
         }).then(res => setEmployees(res.data)).catch(err => console.error(err));
     }, []);

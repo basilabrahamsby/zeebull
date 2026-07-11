@@ -30,7 +30,10 @@ def get_settings(
     current_user: dict = Depends(get_current_user)
 ):
     print(f"Fetching settings for branch: {branch_id}")
-    settings = db.query(SystemSetting).filter(SystemSetting.branch_id == branch_id).all()
+    # Fetch branch-specific AND global settings (branch_id IS NULL)
+    settings = db.query(SystemSetting).filter(
+        (SystemSetting.branch_id == branch_id) | (SystemSetting.branch_id == None)
+    ).all()
     
     # Inject branch details as virtual settings
     from app.models.branch import Branch
@@ -51,10 +54,13 @@ def create_or_update_setting(
     branch_id: int = Depends(get_branch_id),
     current_user: dict = Depends(get_current_user)
 ):
-    print(f"Attempting to create or update setting with key: {setting_in.key} for branch: {branch_id}")
+    # If the setting key is for the mobile app, store globally (branch_id = None)
+    target_branch_id = None if setting_in.key.startswith("mobile_app_") else branch_id
+    
+    print(f"Attempting to create or update setting with key: {setting_in.key} for branch: {target_branch_id}")
     db_setting = db.query(SystemSetting).filter(
         SystemSetting.key == setting_in.key,
-        SystemSetting.branch_id == branch_id
+        SystemSetting.branch_id == target_branch_id
     ).first()
     
     if db_setting:
@@ -68,7 +74,7 @@ def create_or_update_setting(
             key=setting_in.key, 
             value=setting_in.value, 
             description=setting_in.description,
-            branch_id=branch_id
+            branch_id=target_branch_id
         )
         db.add(db_setting)
     
