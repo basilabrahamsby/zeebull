@@ -497,6 +497,9 @@ def update_service_request(
                 checkout_request.started_at = datetime.now(timezone.utc)
             elif update.status == "completed":
                 checkout_request.completed_at = datetime.now(timezone.utc)
+                checkout_request.inventory_checked = True
+                checkout_request.inventory_checked_by = getattr(current_user, 'name', None) or getattr(current_user, 'email', None) or "system"
+                checkout_request.inventory_checked_at = datetime.now(timezone.utc)
             print(f"[INFO] CheckoutRequest {actual_checkout_id} status: {old_checkout_status} -> {update.status}")
         
         db.commit()
