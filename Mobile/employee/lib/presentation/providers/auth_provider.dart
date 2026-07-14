@@ -103,7 +103,7 @@ class AuthProvider extends ChangeNotifier {
         // Respect the force_update flag from the backend
         final forceUpdate = data['force_update'] == true;
 
-        const currentVersionStr = '1.2.2'; // Matches pubspec.yaml version
+        const currentVersionStr = '1.2.3'; // Matches pubspec.yaml version
 
         if (forceUpdate && _isVersionOlder(currentVersionStr, minVersionStr)) {
           _needsUpdate = true;
