@@ -8,7 +8,7 @@ import { Calendar as CalendarIcon, User, DollarSign, Utensils, ConciergeBell, Be
 
 import * as XLSX from "xlsx";
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
-import { Plus, Camera } from "lucide-react";
+import { Plus, Camera, MapPin } from "lucide-react";
 
 import CountUp from "react-countup";
 import BannerMessage from "../components/BannerMessage";
@@ -1735,6 +1735,357 @@ const MonthlyReport = () => {
   );
 };
 
+const LiveLocationTracking = () => {
+  const [employees, setEmployees] = useState([]);
+  const [selectedEmp, setSelectedEmp] = useState(null);
+  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [locationData, setLocationData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const mapRef = useRef(null);
+  const mapInstanceRef = useRef(null);
+
+  const fetchActiveEmployees = () => {
+    api.get('/employees/status-overview')
+      .then(res => {
+        setEmployees(res.data?.active_employees || []);
+      })
+      .catch(err => console.error("Failed to fetch active employees", err))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    fetchActiveEmployees();
+    const interval = setInterval(fetchActiveEmployees, 45000); // Auto-refresh active employee coordinates
+    return () => clearInterval(interval);
+  }, []);
+
+  const fetchHistory = async (empId, date) => {
+    setHistoryLoading(true);
+    try {
+      const res = await api.get(`/employees/${empId}/location-history?date=${date}`);
+      setLocationData(res.data);
+    } catch (e) {
+      console.error("Failed to fetch location history", e);
+      setLocationData(null);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedEmp) {
+      fetchHistory(selectedEmp.id, selectedDate);
+    } else {
+      setLocationData(null);
+    }
+  }, [selectedEmp, selectedDate]);
+
+  // Handle Map Rendering
+  useEffect(() => {
+    if (!mapRef.current) return;
+
+    const loadMap = () => {
+      if (typeof window.L !== 'undefined') {
+        initMap();
+        return;
+      }
+
+      if (!document.getElementById('leaflet-css')) {
+        const link = document.createElement('link');
+        link.id = 'leaflet-css';
+        link.rel = 'stylesheet';
+        link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+        document.head.appendChild(link);
+      }
+
+      if (!document.getElementById('leaflet-js')) {
+        const script = document.createElement('script');
+        script.id = 'leaflet-js';
+        script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+        script.onload = initMap;
+        document.head.appendChild(script);
+      } else {
+        setTimeout(initMap, 300);
+      }
+    };
+
+    const initMap = () => {
+      const L = window.L;
+      if (!L || !mapRef.current) return;
+
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+      }
+
+      let center = [11.6585668, 76.2334917]; // Resort coordinates fallback
+      let zoom = 14;
+
+      // Calculate center based on selected employee current coords or trail
+      if (selectedEmp && selectedEmp.latitude && selectedEmp.longitude) {
+        center = [selectedEmp.latitude, selectedEmp.longitude];
+        zoom = 16;
+      } else if (locationData?.trail?.length > 0) {
+        const lastPoint = locationData.trail[locationData.trail.length - 1];
+        center = [lastPoint.lat, lastPoint.lng];
+        zoom = 16;
+      } else {
+        // Find center of all active employees
+        const tracked = employees.filter(e => e.latitude && e.longitude);
+        if (tracked.length > 0) {
+          center = [tracked[0].latitude, tracked[0].longitude];
+        }
+      }
+
+      const map = L.map(mapRef.current, { zoomControl: true }).setView(center, zoom);
+      mapInstanceRef.current = map;
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
+        maxZoom: 19
+      }).addTo(map);
+
+      // Mode A: Selected Employee History & Route Polyline
+      if (selectedEmp) {
+        const trail = locationData?.trail || [];
+        const currentLat = selectedEmp.latitude;
+        const currentLng = selectedEmp.longitude;
+
+        if (trail.length > 1) {
+          const latlngs = trail.map(p => [p.lat, p.lng]);
+          L.polyline(latlngs, { color: '#f97316', weight: 4, opacity: 0.85, dashArray: '8, 6' }).addTo(map);
+
+          // Green start marker
+          const startIcon = L.divIcon({
+            html: `<div style="width:14px;height:14px;background:#22c55e;border:2.5px solid white;border-radius:50%;box-shadow:0 2px 5px rgba(0,0,0,0.4)"></div>`,
+            className: '', iconAnchor: [7, 7]
+          });
+          L.marker([trail[0].lat, trail[0].lng], { icon: startIcon })
+            .addTo(map)
+            .bindPopup(`<b>🟢 Start Point</b><br>${new Date(trail[0].timestamp + 'Z').toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })}`);
+
+          // Middle tracking dots
+          trail.slice(1, -1).forEach((p, idx) => {
+            const dot = L.divIcon({
+              html: `<div style="width:8px;height:8px;background:#fb923c;border:1.5px solid white;border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,0.3)"></div>`,
+              className: '', iconAnchor: [4, 4]
+            });
+            L.marker([p.lat, p.lng], { icon: dot })
+              .addTo(map)
+              .bindPopup(`<b>Ping ${idx + 2}</b><br>${new Date(p.timestamp + 'Z').toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })}`);
+          });
+        }
+
+        // Live location marker (orange pulse)
+        if (currentLat && currentLng) {
+          const liveIcon = L.divIcon({
+            html: `
+              <div style="position:relative;width:24px;height:24px">
+                <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:20px;height:20px;background:#ef4444;border:3px solid white;border-radius:50%;box-shadow:0 0 10px rgba(239,68,68,0.6);z-index:10"></div>
+                <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:36px;height:36px;background:rgba(239,68,68,0.25);border-radius:50%;animation:ping 1.5s cubic-bezier(0,0,0.2,1) infinite"></div>
+              </div>`,
+            className: '', iconAnchor: [12, 12]
+          });
+          L.marker([currentLat, currentLng], { icon: liveIcon })
+            .addTo(map)
+            .bindPopup(`<b>📍 Live Position</b><br>${selectedEmp.name}<br>Last Active: ${locationData?.last_location_update ? new Date(locationData.last_location_update + 'Z').toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' }) : 'Just now'}`)
+            .openPopup();
+        }
+
+        // Zoom map bounds to fit the whole route
+        const bounds = [
+          ...(currentLat && currentLng ? [[currentLat, currentLng]] : []),
+          ...trail.map(p => [p.lat, p.lng])
+        ];
+        if (bounds.length > 0) {
+          map.fitBounds(bounds, { padding: [50, 50] });
+        }
+
+      } else {
+        // Mode B: Show all active tracked employees on the map
+        const markers = [];
+        employees.forEach(emp => {
+          if (emp.latitude && emp.longitude) {
+            const pinIcon = L.divIcon({
+              html: `
+                <div style="display:flex;flex-direction:column;align-items:center;">
+                  <div style="background:#f97316;color:white;font-weight:bold;font-size:10px;padding:2px 6px;border-radius:10px;box-shadow:0 2px 4px rgba(0,0,0,0.3);white-space:nowrap;margin-bottom:2px;">
+                    ${emp.name}
+                  </div>
+                  <div style="width:16px;height:16px;background:#ea580c;border:2.5px solid white;border-radius:50%;box-shadow:0 2px 5px rgba(0,0,0,0.4)"></div>
+                </div>`,
+              className: '', iconAnchor: [30, 26]
+            });
+            const m = L.marker([emp.latitude, emp.longitude], { icon: pinIcon })
+              .addTo(map)
+              .bindPopup(`<b>📍 ${emp.name}</b><br>${emp.role}<br>Last Active: ${emp.last_location_update ? new Date(emp.last_location_update + 'Z').toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' }) : 'Unknown'}`);
+            markers.push(m);
+          }
+        });
+
+        // Fit map bounds to show all markers
+        if (markers.length > 1) {
+          const group = L.featureGroup(markers);
+          map.fitBounds(group.getBounds(), { padding: [50, 50] });
+        } else if (markers.length === 1) {
+          map.setView(markers[0].getLatLng(), 15);
+        }
+      }
+    };
+
+    loadMap();
+
+    return () => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+      }
+    };
+  }, [employees, selectedEmp, locationData]);
+
+  const filteredEmployees = employees.filter(e =>
+    e.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    e.role.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col h-[75vh]">
+      {/* Header bar */}
+      <div className="bg-gradient-to-r from-orange-500 to-orange-600 px-6 py-4 text-white flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-bold flex items-center gap-2">
+            <MapPin size={22} />
+            Live Location Tracking Board
+          </h2>
+          <p className="text-orange-100 text-sm">Real-time GPS movement of on-duty staff</p>
+        </div>
+        <div className="flex items-center gap-3">
+          {selectedEmp && (
+            <button
+              onClick={() => setSelectedEmp(null)}
+              className="bg-white/20 hover:bg-white/30 text-white px-3.5 py-1.5 rounded-lg text-sm transition-colors font-medium border border-white/20"
+            >
+              ← Show All Staff Map
+            </button>
+          )}
+          <input
+            type="date"
+            value={selectedDate}
+            max={new Date().toISOString().slice(0, 10)}
+            onChange={e => setSelectedDate(e.target.value)}
+            className="text-sm bg-white/20 text-white border border-white/30 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-white/50"
+          />
+        </div>
+      </div>
+
+      <div className="flex flex-1 overflow-hidden">
+        {/* Left list sidebar */}
+        <div className="w-80 border-r border-gray-100 flex flex-col bg-gray-50/50">
+          <div className="p-4 bg-white border-b border-gray-100">
+            <input
+              type="text"
+              placeholder="Search active staff..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="w-full text-sm border border-gray-200 rounded-lg px-3.5 py-2 focus:outline-none focus:border-orange-500"
+            />
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-3 space-y-2">
+            {loading ? (
+              <div className="text-center py-10 text-gray-500 text-sm">Loading active staff...</div>
+            ) : filteredEmployees.length === 0 ? (
+              <div className="text-center py-10 text-gray-400 text-sm italic">No on-duty employees found.</div>
+            ) : (
+              filteredEmployees.map(emp => {
+                const isSelected = selectedEmp?.id === emp.id;
+                const hasGPS = emp.latitude && emp.longitude;
+                return (
+                  <button
+                    key={emp.id}
+                    onClick={() => setSelectedEmp(emp)}
+                    className={`w-full text-left p-3 rounded-xl border transition-all ${
+                      isSelected
+                        ? 'bg-orange-50 border-orange-200 shadow-sm'
+                        : 'bg-white hover:bg-gray-50 border-gray-100'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="font-semibold text-gray-800 text-sm">{emp.name}</div>
+                      <div className="flex items-center gap-1.5">
+                        <span className={`w-2 h-2 rounded-full ${hasGPS ? 'bg-green-500' : 'bg-red-400'}`}></span>
+                        <span className="text-[10px] text-gray-400 font-medium">{hasGPS ? 'Active' : 'No Signal'}</span>
+                      </div>
+                    </div>
+                    <div className="text-xs text-gray-500 mt-0.5 capitalize">{emp.role}</div>
+                    
+                    {emp.check_in_time && (
+                      <div className="text-[11px] text-green-700 mt-2 font-medium bg-green-50/50 px-2 py-0.5 rounded inline-block">
+                        ✓ On Duty since {emp.check_in_time.slice(0, 5)}
+                      </div>
+                    )}
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+
+        {/* Right Map/Trail area */}
+        <div className="flex-1 relative flex flex-col">
+          {/* Map display */}
+          <div className="flex-1 relative min-h-[300px]">
+            {historyLoading ? (
+              <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/70 z-20">
+                <div className="animate-spin w-9 h-9 border-4 border-orange-500 border-t-transparent rounded-full"></div>
+                <p className="mt-2 text-gray-500 text-sm font-medium">Fetching movement history...</p>
+              </div>
+            ) : null}
+            
+            <div ref={mapRef} style={{ width: '100%', height: '100%' }} />
+          </div>
+
+          {/* Details / History bar if selected */}
+          {selectedEmp && locationData && (
+            <div className="border-t border-gray-100 bg-white p-4 max-h-48 overflow-y-auto">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-sm font-bold text-gray-800">
+                  Route Trail for {selectedEmp.name} ({locationData.total_points} pings recorded)
+                </h4>
+                {locationData.last_location_update && (
+                  <span className="text-xs text-gray-400">
+                    Last update received: {new Date(locationData.last_location_update + 'Z').toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' })}
+                  </span>
+                )}
+              </div>
+              
+              {locationData.trail?.length > 0 ? (
+                <div className="flex gap-3 overflow-x-auto py-2">
+                  {locationData.trail.map((p, idx) => (
+                    <div key={idx} className="bg-gray-50 rounded-lg p-2.5 min-w-[140px] border border-gray-100 flex-shrink-0 text-center">
+                      <div className="font-semibold text-xs text-orange-600">
+                        {idx === 0 ? '🟢 Start' : idx === locationData.trail.length - 1 ? '🔴 Current' : `Point ${idx + 1}`}
+                      </div>
+                      <div className="text-xs text-gray-700 mt-1">
+                        {new Date(p.timestamp + 'Z').toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                      <div className="text-[10px] text-gray-400 mt-0.5">{p.lat.toFixed(5)}, {p.lng.toFixed(5)}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-sm text-gray-400 italic text-center py-4">No location pings recorded for this date.</div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const StatusOverview = () => {
   const [overview, setOverview] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -2848,6 +3199,7 @@ const EmployeeManagement = () => {
   const operationsTabs = [
     { id: 'attendance', label: 'Attendance', icon: <Clock size={18} />, permission: 'employee_attendance:view' },
     { id: 'daily-tasks', label: 'Daily Task Report', icon: <CheckSquare size={18} />, permission: 'employee_management:view' },
+    { id: 'live-tracking', label: 'Live Location', icon: <MapPin size={18} />, permission: 'employee_management:view' },
     { id: 'leave', label: 'Leave Mgt', icon: <UserCheck size={18} />, permission: 'employee_leave:view' },
     { id: 'salary-advance', label: 'Salary Advance', icon: <DollarSign size={18} />, permission: 'employee_management:view' },
     { id: 'payroll', label: 'Payroll', icon: <DollarSign size={18} />, permission: 'employee_management:view' }, // Payroll usually under employee_management or special perm
@@ -2880,6 +3232,7 @@ const EmployeeManagement = () => {
       case 'report': return <UserHistory />;
       case 'leave': return <LeaveManagement />;
       case 'attendance': return <AttendanceTracking />;
+      case 'live-tracking': return <LiveLocationTracking />;
       case 'monthly-report': return <MonthlyReport />;
       case 'status-overview': return <StatusOverview />;
       case 'leave-policy': return <LeavePolicyManagement />;
