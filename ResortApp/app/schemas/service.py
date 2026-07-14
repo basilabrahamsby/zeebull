@@ -76,7 +76,8 @@ class ServiceStatus(str, Enum):
 class AssignedServiceBase(BaseModel):
     service_id: int
     employee_id: Optional[int] = None
-    room_id: int
+    room_id: Optional[int] = None
+    location_id: Optional[int] = None
 
 class AssignedServiceCreate(AssignedServiceBase):
     override_charges: Optional[float] = None
@@ -112,12 +113,15 @@ class AssignedServiceOut(BaseModel):
     branch_id: Optional[int] = None
     service_id: int  # Add for filtering
     employee_id: int  # Add for filtering
-    room_id: int  # Add for filtering
+    room_id: Optional[int] = None  # Add for filtering
+    location_id: Optional[int] = None
     booking_id: Optional[int] = None
     package_booking_id: Optional[int] = None
     service: ServiceOut
     employee: EmployeeOut
-    room: RoomOut
+    room: Optional[RoomOut] = None
+    location: Optional[dict] = None
+    location_name: Optional[str] = None
     assigned_at: datetime
     status: ServiceStatus
     started_at: Optional[datetime] = None

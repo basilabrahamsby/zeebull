@@ -665,8 +665,8 @@ def assign_service(
                 print(f"[DEBUG assign_service] Resolved missing employee_id to {emp.id} ({emp.name})")
             else:
                 raise HTTPException(status_code=400, detail="employee_id is required and no active employees exist")
-        if not payload.room_id:
-            raise HTTPException(status_code=400, detail="room_id is required")
+        if not payload.room_id and not payload.location_id:
+            raise HTTPException(status_code=400, detail="Either room_id or location_id is required")
         
         # Validate and safeguard branch_id
         if branch_id is None:
@@ -683,11 +683,12 @@ def assign_service(
         
         # Send Notification (best effort)
         try:
+            target_desc = result.room.number if result.room else (result.location.name if result.location else "Unknown Location")
             notify_service_assigned(
                 db, 
                 service_name=result.service.name if result.service else "Unknown Service",
                 employee_name=result.employee.name if result.employee else "Unknown Employee", 
-                room_number=result.room.number if result.room else "Unknown Room", 
+                room_number=target_desc, 
                 assigned_id=result.id,
                 branch_id=branch_id
             )
@@ -714,10 +715,17 @@ def assign_service(
                 "id": result.employee.id if result.employee else None,
                 "name": result.employee.name if result.employee else "Unknown"
             },
+            "room_id": result.room_id,
+            "location_id": result.location_id,
             "room": {
-                "id": result.room.id if result.room else None,
-                "number": result.room.number if result.room else "Unknown"
-            },
+                "id": result.room.id,
+                "number": result.room.number
+            } if result.room else None,
+            "location": {
+                "id": result.location.id if result.location else None,
+                "name": result.location.name if result.location else "Unknown",
+                "location_type": result.location.location_type if result.location else None
+            } if result.location else None,
             "assigned_at": result.assigned_at.isoformat() + "Z" if result.assigned_at else None,
             "status": result.status.value if hasattr(result.status, 'value') else str(result.status),
             "billing_status": result.billing_status if hasattr(result, 'billing_status') else "unbilled",
@@ -788,15 +796,16 @@ def get_all_assigned_services(
                     print(f"[DEBUG-ERROR] Error loading inventory for assigned service {assigned.id}: {inv_e}")
 
                 # Check for relationships safely
-                if assigned.service is None or assigned.employee is None or assigned.room is None:
+                if assigned.service is None or assigned.employee is None:
                     print(f"[DEBUG-ERROR] Missing mandatory relationships for assigned service {assigned.id}")
                     continue
-
+ 
                 result.append({
                     "id": assigned.id,
                     "service_id": assigned.service.id,
                     "employee_id": assigned.employee.id,
-                    "room_id": assigned.room.id,
+                    "room_id": assigned.room_id,
+                    "location_id": assigned.location_id,
                     "booking_id": assigned.booking_id,
                     "package_booking_id": assigned.package_booking_id,
                     "service": {
@@ -819,7 +828,13 @@ def get_all_assigned_services(
                     "room": {
                         "id": assigned.room.id,
                         "number": assigned.room.number
-                    },
+                    } if assigned.room else None,
+                    "location": {
+                        "id": assigned.location.id if assigned.location else None,
+                        "name": assigned.location.name if assigned.location else "Unknown",
+                        "location_type": assigned.location.location_type if assigned.location else None
+                    } if assigned.location else None,
+                    "location_name": assigned.location.name if assigned.location else (f"Room {assigned.room.number}" if assigned.room else "Unknown Location"),
                     "assigned_at": assigned.assigned_at,
                     "status": status_enum,
                     "started_at": assigned.started_at,

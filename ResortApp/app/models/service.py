@@ -45,7 +45,8 @@ class AssignedService(Base):
     id = Column(Integer, primary_key=True, index=True)
     service_id = Column(Integer, ForeignKey("services.id"))
     employee_id = Column(Integer, ForeignKey("employees.id", ondelete="CASCADE"))
-    room_id = Column(Integer, ForeignKey("rooms.id"))
+    room_id = Column(Integer, ForeignKey("rooms.id"), nullable=True)
+    location_id = Column(Integer, ForeignKey("locations.id"), nullable=True)
     booking_id = Column(Integer, ForeignKey("bookings.id"), nullable=True)
     package_booking_id = Column(Integer, ForeignKey("package_bookings.id"), nullable=True)
     assigned_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
@@ -63,6 +64,7 @@ class AssignedService(Base):
     service = relationship("Service")
     employee = relationship("Employee", back_populates="assigned_services")
     room = relationship("Room")
+    location = relationship("Location")
     booking = relationship("Booking", backref="assigned_services")
     package_booking = relationship("PackageBooking", backref="assigned_services")
     # inventory_assignments relationship is defined in employee_inventory.py via backref

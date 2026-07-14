@@ -225,6 +225,7 @@ const Services = () => {
   const [extraInventoryItems, setExtraInventoryItems] = useState([]); // Extra inventory items for assignment
   const [selectedServiceDetails, setSelectedServiceDetails] = useState(null); // Store selected service details
   const [rooms, setRooms] = useState([]);
+  const [occupiedRoomIds, setOccupiedRoomIds] = useState(new Set());
   const [allRooms, setAllRooms] = useState([]);
   const [bookings, setBookings] = useState([]);
   const [employees, setEmployees] = useState([]);
@@ -431,6 +432,7 @@ const Services = () => {
           roomStatusNormalized === 'occupied';
       });
       setRooms(checkedInRooms);
+      setOccupiedRoomIds(checkedInRoomIds);
     } catch (error) {
       // Set default values on error
       setHasMore(false);
@@ -790,14 +792,18 @@ const Services = () => {
 
   const handleAssign = async () => {
     if (!assignForm.service_id || !assignForm.employee_id || !assignForm.room_id) {
-      alert("Please select service, employee, and room");
+      alert("Please select service, employee, and deployment target");
       return;
     }
     try {
+      const selectedLocId = parseInt(assignForm.room_id);
+      const matchingRoom = allRooms.find(r => r.inventory_location_id === selectedLocId);
+      
       const payload = {
         service_id: parseInt(assignForm.service_id),
         employee_id: parseInt(assignForm.employee_id),
-        room_id: parseInt(assignForm.room_id),
+        location_id: selectedLocId,
+        room_id: matchingRoom ? matchingRoom.id : null,
       };
 
       // Add extra inventory items if any
@@ -6192,10 +6198,33 @@ const Services = () => {
                                 onChange={(e) => setAssignForm({ ...assignForm, room_id: e.target.value })}
                                 className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 pl-14 pr-6 py-5 rounded-[1.5rem] text-sm font-black text-slate-800 transition-all shadow-sm"
                               >
-                                <option value="">Select Unit Vector...</option>
-                                {allRooms.map((r) => (
-                                  <option key={r.id} value={r.id}>UNIT {r.number}</option>
-                                ))}
+                                <option value="">Select Target Location...</option>
+                                {locations
+                                  .sort((a, b) => {
+                                    // Sort guest rooms first, then other locations alphabetically
+                                    const aIsRoom = a.location_type === 'GUEST_ROOM';
+                                    const bIsRoom = b.location_type === 'GUEST_ROOM';
+                                    if (aIsRoom && !bIsRoom) return -1;
+                                    if (!aIsRoom && bIsRoom) return 1;
+                                    return a.name.localeCompare(b.name);
+                                  })
+                                  .map((loc) => {
+                                    const matchingRoom = allRooms.find(r => r.inventory_location_id === loc.id);
+                                    const isOccupied = matchingRoom ? occupiedRoomIds.has(matchingRoom.id) : false;
+                                    
+                                    let label = "";
+                                    if (loc.location_type === 'GUEST_ROOM') {
+                                      label = `Room ${loc.name} ${isOccupied ? "🟢 OCCUPIED" : "⚪ VACANT"}`;
+                                    } else {
+                                      label = `${loc.name} (${loc.location_type || 'LOCATION'})`;
+                                    }
+                                    
+                                    return (
+                                      <option key={loc.id} value={loc.id}>
+                                        {label}
+                                      </option>
+                                    );
+                                  })}
                               </select>
                             </div>
                           </div>

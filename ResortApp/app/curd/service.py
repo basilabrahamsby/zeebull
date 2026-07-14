@@ -391,11 +391,36 @@ def create_assigned_service(db: Session, assigned: AssignedServiceCreate, branch
         if not employee:
             raise ValueError(f"Employee with ID {assigned_dict['employee_id']} not found")
         
-        room = db.query(Room).filter(Room.id == assigned_dict['room_id']).first()
-        if not room:
-            raise ValueError(f"Room with ID {assigned_dict['room_id']} not found")
+        room_id = assigned_dict.get('room_id')
+        location_id = assigned_dict.get('location_id')
         
-        print(f"[DEBUG] All references valid: Service={service.name}, Employee={employee.name}, Room={room.number}")
+        if not room_id and not location_id:
+            raise ValueError("Either room_id or location_id must be provided")
+            
+        room = None
+        location = None
+        
+        if room_id:
+            room = db.query(Room).filter(Room.id == room_id).first()
+            if not room:
+                raise ValueError(f"Room with ID {room_id} not found")
+            if not location_id and room.inventory_location_id:
+                location_id = room.inventory_location_id
+                assigned_dict['location_id'] = location_id
+                
+        if location_id:
+            from app.models.inventory import Location
+            location = db.query(Location).filter(Location.id == location_id).first()
+            if not location:
+                raise ValueError(f"Location with ID {location_id} not found")
+            if not room_id and location.location_type == 'GUEST_ROOM':
+                room = db.query(Room).filter(Room.inventory_location_id == location_id).first()
+                if room:
+                    room_id = room.id
+                    assigned_dict['room_id'] = room_id
+        
+        target_name = room.number if room else (location.name if location else "Unknown Target")
+        print(f"[DEBUG] All references valid: Service={service.name}, Employee={employee.name}, Target={target_name}")
         
         # Load service inventory items if service has any
         service_inventory_items = []
@@ -447,11 +472,11 @@ def create_assigned_service(db: Session, assigned: AssignedServiceCreate, branch
         
         print(f"[DEBUG] Total inventory items to assign (template + extra): {len(service_inventory_items)}")
         
-        # Try to link to a booking if not provided
+        # Try to link to a booking if not provided (only if room_id is set)
         booking_id = assigned_dict.get('booking_id')
         package_booking_id = assigned_dict.get('package_booking_id')
         
-        if not booking_id and not package_booking_id:
+        if not booking_id and not package_booking_id and assigned_dict.get('room_id'):
             from app.curd.foodorder import get_booking_for_room
             b_id, is_pkg = get_booking_for_room(assigned_dict['room_id'], db, branch_id=branch_id)
             if b_id:
@@ -465,7 +490,8 @@ def create_assigned_service(db: Session, assigned: AssignedServiceCreate, branch
             db_assigned = AssignedService(
                 service_id=assigned_dict['service_id'],
                 employee_id=assigned_dict['employee_id'],
-                room_id=assigned_dict['room_id'],
+                room_id=assigned_dict.get('room_id'),
+                location_id=assigned_dict.get('location_id'),
                 booking_id=booking_id,
                 package_booking_id=package_booking_id,
                 override_charges=assigned_dict.get('override_charges'),
