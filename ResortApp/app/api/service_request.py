@@ -303,7 +303,7 @@ def get_service_requests(
                 "is_assigned_service": True,
                 "assigned_service_id": asvc.id,
                 "billing_status": asvc.billing_status, # Include billing status from AssignedService
-                "room_number": asvc.room.number if asvc.room else "???",
+                "room_number": asvc.room.number if asvc.room else (asvc.location.name if asvc.location else "???"),
                 "employee_name": asvc.employee.name if asvc.employee else "Unassigned",
                 "refill_data": None,
                 "inventory_items_used": items_used,

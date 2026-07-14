@@ -510,32 +510,192 @@ class _UrgentRoomCard extends StatelessWidget {
   }
 }
 
-class _ServiceRequestCard extends StatelessWidget {
+class _ServiceRequestCard extends StatefulWidget {
   final ServiceRequest request;
   final VoidCallback onComplete;
   const _ServiceRequestCard({required this.request, required this.onComplete});
 
   @override
+  State<_ServiceRequestCard> createState() => _ServiceRequestCardState();
+}
+
+class _ServiceRequestCardState extends State<_ServiceRequestCard> {
+  bool _isUpdating = false;
+
+  Future<void> _updateStatus(BuildContext context, String status) async {
+    if (!context.read<AttendanceProvider>().isClockedIn) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Action Denied: You must Clock In first")));
+      return;
+    }
+
+    if (status == 'in_progress') {
+      final isFoodService = widget.request.type.toLowerCase().contains('food') || 
+                            widget.request.description.toLowerCase().contains('food') ||
+                            widget.request.type.toLowerCase() == 'delivery';
+
+      if (isFoodService) {
+        showDialog(
+          context: context,
+          builder: (_) => DeliveryStartDialog(
+            request: widget.request,
+            onConfirm: () => _doUpdate('in_progress'),
+          ),
+        );
+        return;
+      }
+
+      showDialog(
+        context: context,
+        builder: (_) => PickInventoryDialog(
+          requestId: widget.request.id,
+          roomNumber: widget.request.roomNumber,
+          preAssignedItems: widget.request.refillItems,
+          onStart: (items) async {
+            setState(() => _isUpdating = true);
+            try {
+              if (items.isNotEmpty) {
+                final groupedItems = <int, List<Map<String, dynamic>>>{};
+                for (var item in items) {
+                  final locId = item['location_id'] as int?;
+                  if (locId != null) {
+                    groupedItems.putIfAbsent(locId, () => []).add(item);
+                  }
+                }
+
+                for (var entry in groupedItems.entries) {
+                  await context.read<InventoryProvider>().createStockIssue(
+                    sourceLocationId: entry.key,
+                    items: entry.value,
+                    notes: "Used for Service Request #${widget.request.id} (Room ${widget.request.roomNumber})",
+                  );
+                }
+              }
+              await _doUpdate('in_progress');
+            } finally {
+              if (mounted) {
+                setState(() => _isUpdating = false);
+              }
+            }
+          },
+        ),
+      );
+    } else {
+      _doUpdate(status);
+    }
+  }
+
+  Future<void> _doUpdate(String status) async {
+    setState(() => _isUpdating = true);
+    try {
+      final provider = context.read<ServiceRequestProvider>();
+      final empId = context.read<AuthProvider>().employeeId;
+      
+      final success = await provider.updateRequestStatus(
+        widget.request.id, 
+        status,
+        employeeId: empId,
+      );
+
+      if (success && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Task updated to ${status.toUpperCase().replaceAll('_', ' ')}")));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isUpdating = false);
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final status = widget.request.status.toLowerCase().replaceAll('_', ' ');
+    final isPending = status == 'pending';
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       child: OnyxGlassCard(
-        padding: EdgeInsets.zero,
-        child: ListTile(
-          leading: Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(color: AppColors.accent.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
-            child: const Icon(Icons.room_service_rounded, color: AppColors.accent, size: 20),
-          ),
-          title: Text("ROOM ${request.roomNumber} - ${request.type.toUpperCase()}", 
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 12)),
-          subtitle: Text(request.description, 
-            style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 10, fontWeight: FontWeight.bold), 
-            maxLines: 1, overflow: TextOverflow.ellipsis),
-          trailing: IconButton(
-            icon: const Icon(Icons.check_circle_rounded, color: AppColors.success, size: 22), 
-            onPressed: onComplete,
-          ),
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(color: AppColors.accent.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
+                  child: const Icon(Icons.room_service_rounded, color: AppColors.accent, size: 20),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "ROOM ${widget.request.roomNumber} - ${widget.request.type.toUpperCase()}", 
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 12, letterSpacing: 0.5)
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        widget.request.description, 
+                        style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 10, fontWeight: FontWeight.bold),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                if (!isPending)
+                  IconButton(
+                    icon: const Icon(Icons.check_circle_rounded, color: AppColors.success, size: 24), 
+                    onPressed: widget.onComplete,
+                  ),
+              ],
+            ),
+            if (isPending) ...[
+              const SizedBox(height: 16),
+              _isUpdating
+                  ? const Center(
+                      child: SizedBox(
+                        height: 24,
+                        width: 24,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accent),
+                      ),
+                    )
+                  : Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () => _updateStatus(context, 'in_progress'),
+                            icon: const Icon(Icons.check_rounded, size: 16),
+                            label: const Text("ACCEPT", style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.accent,
+                              foregroundColor: AppColors.onyx,
+                              elevation: 0,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () => _updateStatus(context, 'cancelled'),
+                            icon: const Icon(Icons.close_rounded, size: 16),
+                            label: const Text("REJECT", style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red.withOpacity(0.2),
+                              foregroundColor: Colors.redAccent,
+                              elevation: 0,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+            ],
+          ],
         ),
       ),
     );
