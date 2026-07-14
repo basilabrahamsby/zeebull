@@ -22,7 +22,10 @@ import {
 
 // ─── Room QR Code Modal ───────────────────────────────────────────────────────
 const RoomQRModal = ({ room, branch, onClose }) => {
-  const guestUrl = `${window.location.protocol}//${window.location.hostname}:3002/#/room/${room.id}`;
+  const isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+  const guestUrl = isLocal 
+    ? `${window.location.protocol}//${window.location.hostname}:3002/#/room/${room.id}`
+    : `${window.location.protocol}//${window.location.hostname}/#/room/${room.id}`;
   const branchName = branch?.name || 'The Resort';
   const branchPhone = branch?.phone || 'Contact Front Desk';
   const branchAddress = branch?.address || '';
