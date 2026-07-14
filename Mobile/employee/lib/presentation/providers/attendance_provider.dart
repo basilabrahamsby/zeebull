@@ -69,11 +69,11 @@ class AttendanceProvider extends ChangeNotifier {
            
            print("Today's logs: ${todayLogs.length}");
            
-           // Check if ANY log is open (no checkout time)
-           try {
-             final activeLog = todayLogs.firstWhere(
-               (log) => log['check_out_time'] == null,
-             );
+            // Check if ANY log is open in the entire list (no checkout time) - handles overnight/night shifts
+            try {
+              final activeLog = logs.firstWhere(
+                (log) => log['check_out_time'] == null,
+              );
              
              print("Found active log: ${activeLog}");
              _isClockedIn = true;
