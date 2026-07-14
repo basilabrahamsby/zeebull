@@ -48,11 +48,16 @@ class ServiceRequestProvider with ChangeNotifier {
         final List<dynamic> activeData = activeResponse.data;
         final List<dynamic> completedData = completedResponse.data;
         
-        // Combine both lists
+        // Combine both lists and deduplicate by request ID
         final allData = [...activeData, ...completedData];
-        _requests = allData.map((json) => ServiceRequest.fromJson(json)).toList();
+        final Map<String, ServiceRequest> uniqueMap = {};
+        for (var json in allData) {
+          final req = ServiceRequest.fromJson(json);
+          uniqueMap[req.id] = req;
+        }
+        _requests = uniqueMap.values.toList();
         
-        print('[DEBUG] Fetched ${activeData.length} active + ${completedData.length} completed = ${_requests.length} total requests');
+        print('[DEBUG] Fetched ${activeData.length} active + ${completedData.length} completed = ${_requests.length} total unique requests');
         print('[DEBUG] Completed count: ${_requests.where((r) => r.status.toLowerCase() == 'completed').length}');
       } else {
         _error = "Failed to load requests: ${activeResponse.statusCode} / ${completedResponse.statusCode}";
