@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'core/app_permissions.dart';
 import 'package:orchid_employee/presentation/widgets/responsive_container.dart';
 import 'presentation/providers/auth_provider.dart';
 import 'presentation/providers/room_provider.dart';
@@ -114,8 +115,27 @@ class OrchidEmployeeApp extends StatelessWidget {
   }
 }
 
-class AuthWrapper extends StatelessWidget {
+class AuthWrapper extends StatefulWidget {
   const AuthWrapper({super.key});
+
+  @override
+  State<AuthWrapper> createState() => _AuthWrapperState();
+}
+
+class _AuthWrapperState extends State<AuthWrapper> {
+  bool _permissionsRequested = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Request all permissions once on first launch, after the first frame
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!_permissionsRequested && mounted) {
+        _permissionsRequested = true;
+        await AppPermissions.requestAll(context);
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {

@@ -347,6 +347,70 @@ def get_employee_status_overview(db: Session = Depends(get_db), current_user: Us
             
     return result
 
+@router.get("/{employee_id}/location-history")
+def get_employee_location_history(
+    employee_id: int,
+    date: str = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Returns the live location history trail for an employee on a specific date.
+    If no date given, defaults to today.
+    """
+    from app.models.employee import EmployeeLocationHistory
+    from datetime import datetime as dt, date as date_type
+    import pytz
+
+    try:
+        if date:
+            filter_date = dt.strptime(date, "%Y-%m-%d").date()
+        else:
+            ist = get_system_timezone()
+            filter_date = dt.now(ist).date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD.")
+
+    employee = db.query(EmployeeModel).filter(EmployeeModel.id == employee_id).first()
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found")
+
+    # Fetch location history for that day
+    day_start = dt.combine(filter_date, dt.min.time())
+    day_end = dt.combine(filter_date, dt.max.time())
+
+    history = (
+        db.query(EmployeeLocationHistory)
+        .filter(
+            EmployeeLocationHistory.employee_id == employee_id,
+            EmployeeLocationHistory.timestamp >= day_start,
+            EmployeeLocationHistory.timestamp <= day_end,
+        )
+        .order_by(EmployeeLocationHistory.timestamp.asc())
+        .all()
+    )
+
+    trail = [
+        {
+            "lat": h.latitude,
+            "lng": h.longitude,
+            "timestamp": h.timestamp.isoformat(),
+        }
+        for h in history
+    ]
+
+    return {
+        "employee_id": employee_id,
+        "employee_name": employee.name,
+        "employee_role": employee.role,
+        "date": filter_date.isoformat(),
+        "current_latitude": employee.latitude,
+        "current_longitude": employee.longitude,
+        "last_location_update": employee.last_location_update.isoformat() if employee.last_location_update else None,
+        "trail": trail,
+        "total_points": len(trail),
+    }
+
 @router.get("/me")
 @router.get("/me/")
 def get_myself(db: Session = Depends(get_db), current_user: User = Depends(get_current_user), branch_id: int = Depends(get_branch_id)):

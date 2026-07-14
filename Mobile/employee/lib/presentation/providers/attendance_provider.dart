@@ -4,6 +4,7 @@ import '../../data/services/api_service.dart';
 import 'dart:convert';
 import 'dart:async';
 import 'package:geolocator/geolocator.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class AttendanceProvider extends ChangeNotifier {
   final ApiService _apiService;
@@ -276,9 +277,10 @@ class AttendanceProvider extends ChangeNotifier {
 
   Future<void> _sendCurrentLocation(int employeeId) async {
     try {
-      final permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
-        print("[LOCATION] Permission not granted, skipping live location update.");
+      // Use permission_handler for a clean permission check
+      final hasPermission = await Permission.location.isGranted;
+      if (!hasPermission) {
+        print("[LOCATION] Location permission not granted, skipping live update.");
         return;
       }
 
