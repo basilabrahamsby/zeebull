@@ -63,10 +63,10 @@ def create_checkout_request(
     if not room:
         raise HTTPException(status_code=404, detail=f"Room {room_number} not found")
     
-    # Find active booking
+    # Find active booking (must be checked-in/checked_in, not 'booked')
     booking_link = (db.query(BookingRoom)
                     .join(Booking)
-                    .filter(BookingRoom.room_id == room.id, Booking.status.in_(['checked-in', 'checked_in', 'booked']))
+                    .filter(BookingRoom.room_id == room.id, Booking.status.in_(['checked-in', 'checked_in']))
                     .order_by(Booking.id.desc()).first())
     
     package_link = None
@@ -78,14 +78,14 @@ def create_checkout_request(
     else:
         package_link = (db.query(PackageBookingRoom)
                         .join(PackageBooking)
-                        .filter(PackageBookingRoom.room_id == room.id, PackageBooking.status.in_(['checked-in', 'checked_in', 'booked']))
+                        .filter(PackageBookingRoom.room_id == room.id, PackageBooking.status.in_(['checked-in', 'checked_in']))
                         .order_by(PackageBooking.id.desc()).first())
         if package_link:
             booking = package_link.package_booking
             is_package = True
     
     if not booking:
-        raise HTTPException(status_code=404, detail=f"No active booking found for room {room_number}")
+        raise HTTPException(status_code=400, detail=f"Room {room_number} is not currently checked-in. Checkout is only allowed for occupied/checked-in rooms.")
     
     # Determine rooms to create checking requests for
     target_rooms = []

@@ -46,7 +46,7 @@ export default function GuestRoomPortal({ roomId }) {
 
   const fetchRoomData = useCallback(async () => {
     try {
-      const resp = await fetch(`${API}/rooms?limit=100`, { headers: { "Content-Type": "application/json" } });
+      const resp = await fetch(`${API}/public/rooms?limit=100`, { headers: { "Content-Type": "application/json" } });
       if (!resp.ok) throw new Error("room fetch failed");
       const rooms = await resp.json();
       const found = rooms.find(r => r.id === parseInt(roomId));
@@ -55,7 +55,7 @@ export default function GuestRoomPortal({ roomId }) {
       console.error("GuestPortal: room fetch error", e);
     }
     try {
-      const resp2 = await fetch(`${API}/branches`);
+      const resp2 = await fetch(`${API}/public/branches`);
       if (resp2.ok) {
         const brs = await resp2.json();
         if (brs && brs.length > 0) setBranch(brs[0]);
@@ -309,6 +309,53 @@ export default function GuestRoomPortal({ roomId }) {
   const frontOfficePhone = branch?.phone || null;
   const address = branch?.address || "";
   const imgUrl = room?.image_url ? `${MEDIA}${room.image_url}` : null;
+
+  if (room && room.status !== "Checked-in") {
+    return (
+      <div style={{ minHeight: "100vh", background: "#0a0a0f", display: "flex", flexDirection: "column", justifycontent: "space-between", fontFamily: "'Montserrat', sans-serif", color: "white" }}>
+        <style>{`
+          @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800;900&family=Playfair+Display:wght@400;500;600;700&display=swap');
+          .welcome-glow { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 300px; height: 300px; background: rgba(245, 158, 11, 0.15); filter: blur(80px); border-radius: 50%; }
+        `}</style>
+        
+        {/* Top brand */}
+        <div style={{ padding: "40px 24px 0", textAlign: "center" }}>
+          <p style={{ fontSize: "0.65rem", fontWeight: 800, color: "#f59e0b", letterSpacing: "0.4em", textTransform: "uppercase", margin: "0 0 10px" }}>
+            {resortName}
+          </p>
+          <div style={{ borderBottom: "1px solid rgba(255,255,255,0.08)", width: "40px", margin: "0 auto" }}></div>
+        </div>
+
+        {/* Center welcome card */}
+        <div style={{ padding: "20px 24px", position: "relative", zIndex: 10, textAlign: "center" }}>
+          <div style={{ fontSize: "3.5rem", marginBottom: "20px", display: "inline-block" }}>🛎️</div>
+          <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: "1.8rem", fontWeight: 700, margin: "0 0 16px", color: "#f59e0b" }}>
+            Welcome to Room {roomNumber}
+          </h1>
+          <p style={{ fontSize: "0.85rem", color: "#94a3b8", lineHeight: 1.6, maxWidth: "340px", margin: "0 auto 30px" }}>
+            This room is not currently checked-in. To access guest portal services (in-room dining, digital service requests, checkout, etc.), please complete your check-in with the front desk.
+          </p>
+          {frontOfficePhone && (
+            <button
+              onClick={() => {
+                window.location.href = `tel:${frontOfficePhone}`;
+              }}
+              style={{ background: "linear-gradient(135deg, #f59e0b, #d97706)", border: "none", borderRadius: "14px", padding: "14px 28px", color: "#0a0a0f", fontWeight: 800, fontSize: "0.85rem", letterSpacing: "0.05em", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "8px" }}
+            >
+              📞 Call Reception
+            </button>
+          )}
+        </div>
+
+        {/* Footer info */}
+        <div style={{ padding: "0 24px 40px", textAlign: "center" }}>
+          <p style={{ fontSize: "0.6rem", color: "#4b5563", letterSpacing: "0.15em", textTransform: "uppercase", margin: 0 }}>
+            Luxury Awaits You at Zeebull
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   // Filtered food items
   const filteredFoodItems = foodItems.filter(item => {

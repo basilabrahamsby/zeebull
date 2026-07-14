@@ -2265,7 +2265,7 @@ const Rooms = ({ noLayout = false }) => {
       {qrCodeRoom && (
         <RoomQRModal
           room={qrCodeRoom}
-          branch={activeBranch}
+          branch={activeBranch || branches.find(b => b.id === qrCodeRoom.branch_id)}
           onClose={() => setQrCodeRoom(null)}
         />
       )}

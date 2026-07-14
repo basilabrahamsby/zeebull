@@ -6193,7 +6193,7 @@ const Services = () => {
                                 className="w-full bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-500 pl-14 pr-6 py-5 rounded-[1.5rem] text-sm font-black text-slate-800 transition-all shadow-sm"
                               >
                                 <option value="">Select Unit Vector...</option>
-                                {rooms.map((r) => (
+                                {allRooms.map((r) => (
                                   <option key={r.id} value={r.id}>UNIT {r.number}</option>
                                 ))}
                               </select>
