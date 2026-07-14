@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import { formatCurrency } from '../utils/currency';
 import DashboardLayout from "../layout/DashboardLayout";
 import api from "../services/api";
@@ -1738,51 +1738,386 @@ const MonthlyReport = () => {
 const StatusOverview = () => {
   const [overview, setOverview] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [locationModal, setLocationModal] = useState(null); // { employee }
+  const [locationData, setLocationData] = useState(null);
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const mapRef = useRef(null);
+  const mapInstanceRef = useRef(null);
 
-  useEffect(() => {
+  const fetchOverview = () => {
+    setLoading(true);
     api.get('/employees/status-overview')
       .then(res => setOverview(res.data))
       .catch(err => console.error("Failed to fetch status overview", err))
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    fetchOverview();
+    const interval = setInterval(fetchOverview, 60000); // refresh every minute
+    return () => clearInterval(interval);
   }, []);
 
-  const EmployeeList = ({ title, employees, colorClass }) => (
-    <div className={`p-4 rounded-lg shadow-sm ${colorClass}`}>
-      <h4 className="font-bold text-lg mb-2">{title} ({employees.length})</h4>
+  const openLocationModal = async (emp) => {
+    setLocationModal(emp);
+    setLocationData(null);
+    setLocationLoading(true);
+    try {
+      const res = await api.get(`/employees/${emp.id}/location-history?date=${selectedDate}`);
+      setLocationData(res.data);
+    } catch (e) {
+      console.error("Failed to fetch location history", e);
+    } finally {
+      setLocationLoading(false);
+    }
+  };
+
+  const fetchLocationForDate = async (empId, date) => {
+    setLocationData(null);
+    setLocationLoading(true);
+    try {
+      const res = await api.get(`/employees/${empId}/location-history?date=${date}`);
+      setLocationData(res.data);
+    } catch (e) {
+      console.error("Failed to fetch location history", e);
+    } finally {
+      setLocationLoading(false);
+    }
+  };
+
+  // Initialize map when locationData changes
+  useEffect(() => {
+    if (!locationData || !mapRef.current) return;
+
+    // Load Leaflet dynamically
+    const loadMap = () => {
+      if (typeof window.L !== 'undefined') {
+        initMap();
+        return;
+      }
+
+      // Load CSS
+      if (!document.getElementById('leaflet-css')) {
+        const link = document.createElement('link');
+        link.id = 'leaflet-css';
+        link.rel = 'stylesheet';
+        link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+        document.head.appendChild(link);
+      }
+
+      // Load JS
+      if (!document.getElementById('leaflet-js')) {
+        const script = document.createElement('script');
+        script.id = 'leaflet-js';
+        script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+        script.onload = initMap;
+        document.head.appendChild(script);
+      } else {
+        // Script tag exists, wait a bit
+        setTimeout(initMap, 300);
+      }
+    };
+
+    const initMap = () => {
+      const L = window.L;
+      if (!L || !mapRef.current) return;
+
+      // Destroy previous map instance
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+      }
+
+      const trail = locationData.trail || [];
+      const currentLat = locationData.current_latitude;
+      const currentLng = locationData.current_longitude;
+
+      // Determine center
+      let center = [10.8505, 76.2711]; // Kerala default
+      if (currentLat && currentLng) {
+        center = [currentLat, currentLng];
+      } else if (trail.length > 0) {
+        center = [trail[trail.length - 1].lat, trail[trail.length - 1].lng];
+      }
+
+      const map = L.map(mapRef.current, { zoomControl: true }).setView(center, 16);
+      mapInstanceRef.current = map;
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
+        maxZoom: 19,
+      }).addTo(map);
+
+      // Draw trail polyline
+      if (trail.length > 1) {
+        const latlngs = trail.map(p => [p.lat, p.lng]);
+        L.polyline(latlngs, { color: '#f97316', weight: 3, opacity: 0.8, dashArray: '6,4' }).addTo(map);
+
+        // Start marker (green)
+        const startIcon = L.divIcon({
+          html: `<div style="width:14px;height:14px;background:#22c55e;border:2px solid white;border-radius:50%;box-shadow:0 2px 4px rgba(0,0,0,0.4)"></div>`,
+          className: '', iconAnchor: [7, 7]
+        });
+        L.marker([trail[0].lat, trail[0].lng], { icon: startIcon })
+          .addTo(map)
+          .bindPopup(`<b>Start</b><br>${new Date(trail[0].timestamp + 'Z').toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })}`);
+
+        // Intermediate dots
+        trail.slice(1, -1).forEach((p, i) => {
+          const dot = L.divIcon({
+            html: `<div style="width:8px;height:8px;background:#fb923c;border:2px solid white;border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,0.3)"></div>`,
+            className: '', iconAnchor: [4, 4]
+          });
+          L.marker([p.lat, p.lng], { icon: dot })
+            .addTo(map)
+            .bindPopup(`<b>Point ${i + 2}</b><br>${new Date(p.timestamp + 'Z').toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })}`);
+        });
+      } else if (trail.length === 1) {
+        const singleIcon = L.divIcon({
+          html: `<div style="width:12px;height:12px;background:#22c55e;border:2px solid white;border-radius:50%;box-shadow:0 2px 4px rgba(0,0,0,0.4)"></div>`,
+          className: '', iconAnchor: [6, 6]
+        });
+        L.marker([trail[0].lat, trail[0].lng], { icon: singleIcon })
+          .addTo(map)
+          .bindPopup(`<b>${new Date(trail[0].timestamp + 'Z').toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' })}</b>`);
+      }
+
+      // Current location marker (orange pulse)
+      if (currentLat && currentLng) {
+        const currentIcon = L.divIcon({
+          html: `
+            <div style="position:relative;width:20px;height:20px">
+              <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:20px;height:20px;background:#f97316;border:3px solid white;border-radius:50%;box-shadow:0 0 0 3px rgba(249,115,22,0.3);z-index:10"></div>
+            </div>`,
+          className: '', iconAnchor: [10, 10]
+        });
+        L.marker([currentLat, currentLng], { icon: currentIcon })
+          .addTo(map)
+          .bindPopup(`<b>📍 Current Location</b><br>${locationData.employee_name}`)
+          .openPopup();
+      }
+
+      // Fit bounds to all points
+      const allPoints = [
+        ...(currentLat && currentLng ? [[currentLat, currentLng]] : []),
+        ...trail.map(p => [p.lat, p.lng])
+      ];
+      if (allPoints.length > 1) {
+        map.fitBounds(allPoints, { padding: [30, 30] });
+      }
+    };
+
+    loadMap();
+
+    return () => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+      }
+    };
+  }, [locationData]);
+
+  const formatIST = (isoStr) => {
+    if (!isoStr) return '—';
+    const d = new Date(isoStr.endsWith('Z') ? isoStr : isoStr + 'Z');
+    return d.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  };
+
+  const EmployeeList = ({ title, employees, colorClass, bgDot, showLocation = false }) => (
+    <div className={`p-4 rounded-xl shadow-sm border ${colorClass}`}>
+      <div className="flex items-center justify-between mb-3">
+        <h4 className="font-bold text-lg flex items-center gap-2">
+          <span className={`inline-block w-2.5 h-2.5 rounded-full ${bgDot}`}></span>
+          {title}
+          <span className="text-base font-extrabold ml-1">({employees.length})</span>
+        </h4>
+      </div>
       {employees.length > 0 ? (
-        <ul className="space-y-1 text-sm max-h-60 overflow-y-auto">
+        <ul className="space-y-1.5 text-sm max-h-72 overflow-y-auto">
           {employees.map(emp => (
-            <li key={emp.id} className="flex justify-between items-center p-1.5 rounded hover:bg-white/50">
-              <span>{emp.name}</span>
-              <span className="text-xs text-gray-600">{emp.role}</span>
+            <li key={emp.id} className="flex justify-between items-center p-2 rounded-lg hover:bg-white/60 transition-colors">
+              <div>
+                <span className="font-medium">{emp.name}</span>
+                {emp.check_in_time && (
+                  <span className="ml-2 text-xs text-green-700 font-medium">
+                    ✓ IN {typeof emp.check_in_time === 'string' ? emp.check_in_time.slice(0,5) : ''}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-500 capitalize">{emp.role}</span>
+                {showLocation && (
+                  <button
+                    onClick={() => openLocationModal(emp)}
+                    title="View Location & Movement"
+                    className="flex items-center gap-1 text-xs bg-orange-500 hover:bg-orange-600 text-white px-2 py-1 rounded-md transition-colors font-medium"
+                  >
+                    <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+                    Track
+                  </button>
+                )}
+              </div>
             </li>
           ))}
         </ul>
       ) : (
-        <p className="text-sm text-gray-500 italic">No employees in this category.</p>
+        <p className="text-sm text-gray-400 italic">No employees in this category.</p>
       )}
     </div>
   );
 
-  if (loading) return <p>Loading employee overview...</p>;
-  if (!overview) return <p>Could not load data.</p>;
+  if (loading) return (
+    <div className="flex items-center justify-center py-20">
+      <div className="animate-spin w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full"></div>
+      <span className="ml-3 text-gray-500">Loading org status...</span>
+    </div>
+  );
+  if (!overview) return <p className="text-center text-gray-500 py-10">Could not load org status.</p>;
+
+  const totalActive = overview.active_employees?.length || 0;
+  const totalOnLeave = (overview.on_paid_leave?.length || 0) + (overview.on_sick_leave?.length || 0) + (overview.on_unpaid_leave?.length || 0);
+  const totalInactive = overview.inactive_employees?.length || 0;
+  const grandTotal = totalActive + totalOnLeave + totalInactive;
 
   return (
-    <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
-      >
-        <EmployeeList title="Active Employees" employees={overview.active_employees} colorClass="bg-green-50 text-green-900" />
-        <EmployeeList title="On Paid Leave" employees={overview.on_paid_leave} colorClass="bg-blue-50 text-blue-900" />
-        <EmployeeList title="On Sick Leave" employees={overview.on_sick_leave} colorClass="bg-yellow-50 text-yellow-900" />
-        <EmployeeList title="On Unpaid Leave" employees={overview.on_unpaid_leave} colorClass="bg-orange-50 text-orange-900" />
-        <EmployeeList title="Inactive Employees" employees={overview.inactive_employees} colorClass="bg-red-50 text-red-900" />
-      </motion.div>
-    </AnimatePresence>
+    <div className="space-y-6">
+      {/* Summary KPI row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { label: 'Total Staff', value: grandTotal, color: 'text-gray-800', bg: 'bg-gray-50 border-gray-200' },
+          { label: 'On Duty', value: totalActive, color: 'text-green-700', bg: 'bg-green-50 border-green-200' },
+          { label: 'On Leave', value: totalOnLeave, color: 'text-blue-700', bg: 'bg-blue-50 border-blue-200' },
+          { label: 'Off Duty', value: totalInactive, color: 'text-red-600', bg: 'bg-red-50 border-red-200' },
+        ].map(k => (
+          <div key={k.label} className={`rounded-xl border p-4 text-center ${k.bg}`}>
+            <div className={`text-3xl font-extrabold ${k.color}`}>{k.value}</div>
+            <div className="text-sm text-gray-500 mt-1">{k.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Grid of category lists */}
+      <AnimatePresence>
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          <EmployeeList title="On Duty" employees={overview.active_employees || []} colorClass="bg-green-50 text-green-900 border-green-200" bgDot="bg-green-500" showLocation={true} />
+          <EmployeeList title="On Paid Leave" employees={overview.on_paid_leave || []} colorClass="bg-blue-50 text-blue-900 border-blue-200" bgDot="bg-blue-500" />
+          <EmployeeList title="On Sick Leave" employees={overview.on_sick_leave || []} colorClass="bg-yellow-50 text-yellow-900 border-yellow-200" bgDot="bg-yellow-500" />
+          <EmployeeList title="On Unpaid Leave" employees={overview.on_unpaid_leave || []} colorClass="bg-purple-50 text-purple-900 border-purple-200" bgDot="bg-purple-500" />
+          <EmployeeList title="Off Duty" employees={overview.inactive_employees || []} colorClass="bg-red-50 text-red-900 border-red-200" bgDot="bg-red-400" />
+        </motion.div>
+      </AnimatePresence>
+
+      {/* Location Modal */}
+      {locationModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-t-2xl">
+              <div>
+                <h3 className="text-lg font-bold">📍 {locationModal.name}</h3>
+                <p className="text-orange-100 text-sm capitalize">{locationModal.role} · Location Tracking</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <input
+                  type="date"
+                  value={selectedDate}
+                  max={new Date().toISOString().slice(0, 10)}
+                  onChange={e => {
+                    setSelectedDate(e.target.value);
+                    fetchLocationForDate(locationModal.id, e.target.value);
+                  }}
+                  className="text-sm bg-white/20 text-white border border-white/30 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-white/50"
+                />
+                <button onClick={() => { setLocationModal(null); setLocationData(null); }} className="hover:bg-white/20 p-2 rounded-lg transition-colors">
+                  <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                </button>
+              </div>
+            </div>
+
+            <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
+              {/* Map Area */}
+              <div className="flex-1 relative bg-gray-100 min-h-[300px]">
+                {locationLoading ? (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <div className="animate-spin w-10 h-10 border-4 border-orange-500 border-t-transparent rounded-full"></div>
+                    <p className="mt-3 text-gray-500 text-sm">Loading location data...</p>
+                  </div>
+                ) : locationData && (locationData.trail?.length > 0 || locationData.current_latitude) ? (
+                  <div ref={mapRef} style={{ width: '100%', height: '100%', minHeight: '300px' }} />
+                ) : (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400">
+                    <svg width="48" height="48" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24" className="mb-3 opacity-40">
+                      <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+                    </svg>
+                    <p className="text-sm font-medium">No location data for {selectedDate}</p>
+                    <p className="text-xs mt-1">Employee may not have been tracked on this date</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Trail Sidebar */}
+              <div className="w-full md:w-64 border-t md:border-t-0 md:border-l border-gray-100 bg-gray-50 flex flex-col overflow-hidden">
+                <div className="px-4 py-3 border-b border-gray-200 bg-white">
+                  <div className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1">Movement Trail</div>
+                  {locationData && (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">{locationData.total_points} points</span>
+                      {locationData.last_location_update && (
+                        <span className="text-xs text-gray-400">Last: {formatIST(locationData.last_location_update)}</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex-1 overflow-y-auto py-2">
+                  {locationLoading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="animate-spin w-5 h-5 border-2 border-orange-500 border-t-transparent rounded-full"></div>
+                    </div>
+                  ) : locationData?.trail?.length > 0 ? (
+                    <div className="relative px-4">
+                      {/* Vertical timeline line */}
+                      <div className="absolute left-7 top-3 bottom-3 w-0.5 bg-orange-200"></div>
+                      {locationData.trail.map((point, idx) => (
+                        <div key={idx} className="relative flex items-start gap-3 mb-3">
+                          <div className={`flex-shrink-0 w-5 h-5 rounded-full border-2 border-white shadow z-10 mt-0.5 ${idx === 0 ? 'bg-green-500' : idx === locationData.trail.length - 1 ? 'bg-orange-500' : 'bg-orange-300'}`}></div>
+                          <div className="bg-white rounded-lg px-2.5 py-1.5 text-xs shadow-sm border border-gray-100 flex-1">
+                            <div className="font-semibold text-gray-700">
+                              {idx === 0 ? '🟢 Start' : idx === locationData.trail.length - 1 ? '🔴 Last' : `Point ${idx + 1}`}
+                            </div>
+                            <div className="text-gray-500 mt-0.5">{formatIST(point.timestamp)}</div>
+                            <div className="text-gray-400 text-[10px]">{point.lat.toFixed(5)}, {point.lng.toFixed(5)}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : !locationLoading && locationData ? (
+                    <div className="text-center py-8 text-gray-400 text-sm px-4">
+                      <p>No movement recorded</p>
+                      <p className="text-xs mt-1">for {selectedDate}</p>
+                    </div>
+                  ) : null}
+                </div>
+
+                {/* Current Location Footer */}
+                {locationData?.current_latitude && (
+                  <div className="border-t border-gray-200 px-4 py-3 bg-orange-50">
+                    <div className="text-xs text-orange-700 font-semibold mb-1">📍 Current Position</div>
+                    <div className="text-xs text-gray-600">{locationData.current_latitude?.toFixed(5)}, {locationData.current_longitude?.toFixed(5)}</div>
+                    <div className="text-xs text-gray-400 mt-0.5">Updated: {formatIST(locationData.last_location_update)}</div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 };
+
+
 
 const EmployeeListAndForm = ({ showInactiveOnly = false }) => {
   const [employees, setEmployees] = useState([]);
