@@ -137,6 +137,26 @@ class AppDrawer extends StatelessWidget {
                     },
                   ),
                 ],
+                
+                if (userRole == UserRole.frontOffice) ...[
+                  _buildSectionHeader("FRONT OFFICE"),
+                  _DrawerItem(
+                    icon: Icons.bed_rounded,
+                    title: "ROOMS LIST",
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => RoomListScreen()));
+                    },
+                  ),
+                  _DrawerItem(
+                    icon: Icons.room_service_rounded,
+                    title: "SERVICE REQUESTS",
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => ServiceRequestsScreen()));
+                    },
+                  ),
+                ],
 
                 // Kitchen Menu
                 if (userRole == UserRole.kitchen) ...[
@@ -365,6 +385,7 @@ class AppDrawer extends StatelessWidget {
       case UserRole.kitchen: return "Kitchen Staff";
       case UserRole.waiter: return "Restaurant Staff";
       case UserRole.manager: return "Manager";
+      case UserRole.frontOffice: return "Front Office";
       default: return "Employee";
     }
   }

@@ -3783,8 +3783,8 @@ const Services = () => {
                             </td>
                             <td className="py-5 px-6 text-right">
                               <div className="flex flex-col">
-                                <span className="text-[11px] font-black text-slate-800">{s.assigned_at ? new Date(s.assigned_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A'}</span>
-                                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">{s.assigned_at ? new Date(s.assigned_at).toLocaleDateString() : 'NO TIMESTAMP'}</span>
+                                <span className="text-[11px] font-black text-slate-800">{s.assigned_at ? new Date(ensureUTC(s.assigned_at)).toLocaleTimeString([], { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' }) : 'N/A'}</span>
+                                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">{s.assigned_at ? new Date(ensureUTC(s.assigned_at)).toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata' }) : 'NO TIMESTAMP'}</span>
                               </div>
                             </td>
                             <td className="py-5 px-6 text-right">
@@ -4352,7 +4352,7 @@ const Services = () => {
                       <div className="space-y-1">
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Dispatch Time</span>
                         <div className="font-black text-slate-800">
-                          {viewingAssignedService.assigned_at ? new Date(viewingAssignedService.assigned_at).toLocaleTimeString() : 'N/A'}
+                          {viewingAssignedService.assigned_at ? formatDateTimeIST(viewingAssignedService.assigned_at) : 'N/A'}
                         </div>
                       </div>
                     </div>

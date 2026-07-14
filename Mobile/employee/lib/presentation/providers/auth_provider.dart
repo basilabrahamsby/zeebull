@@ -8,7 +8,7 @@ import 'package:jwt_decoder/jwt_decoder.dart'; // We might need this, or just de
 import 'dart:convert';
 
 enum AuthStatus { unknown, authenticated, unauthenticated }
-enum UserRole { manager, housekeeping, kitchen, waiter, maintenance, unknown }
+enum UserRole { manager, housekeeping, kitchen, waiter, maintenance, frontOffice, unknown }
 
 class AuthProvider extends ChangeNotifier {
   AuthStatus _status = AuthStatus.unknown;
@@ -236,6 +236,9 @@ class AuthProvider extends ChangeNotifier {
     if (roleStr.contains('kitchen') || roleStr.contains('chef') || roleStr.contains('cook')) return UserRole.kitchen;
     if (roleStr.contains('waiter') || roleStr.contains('server') || roleStr.contains('service') || roleStr.contains('room')) return UserRole.waiter;
     if (roleStr.contains('maintenance')) return UserRole.maintenance;
+    if (roleStr.contains('frontoffice') || roleStr.contains('front_office') || roleStr.contains('reception')) {
+      return UserRole.frontOffice;
+    }
     return UserRole.housekeeping; // Redirect unknown to housekeeping
   }
 

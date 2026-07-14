@@ -105,7 +105,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   bool _shouldShowBottomBar(UserRole role) {
-    return role == UserRole.manager || role == UserRole.housekeeping || role == UserRole.waiter || role == UserRole.maintenance || role == UserRole.kitchen;
+    return role == UserRole.manager || role == UserRole.housekeeping || role == UserRole.waiter || role == UserRole.maintenance || role == UserRole.kitchen || role == UserRole.frontOffice;
   }
 
   List<Widget> _getPagesForRole(UserRole role) {
@@ -117,6 +117,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ManagerStaffScreen(),
           ManagerInventoryScreen(),
           FinancialReportsScreen(),
+        ];
+      case UserRole.frontOffice:
+        return [
+          const HousekeepingDashboard(),
+          const WaiterServiceScreen(),
+          RoomListScreen(),
+          NotificationsScreen(),
         ];
       case UserRole.housekeeping:
         return [
@@ -158,6 +165,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
         BottomNavigationBarItem(icon: Icon(Icons.inventory), label: "Stock"),
         BottomNavigationBarItem(icon: Icon(Icons.analytics), label: "Finance"),
       ];
+    } else if (role == UserRole.frontOffice) {
+      return const [
+        BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: "Home"),
+        BottomNavigationBarItem(icon: Icon(Icons.room_service_rounded), label: "Tasks"),
+        BottomNavigationBarItem(icon: Icon(Icons.bed), label: "Rooms"),
+        BottomNavigationBarItem(icon: Icon(Icons.notifications), label: "Alerts"),
+      ];
     } else if (role == UserRole.housekeeping) {
       return const [
         BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: "Home"),
@@ -192,6 +206,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String _getTitleForIndex(UserRole role, int index) {
     if (role == UserRole.manager) {
       return ["Dashboard", "Service Tasks", "Staff Management", "Inventory Control", "Financial Analytics"][index];
+    }
+    if (role == UserRole.frontOffice) {
+      return ["Dashboard", "Assigned Tasks", "Room Management", "Notifications"][index];
     }
     if (role == UserRole.housekeeping) {
       return ["Dashboard", "Assigned Tasks", "Room Management", "Notifications"][index];
