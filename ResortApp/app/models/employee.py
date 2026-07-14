@@ -13,6 +13,10 @@ class Employee(Base):
     image_url = Column(String, nullable=True) # ✅ Changed 'image' to 'image_url' for clarity
     daily_tasks = Column(String, nullable=True) # JSON or Text representing daily task list
     is_active = Column(Boolean, default=True, nullable=False, server_default='true')  # soft-delete flag
+    
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
+    last_location_update = Column(DateTime, nullable=True)
 
     # Leave balances (total allocated per year)
     paid_leave_balance = Column(Integer, default=12)
@@ -103,3 +107,13 @@ class WorkingLog(Base):
 
     
     employee = relationship("Employee", back_populates="working_logs")
+
+class EmployeeLocationHistory(Base):
+    __tablename__ = "employee_location_history"
+    id = Column(Integer, primary_key=True, index=True)
+    employee_id = Column(Integer, ForeignKey("employees.id", ondelete="CASCADE"), nullable=False)
+    latitude = Column(Float, nullable=False)
+    longitude = Column(Float, nullable=False)
+    timestamp = Column(DateTime, nullable=False)
+    
+    employee = relationship("Employee")

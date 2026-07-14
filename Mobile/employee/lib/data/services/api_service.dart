@@ -113,6 +113,17 @@ class ApiService {
     return await _dio.post('/attendance/clock-out', data: formData);
   }
 
+  Future<Response> updateLiveLocation(int employeeId, double latitude, double longitude) async {
+    return await _dio.post(
+      '/attendance/update-live-location',
+      data: {
+        'employee_id': employeeId,
+        'latitude': latitude,
+        'longitude': longitude,
+      },
+    );
+  }
+
   Future<Response> getWorkLogs(int employeeId) async {
     return await _dio.get(
       '/attendance/work-logs/$employeeId',

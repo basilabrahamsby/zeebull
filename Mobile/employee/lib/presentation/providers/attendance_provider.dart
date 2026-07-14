@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import '../../data/services/api_service.dart';
 import 'dart:convert';
+import 'dart:async';
+import 'package:geolocator/geolocator.dart';
 
 class AttendanceProvider extends ChangeNotifier {
   final ApiService _apiService;
@@ -99,6 +101,7 @@ class AttendanceProvider extends ChangeNotifier {
              
              foundActive = true;
              print("Status: CLOCKED IN at ${_clockInTime} with Log ID: $_activeLogId");
+             _startLocationTracking(employeeId);
            } catch (e) {
              // No active log found
              print("No active clock-in found in today's logs");
@@ -113,6 +116,7 @@ class AttendanceProvider extends ChangeNotifier {
            _activeLogId = null;
            _completedTasks = [];
            print("Status: CLOCKED OUT");
+           _stopLocationTracking();
         }
       }
     } catch (e) {
@@ -146,6 +150,7 @@ class AttendanceProvider extends ChangeNotifier {
         _isClockedIn = true;
         _clockInTime = DateTime.now();
         print("Clock-in successful!");
+        _startLocationTracking(employeeId);
         // Refresh status to get latest data
         await checkTodayStatus(employeeId);
         
@@ -201,6 +206,7 @@ class AttendanceProvider extends ChangeNotifier {
       if (response.statusCode == 200) {
         _isClockedIn = false;
         _clockInTime = null;
+        _stopLocationTracking();
         return true;
       } else {
          _error = "Failed to clock out";
@@ -236,5 +242,73 @@ class AttendanceProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  Timer? _locationTimer;
+
+  void _startLocationTracking(int employeeId) {
+    if (_locationTimer != null) return; // Already tracking
+    
+    print("[LOCATION] Starting periodic location tracking for employee: $employeeId");
+    
+    // First update immediately
+    _sendCurrentLocation(employeeId);
+
+    // Track every 2 minutes
+    _locationTimer = Timer.periodic(const Duration(minutes: 2), (timer) {
+      if (!_isClockedIn) {
+        print("[LOCATION] Employee clocked out, stopping location tracking timer.");
+        timer.cancel();
+        _locationTimer = null;
+        return;
+      }
+      _sendCurrentLocation(employeeId);
+    });
+  }
+
+  void _stopLocationTracking() {
+    if (_locationTimer != null) {
+      print("[LOCATION] Stopping location tracking timer.");
+      _locationTimer!.cancel();
+      _locationTimer = null;
+    }
+  }
+
+  Future<void> _sendCurrentLocation(int employeeId) async {
+    try {
+      final permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
+        print("[LOCATION] Permission not granted, skipping live location update.");
+        return;
+      }
+
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        print("[LOCATION] Location service is disabled, skipping update.");
+        return;
+      }
+
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          distanceFilter: 10,
+        ),
+      );
+
+      print("[LOCATION] Sending live location: ${position.latitude}, ${position.longitude}");
+      await _apiService.updateLiveLocation(
+        employeeId,
+        position.latitude,
+        position.longitude,
+      );
+    } catch (e) {
+      print("[LOCATION] Error updating live location: $e");
+    }
+  }
+
+  @override
+  void dispose() {
+    _stopLocationTracking();
+    super.dispose();
   }
 }

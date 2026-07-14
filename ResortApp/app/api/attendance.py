@@ -11,7 +11,7 @@ import pytz
 
 from calendar import monthrange
 from app.utils.auth import get_db, get_current_user
-from app.models.employee import Attendance, WorkingLog, Employee, Leave
+from app.models.employee import Attendance, WorkingLog, Employee, Leave, EmployeeLocationHistory
 from app.models.salary_advance import SalaryAdvance
 from app.models.settings import SystemSetting
 from app.models.user import User
@@ -303,6 +303,36 @@ def _calculate_duration(log_date, check_in_time, check_out_time):
     if end_dt < start_dt:
         end_dt += timedelta(days=1)
     return (end_dt - start_dt).total_seconds() / 3600
+
+class LiveLocationUpdate(BaseModel):
+    employee_id: int
+    latitude: float
+    longitude: float
+
+@router.post("/update-live-location")
+def update_live_location(
+    update: LiveLocationUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    employee = db.query(Employee).filter(Employee.id == update.employee_id).first()
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found")
+        
+    employee.latitude = update.latitude
+    employee.longitude = update.longitude
+    employee.last_location_update = datetime.utcnow()
+    
+    history_entry = EmployeeLocationHistory(
+        employee_id=update.employee_id,
+        latitude=update.latitude,
+        longitude=update.longitude,
+        timestamp=datetime.utcnow()
+    )
+    db.add(history_entry)
+    db.commit()
+    
+    return {"status": "success", "message": "Live location updated"}
 
 @router.get("/work-logs/date/{log_date}", response_model=List[WorkingLogRecord])
 def get_work_logs_by_date(log_date: date, db: Session = Depends(get_db), current_user: User = Depends(get_current_user), branch_id: int = Depends(get_branch_id)):
