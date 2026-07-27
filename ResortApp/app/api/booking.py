@@ -1238,6 +1238,17 @@ def create_booking(
             room_charges=total_amt
         )
         formatted_booking_id = format_display_id(booking_full.id, branch_id=branch_id)
+        
+        # Send confirmation email to guest if guest email is provided
+        if booking_full.guest_email:
+            send_email(
+                to_email=booking_full.guest_email,
+                subject=f"Booking Confirmation {formatted_booking_id} - Zeebull Hospitality",
+                html_content=email_html,
+                to_name=booking_full.guest_name
+            )
+
+        # Notify admin
         send_email(
             to_email="info@zeebull.com",
             subject=f"New Room Booking: {formatted_booking_id}",
@@ -1245,7 +1256,7 @@ def create_booking(
             cc="orchidresort@gmail.com"
         )
     except Exception as e:
-        print(f"Failed to send admin notification email: {str(e)}")
+        print(f"Failed to send booking notification email: {str(e)}")
 
     return booking_full
 

@@ -1,0 +1,1 @@
+ssh -i C:\Users\pro\.ssh\gcp_key -o StrictHostKeyChecking=no basilabrahamaby@34.162.60.52 "sudo -u postgres psql -d zeebuldb -c `"SELECT id, display_id, guest_name, total_amount, advance_paid, check_in_date, check_out_date, room_rate, room_charges FROM bookings WHERE display_id = 'BK-1-000144';`""

@@ -240,34 +240,47 @@ app.add_middleware(ActivityLoggingMiddleware)
 
 # Performance monitoring and caching middleware
 class PerformanceMiddleware(BaseHTTPMiddleware):
+    # Image and font extensions that can be cached for a long time
+    _IMMUTABLE_EXTS = (".webp", ".jpg", ".jpeg", ".png", ".gif", ".svg", ".ico", ".woff", ".woff2", ".ttf")
+    # Upload path prefix — served as user-uploaded images
+    _STATIC_PATHS = ("/uploads/", "/static/", "/user-static/", "/admin-static/", "/landing/")
+    # Real-time paths that must never be cached
+    _NO_CACHE_PATHS = ("/bill/active-rooms", "/active-rooms", "/checkout", "/auth/")
+
     async def dispatch(self, request: Request, call_next):
         start_time = time()
         response = await call_next(request)
         process_time = time() - start_time
-        
-        # Add performance headers
+
+        # Add performance header
         response.headers["X-Process-Time"] = str(round(process_time, 3))
-        
-        # Add caching headers for GET requests (5 minutes for dynamic, 1 hour for static)
-        # Add caching headers for GET requests (5 minutes for dynamic, 1 hour for static)
-        # Add caching headers for GET requests (5 minutes for dynamic, 1 hour for static)
+
         if request.method == "GET":
-            path = str(request.url.path)
-            print(f"[DEBUG-PERF] Path: {path}") # Add debug print
-            # Disable cache for critical real-time endpoints
-            if any(p in path for p in ["/bill/active-rooms", "/active-rooms", "/bookings", "/checkout"]):
-                 response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
-                 print(f"[DEBUG-PERF] Disabled Cache for: {path}")
-            # Cache static/semi-static endpoints longer
-            elif any(p in path for p in ["/rooms", "/packages", "/services", "/food-items", "/inventory/items"]):
+            path = str(request.url.path).lower()
+
+            # 1. Real-time endpoints — never cache
+            if any(p in path for p in self._NO_CACHE_PATHS):
                 response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+
+            # 2. Uploaded images & static assets — cache 1 year (immutable, fingerprinted filenames)
+            elif any(path.startswith(p) for p in self._STATIC_PATHS):
+                if any(path.endswith(ext) for ext in self._IMMUTABLE_EXTS):
+                    response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+                else:
+                    response.headers["Cache-Control"] = "public, max-age=3600"
+
+            # 3. Semi-static API data (rooms, packages, menus) — cache 5 minutes
+            elif any(p in path for p in ["/rooms", "/packages", "/services", "/food-items", "/menu"]):
+                response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=60"
+
+            # 4. All other API endpoints — short cache 30 seconds
             else:
-                response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
-        
+                response.headers["Cache-Control"] = "public, max-age=30, stale-while-revalidate=10"
+
         # Log slow requests (> 1 second)
         if process_time > 1.0:
             print(f"[PERF] Slow request: {request.method} {request.url.path} took {process_time:.2f}s")
-        
+
         return response
 
 @app.middleware("http")

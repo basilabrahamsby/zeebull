@@ -1522,6 +1522,7 @@ export default function App() {
         return Array.from(new Set(['All', ...fromCategories, ...fromItems]));
     }, [foodCategories, foodItemsByCategory]);
     const [selectedFoodCategory, setSelectedFoodCategory] = useState('All');
+    const [visibleFoodCount, setVisibleFoodCount] = useState(10);
     useEffect(() => {
         if (!categoryNames.length) {
             if (selectedFoodCategory !== 'All') setSelectedFoodCategory('All');
@@ -1536,6 +1537,9 @@ export default function App() {
             setSelectedFoodCategory(categoryNames[0] || 'All');
         }
     }, [categoryNames, selectedFoodCategory]);
+    useEffect(() => {
+        setVisibleFoodCount(10);
+    }, [selectedFoodCategory]);
     const displayedFoodItems = useMemo(() => {
         if (selectedFoodCategory === 'All') return foodItems;
         return foodItemsByCategory[selectedFoodCategory] || [];
@@ -4137,48 +4141,64 @@ export default function App() {
                                     </div>
 
                                     {displayedFoodItems.length > 0 ? (
-                                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                                            {displayedFoodItems.map((food) => {
-                                                const categoryName = food.category?.name || food.category_name || 'Uncategorized';
-                                                return (
-                                                    <div
-                                                        key={food.id}
-                                                        className={`group relative ${theme.bgCard} rounded-2xl overflow-hidden luxury-shadow transition-all duration-300 transform hover:-translate-y-2 border ${theme.cardBorder || theme.border}`}
-                                                    >
-                                                        <div className="relative h-40 overflow-hidden">
-                                                            <img
-                                                                src={getImageUrl(food.images?.[0]?.image_url)}
-                                                                alt={food.name}
-                                                                className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
-                                                                onError={(e) => { e.target.src = ITEM_PLACEHOLDER; }}
-                                                            />
-                                                            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-                                                            <div className="absolute top-3 left-3 px-3 py-1 bg-black/40 text-white text-xs font-semibold rounded-full backdrop-blur-sm">
-                                                                {categoryName}
+                                        <>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
+                                                {displayedFoodItems.slice(0, visibleFoodCount).map((food) => {
+                                                    const categoryName = food.category?.name || food.category_name || 'Uncategorized';
+                                                    return (
+                                                        <div
+                                                            key={food.id}
+                                                            className={`group relative ${theme.bgCard} rounded-2xl overflow-hidden luxury-shadow transition-all duration-300 transform hover:-translate-y-2 border ${theme.cardBorder || theme.border}`}
+                                                        >
+                                                            <div className="relative h-44 sm:h-48 overflow-hidden">
+                                                                <img
+                                                                    src={getImageUrl(food.images?.[0]?.image_url)}
+                                                                    alt={food.name}
+                                                                    loading="lazy"
+                                                                    decoding="async"
+                                                                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                                                                    onError={(e) => { e.target.src = ITEM_PLACEHOLDER; }}
+                                                                />
+                                                                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                                                                <div className="absolute top-3 left-3 px-3 py-1 bg-black/40 text-white text-xs font-semibold rounded-full backdrop-blur-sm">
+                                                                    {categoryName}
+                                                                </div>
+                                                                <div className="absolute top-3 right-3">
+                                                                    <span className={`px-3 py-1 rounded-full text-xs font-bold shadow-lg ${food.available ? "bg-green-500 text-white" : "bg-red-500 text-white"}`}>
+                                                                        {food.available ? "Available" : "Unavailable"}
+                                                                    </span>
+                                                                </div>
                                                             </div>
-                                                            <div className="absolute top-3 right-3">
-                                                                <span className={`px-3 py-1 rounded-full text-xs font-bold shadow-lg ${food.available ? "bg-green-500 text-white" : "bg-red-500 text-white"}`}>
-                                                                    {food.available ? "Available" : "Unavailable"}
+                                                            <div className="p-4 sm:p-5 space-y-2">
+                                                                <span className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-[#0f5132]/70 bg-[#0f5132]/10 px-3 py-1 rounded-full">
+                                                                    {categoryName}
                                                                 </span>
+                                                                <h4 className={`text-base sm:text-lg font-semibold ${theme.textCardPrimary || theme.textPrimary}`}>
+                                                                    {food.name}
+                                                                </h4>
+                                                                {food.price && (
+                                                                    <p className="text-sm sm:text-base text-[#1a7042] font-semibold">
+                                                                        {formatCurrency(food.price)}
+                                                                    </p>
+                                                                )}
                                                             </div>
                                                         </div>
-                                                        <div className="p-5 space-y-2">
-                                                            <span className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-[#0f5132]/70 bg-[#0f5132]/10 px-3 py-1 rounded-full">
-                                                                {categoryName}
-                                                            </span>
-                                                            <h4 className={`text-lg font-semibold ${theme.textCardPrimary || theme.textPrimary}`}>
-                                                                {food.name}
-                                                            </h4>
-                                                            {food.price && (
-                                                                <p className="text-sm text-[#1a7042] font-semibold">
-                                                                    {formatCurrency(food.price)}
-                                                                </p>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+
+                                            {displayedFoodItems.length > visibleFoodCount && (
+                                                <div className="mt-8 sm:mt-10 text-center">
+                                                    <button
+                                                        onClick={() => setVisibleFoodCount(prev => prev + 10)}
+                                                        className="inline-flex items-center gap-2 px-8 py-3.5 bg-[#0f5132] hover:bg-[#156d44] text-white text-sm sm:text-base font-bold rounded-full shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5 active:translate-y-0 cursor-pointer"
+                                                    >
+                                                        <span>View More Dishes ({displayedFoodItems.length - visibleFoodCount} More)</span>
+                                                        <ChevronDown className="w-5 h-5 animate-bounce" />
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </>
                                     ) : (
                                         <div className="text-center py-10 bg-white/60 border border-[#d8c9ac] rounded-2xl">
                                             <p className="text-[#4f6f62] font-medium">
