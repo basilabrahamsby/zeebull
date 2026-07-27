@@ -463,6 +463,8 @@ const RoomTypeModal = ({ onClose, type, isEditing, onSubmit, branches, isEnterpr
     online_inventory: type?.online_inventory ?? "",
     capacity: type?.adults_capacity || 2,
     children_capacity: type?.children_capacity || 0,
+    extra_adult_price: type?.extra_adult_price || "",
+    extra_child_price: type?.extra_child_price || "",
     channel_manager_id: type?.channel_manager_id || "",
     description: type?.description || "",
     
@@ -555,7 +557,7 @@ const RoomTypeModal = ({ onClose, type, isEditing, onSubmit, branches, isEnterpr
   };
 
   const addRatePlan = () => {
-    setRatePlans([...ratePlans, { name: "", occupancy: 2, channel_manager_id: "", meal_plan: "CP", base_price: 0, price_offset: 0 }]);
+    setRatePlans([...ratePlans, { name: "", occupancy: 2, channel_manager_id: "", meal_plan: "CP", base_price: 0, price_offset: 0, extra_adult_price: 0, extra_child_price: 0 }]);
   };
 
   const updateRatePlan = (index, field, value) => {
@@ -578,6 +580,8 @@ const RoomTypeModal = ({ onClose, type, isEditing, onSubmit, branches, isEnterpr
     if (formData.weekend_price) data.append("weekend_price", formData.weekend_price);
     if (formData.long_weekend_price) data.append("long_weekend_price", formData.long_weekend_price);
     if (formData.holiday_price) data.append("holiday_price", formData.holiday_price);
+    if (formData.extra_adult_price) data.append("extra_adult_price", formData.extra_adult_price);
+    if (formData.extra_child_price) data.append("extra_child_price", formData.extra_child_price);
     data.append("total_inventory", formData.total_inventory || 0);
     if (formData.online_inventory !== "" && formData.online_inventory !== null) {
       data.append("online_inventory", formData.online_inventory);
@@ -694,7 +698,7 @@ const RoomTypeModal = ({ onClose, type, isEditing, onSubmit, branches, isEnterpr
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                     <div>
                       <label className="block text-[11px] font-black text-indigo-400 uppercase tracking-tighter mb-1.5 ml-1">Adult Capacity <span className="text-red-500">*</span></label>
                       <div className="relative group">
@@ -722,6 +726,36 @@ const RoomTypeModal = ({ onClose, type, isEditing, onSubmit, branches, isEnterpr
                           min="0"
                           className="w-full pl-10 pr-4 py-3 border-2 border-gray-100 rounded-2xl focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all font-bold text-gray-800 bg-white/50 focus:bg-white" 
                           placeholder="0"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-black text-emerald-600 uppercase tracking-tighter mb-1.5 ml-1">Extra Adult (₹)</label>
+                      <div className="relative group">
+                        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-emerald-500 font-bold text-xs">₹</span>
+                        <input 
+                          type="number" 
+                          name="extra_adult_price" 
+                          value={formData.extra_adult_price} 
+                          onChange={handleChange} 
+                          min="0"
+                          className="w-full pl-9 pr-3 py-3 border-2 border-emerald-100 rounded-2xl focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all font-black text-emerald-700 bg-emerald-50/20" 
+                          placeholder="e.g. 1200"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-black text-amber-600 uppercase tracking-tighter mb-1.5 ml-1">Extra Child (₹)</label>
+                      <div className="relative group">
+                        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-amber-500 font-bold text-xs">₹</span>
+                        <input 
+                          type="number" 
+                          name="extra_child_price" 
+                          value={formData.extra_child_price} 
+                          onChange={handleChange} 
+                          min="0"
+                          className="w-full pl-9 pr-3 py-3 border-2 border-amber-100 rounded-2xl focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10 outline-none transition-all font-black text-amber-700 bg-amber-50/20" 
+                          placeholder="e.g. 600"
                         />
                       </div>
                     </div>
@@ -874,77 +908,132 @@ const RoomTypeModal = ({ onClose, type, isEditing, onSubmit, branches, isEnterpr
               </button>
             </div>
             
-            <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+            <div className="space-y-4 max-h-[550px] overflow-y-auto pr-2 custom-scrollbar">
               {ratePlans.map((plan, index) => (
-                <div key={index} className="flex gap-4 items-end bg-gray-50/80 p-5 rounded-2xl border border-gray-200 group relative animate-in slide-in-from-right-2 duration-200 hover:border-indigo-300 transition-all">
-                  <div className="flex-[2]">
-                    <label className="block text-[11px] font-black text-gray-400 uppercase mb-2 ml-1 tracking-wider">Plan Name</label>
-                    <div className="relative">
-                      <i className="fas fa-signature absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
-                      <input 
-                        value={plan.name} 
-                        onChange={(e) => updateRatePlan(index, 'name', e.target.value)}
-                        className="w-full pl-9 pr-4 py-3 text-sm border-2 border-white rounded-xl focus:border-indigo-500 outline-none font-bold text-gray-700 shadow-sm"
-                        placeholder="e.g. Luxury Single CP"
-                      />
+                <div key={index} className="bg-gradient-to-r from-gray-50 via-white to-gray-50 p-5 rounded-3xl border-2 border-gray-100 group relative animate-in slide-in-from-right-2 duration-200 hover:border-indigo-400 hover:shadow-lg transition-all space-y-3">
+                  
+                  {/* ROW 1: Mapping Identifiers & Delete Action */}
+                  <div className="flex flex-wrap sm:flex-nowrap items-center gap-3">
+                    <div className="flex-1 min-w-[140px]">
+                      <label className="block text-[11px] font-black text-gray-500 uppercase mb-1 ml-1 tracking-wider">Plan Name</label>
+                      <div className="relative">
+                        <i className="fas fa-tag absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+                        <input 
+                          value={plan.name} 
+                          onChange={(e) => updateRatePlan(index, 'name', e.target.value)}
+                          className="w-full pl-9 pr-3 py-2.5 text-sm border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:bg-white outline-none font-bold text-gray-800 bg-white/80 shadow-xs"
+                          placeholder="e.g. Single CP"
+                        />
+                      </div>
                     </div>
-                  </div>
-                  <div className="w-20">
-                    <label className="block text-[11px] font-black text-gray-400 uppercase mb-2 ml-1 tracking-wider text-center">Occ.</label>
-                    <input 
-                      type="number"
-                      value={plan.occupancy} 
-                      onChange={(e) => updateRatePlan(index, 'occupancy', e.target.value)}
-                      className="w-full px-2 py-3 text-sm border-2 border-white rounded-xl focus:border-indigo-500 outline-none text-center font-black text-indigo-600 shadow-sm"
-                      min="1" max="10"
-                    />
-                  </div>
-                  <div className="flex-[2]">
-                    <label className="block text-[11px] font-black text-gray-400 uppercase mb-2 ml-1 tracking-wider">Aiosell ID</label>
-                    <div className="relative">
-                      <i className="fas fa-fingerprint absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
-                      <input 
-                        value={plan.channel_manager_id} 
-                        onChange={(e) => updateRatePlan(index, 'channel_manager_id', e.target.value)}
-                        className="w-full pl-9 pr-4 py-3 text-sm border-2 border-white rounded-xl focus:border-indigo-500 outline-none font-mono font-bold text-indigo-900 shadow-sm"
-                        placeholder="e.g. room-s-cp"
-                      />
-                    </div>
-                  </div>
-                  <div className="flex-1">
-                    <label className="block text-[11px] font-black text-gray-400 uppercase mb-2 ml-1 tracking-wider" title="Relative to Room Base Price">Offset (₹)</label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xs">+/-</span>
+
+                    <div className="w-20">
+                      <label className="block text-[11px] font-black text-gray-500 uppercase mb-1 tracking-wider text-center">Occ.</label>
                       <input 
                         type="number"
-                        value={plan.price_offset} 
-                        onChange={(e) => updateRatePlan(index, 'price_offset', e.target.value)}
-                        className="w-full pl-9 pr-3 py-3 text-sm border-2 border-white rounded-xl focus:border-indigo-500 outline-none font-black text-indigo-500 shadow-sm"
-                        placeholder="0"
+                        value={plan.occupancy} 
+                        onChange={(e) => updateRatePlan(index, 'occupancy', e.target.value)}
+                        className="w-full px-2 py-2.5 text-sm border-2 border-gray-200 rounded-xl focus:border-indigo-500 outline-none text-center font-black text-indigo-600 bg-white shadow-xs"
+                        min="1" max="10"
                       />
                     </div>
-                  </div>
-                  <div className="flex-1">
-                    <label className="block text-[11px] font-black text-gray-400 uppercase mb-2 ml-1 tracking-wider" title="Fixed price override">Fixed (₹)</label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xs">₹</span>
-                      <input 
-                        type="number"
-                        value={plan.base_price} 
-                        onChange={(e) => updateRatePlan(index, 'base_price', e.target.value)}
-                        className="w-full pl-7 pr-3 py-3 text-sm border-2 border-white rounded-xl focus:border-indigo-500 outline-none font-black text-green-600 shadow-sm"
-                        placeholder="0"
-                      />
+
+                    <div className="flex-[2] min-w-[200px]">
+                      <label className="block text-[11px] font-black text-indigo-500 uppercase mb-1 ml-1 tracking-wider flex items-center justify-between">
+                        <span>Aiosell Rateplan ID</span>
+                        <span className="text-[9px] font-bold bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-md">OTA Sync Key</span>
+                      </label>
+                      <div className="relative">
+                        <i className="fas fa-fingerprint absolute left-3.5 top-1/2 -translate-y-1/2 text-indigo-400 text-xs"></i>
+                        <input 
+                          value={plan.channel_manager_id} 
+                          onChange={(e) => updateRatePlan(index, 'channel_manager_id', e.target.value)}
+                          className="w-full pl-9 pr-3 py-2.5 text-sm border-2 border-indigo-100 rounded-xl focus:border-indigo-500 outline-none font-mono font-bold text-indigo-900 bg-indigo-50/20 shadow-xs"
+                          placeholder="e.g. room-s-cp"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="pt-5 ml-auto">
+                      <button 
+                        type="button" 
+                        onClick={() => removeRatePlan(index)}
+                        className="px-3.5 py-2.5 bg-red-50 text-red-500 hover:text-white hover:bg-red-500 rounded-xl transition-all border border-red-200 font-bold text-xs flex items-center gap-1.5 shadow-xs"
+                        title="Remove mapping"
+                      >
+                        <i className="fas fa-trash-alt"></i>
+                        <span className="hidden sm:inline">Delete</span>
+                      </button>
                     </div>
                   </div>
-                  <button 
-                    type="button" 
-                    onClick={() => removeRatePlan(index)}
-                    className="mb-1 p-3 bg-red-50 text-red-500 hover:text-red-700 hover:bg-red-100 rounded-xl transition-all border border-red-200"
-                    title="Remove mapping"
-                  >
-                    <i className="fas fa-trash-alt text-lg"></i>
-                  </button>
+
+                  {/* ROW 2: Price Offsets & Extra Rates */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t border-gray-100">
+                    <div>
+                      <label className="block text-[11px] font-black text-gray-500 uppercase mb-1 ml-1 tracking-wider" title="Offset relative to Base Room Price">
+                        Price Offset (₹)
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xs">+/-</span>
+                        <input 
+                          type="number"
+                          value={plan.price_offset} 
+                          onChange={(e) => updateRatePlan(index, 'price_offset', e.target.value)}
+                          className="w-full pl-8 pr-3 py-2 text-sm border-2 border-gray-200 rounded-xl focus:border-indigo-500 outline-none font-black text-indigo-600 bg-white shadow-xs"
+                          placeholder="0"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-black text-gray-500 uppercase mb-1 ml-1 tracking-wider" title="Fixed price override">
+                        Fixed Price (₹)
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xs">₹</span>
+                        <input 
+                          type="number"
+                          value={plan.base_price} 
+                          onChange={(e) => updateRatePlan(index, 'base_price', e.target.value)}
+                          className="w-full pl-7 pr-3 py-2 text-sm border-2 border-gray-200 rounded-xl focus:border-gray-500 outline-none font-black text-gray-700 bg-white shadow-xs"
+                          placeholder="0"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-black text-emerald-600 uppercase mb-1 ml-1 tracking-wider" title="Extra Adult Rate">
+                        Ex. Adult (₹)
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-emerald-500 font-bold text-xs">₹</span>
+                        <input 
+                          type="number"
+                          value={plan.extra_adult_price ?? ""} 
+                          onChange={(e) => updateRatePlan(index, 'extra_adult_price', e.target.value)}
+                          className="w-full pl-7 pr-3 py-2 text-sm border-2 border-emerald-300 rounded-xl focus:border-emerald-500 outline-none font-black text-emerald-700 bg-emerald-50/40 shadow-xs"
+                          placeholder="0"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-black text-amber-600 uppercase mb-1 ml-1 tracking-wider" title="Extra Child Rate">
+                        Ex. Child (₹)
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-amber-500 font-bold text-xs">₹</span>
+                        <input 
+                          type="number"
+                          value={plan.extra_child_price ?? ""} 
+                          onChange={(e) => updateRatePlan(index, 'extra_child_price', e.target.value)}
+                          className="w-full pl-7 pr-3 py-2 text-sm border-2 border-amber-300 rounded-xl focus:border-amber-500 outline-none font-black text-amber-700 bg-amber-50/40 shadow-xs"
+                          placeholder="0"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
                 </div>
               ))}
               {ratePlans.length === 0 && (

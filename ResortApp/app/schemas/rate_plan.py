@@ -9,6 +9,8 @@ class RatePlanBase(BaseModel):
     base_price: float = 0.0
     weekend_price: Optional[float] = None
     price_offset: float = 0.0
+    extra_adult_price: Optional[float] = 0.0
+    extra_child_price: Optional[float] = 0.0
 
 class RatePlanCreate(RatePlanBase):
     room_type_id: int
@@ -21,6 +23,8 @@ class RatePlanUpdate(BaseModel):
     base_price: Optional[float] = None
     weekend_price: Optional[float] = None
     price_offset: Optional[float] = None
+    extra_adult_price: Optional[float] = None
+    extra_child_price: Optional[float] = None
 
 class RatePlanOut(RatePlanBase):
     id: int

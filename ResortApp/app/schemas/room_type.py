@@ -12,6 +12,8 @@ class RoomTypeBase(BaseModel):
     holiday_price: Optional[float] = None
     adults_capacity: int = 2
     children_capacity: int = 0
+    extra_adult_price: Optional[float] = 0.0
+    extra_child_price: Optional[float] = 0.0
     channel_manager_id: Optional[str] = None
     online_inventory: Optional[int] = None
     
@@ -61,6 +63,8 @@ class RoomTypeUpdate(BaseModel):
     holiday_price: Optional[float] = None
     adults_capacity: Optional[int] = None
     children_capacity: Optional[int] = None
+    extra_adult_price: Optional[float] = None
+    extra_child_price: Optional[float] = None
     channel_manager_id: Optional[str] = None
     online_inventory: Optional[int] = None
     

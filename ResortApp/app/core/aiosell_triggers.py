@@ -287,6 +287,10 @@ def trigger_rates_push(room_type_id: int, days: int = 90):
                 else:
                     rate = daily_base + (plan.price_offset or 0)
 
+                # Extract extra adult & child rates from plan or room_type
+                extra_adult = (plan.extra_adult_price if plan.extra_adult_price is not None else getattr(room_type, 'extra_adult_price', 0.0)) or 0.0
+                extra_child = (plan.extra_child_price if plan.extra_child_price is not None else getattr(room_type, 'extra_child_price', 0.0)) or 0.0
+
                 # Group consecutive dates with same rate to minimize payload size
                 if rate != current_rate:
                     if segment_start:
@@ -295,19 +299,25 @@ def trigger_rates_push(room_type_id: int, days: int = 90):
                             "rate": current_rate,
                             "start_date": segment_start,
                             "end_date": target_date - timedelta(days=1),
-                            "rate_plan_code": plan.channel_manager_id
+                            "rate_plan_code": plan.channel_manager_id,
+                            "extra_adult": extra_adult,
+                            "extra_child": extra_child
                         })
                     segment_start = target_date
                     current_rate = rate
             
             # Add final segment
             if segment_start:
+                extra_adult = (plan.extra_adult_price if plan.extra_adult_price is not None else getattr(room_type, 'extra_adult_price', 0.0)) or 0.0
+                extra_child = (plan.extra_child_price if plan.extra_child_price is not None else getattr(room_type, 'extra_child_price', 0.0)) or 0.0
                 batch_data.append({
                     "room_code": room_type.channel_manager_id,
                     "rate": current_rate,
                     "start_date": segment_start,
                     "end_date": start_date + timedelta(days=days),
-                    "rate_plan_code": plan.channel_manager_id
+                    "rate_plan_code": plan.channel_manager_id,
+                    "extra_adult": extra_adult,
+                    "extra_child": extra_child
                 })
 
             if batch_data:

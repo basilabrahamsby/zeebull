@@ -84,9 +84,9 @@ def push_inventory(room_code: str, available_qty: int, start_date: date, end_dat
     return _send_push(payload, "Inventory", API_URL_INVENTORY)
 
 
-def push_rate(room_code: str, base_price: float, start_date: date, end_date: date = None, rate_plan_code: str = "EP"):
+def push_rate(room_code: str, base_price: float, start_date: date, end_date: date = None, rate_plan_code: str = "EP", extra_adult: float = 0.0, extra_child: float = 0.0):
     """
-    Pushes rates for a specific room type mapping.
+    Pushes rates for a specific room type mapping including extra adult and extra child prices.
     """
     if not end_date:
         end_date = start_date
@@ -94,30 +94,34 @@ def push_rate(room_code: str, base_price: float, start_date: date, end_date: dat
     str_start = start_date.strftime("%Y-%m-%d")
     str_end = end_date.strftime("%Y-%m-%d")
     
+    rate_entry = {
+        "roomCode": room_code,
+        "rate": float(base_price),
+        "rateplanCode": rate_plan_code
+    }
+    if extra_adult and extra_adult > 0:
+        rate_entry["extraAdult"] = float(extra_adult)
+    if extra_child and extra_child > 0:
+        rate_entry["extraChild"] = float(extra_child)
+    
     payload = {
         "hotelCode": HOTEL_CODE,
         "updates": [
             {
                 "startDate": str_start,
                 "endDate": str_end,
-                "rates": [
-                    {
-                        "roomCode": room_code,
-                        "rate": float(base_price),
-                        "rateplanCode": rate_plan_code
-                    }
-                ]
+                "rates": [rate_entry]
             }
         ]
     }
     
-    logger.info(f"[AIOSELL] Pushing Rate: Room={room_code}, Plan={rate_plan_code}, Rate={base_price}, Date={str_start}")
+    logger.info(f"[AIOSELL] Pushing Rate: Room={room_code}, Plan={rate_plan_code}, Rate={base_price}, ExtraAdult={extra_adult}, ExtraChild={extra_child}, Date={str_start}")
     return _send_push(payload, "Rate", API_URL_RATES)
 
 def batch_push_rates(rate_data: list):
     """
     Accepts a list of dictionaries to push multiple rates or dates at once:
-    [{ "room_code": "SUITE", "rate": 5000.0, "start_date": Date, "end_date": Date, "rate_plan_code": "EP" }]
+    [{ "room_code": "SUITE", "rate": 5000.0, "start_date": Date, "end_date": Date, "rate_plan_code": "EP", "extra_adult": 1200.0, "extra_child": 600.0 }]
     """
     updates = []
     
@@ -127,17 +131,23 @@ def batch_push_rates(rate_data: list):
         start = item.get("start_date")
         end = item.get("end_date", start)
         rate_plan_code = item.get("rate_plan_code", "EP")
+        extra_adult = item.get("extra_adult", 0.0)
+        extra_child = item.get("extra_child", 0.0)
+        
+        rate_entry = {
+            "roomCode": room_code,
+            "rate": float(rate),
+            "rateplanCode": rate_plan_code
+        }
+        if extra_adult and float(extra_adult) > 0:
+            rate_entry["extraAdult"] = float(extra_adult)
+        if extra_child and float(extra_child) > 0:
+            rate_entry["extraChild"] = float(extra_child)
         
         updates.append({
             "startDate": start.strftime("%Y-%m-%d"),
             "endDate": end.strftime("%Y-%m-%d"),
-            "rates": [
-                {
-                    "roomCode": room_code,
-                    "rate": float(rate),
-                    "rateplanCode": rate_plan_code
-                }
-            ]
+            "rates": [rate_entry]
         })
         
     payload = {

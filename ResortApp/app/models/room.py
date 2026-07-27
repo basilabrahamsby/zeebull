@@ -15,6 +15,8 @@ class RoomType(Base):
     holiday_price = Column(Float, nullable=True)
     adults_capacity = Column(Integer, default=2)
     children_capacity = Column(Integer, default=0)
+    extra_adult_price = Column(Float, nullable=True, default=0.0)
+    extra_child_price = Column(Float, nullable=True, default=0.0)
     channel_manager_id = Column(String, nullable=True) # For future OTA sync
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False, index=True)
     
@@ -197,6 +199,8 @@ class RatePlan(Base):
     base_price = Column(Float, default=0.0)
     weekend_price = Column(Float, nullable=True)
     price_offset = Column(Float, default=0.0)
+    extra_adult_price = Column(Float, nullable=True, default=0.0)
+    extra_child_price = Column(Float, nullable=True, default=0.0)
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False, index=True)
     
     room_type = relationship("RoomType", back_populates="rate_plans")

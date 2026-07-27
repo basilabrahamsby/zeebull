@@ -198,6 +198,8 @@ def create_room_type(
                     channel_manager_id=plan.get("channel_manager_id"),
                     base_price=float(plan.get("base_price", 0.0)),
                     price_offset=float(plan.get("price_offset", 0.0)),
+                    extra_adult_price=float(plan.get("extra_adult_price")) if plan.get("extra_adult_price") is not None else None,
+                    extra_child_price=float(plan.get("extra_child_price")) if plan.get("extra_child_price") is not None else None,
                     branch_id=effective_branch_id
                 )
                 db.add(db_plan)
@@ -227,6 +229,8 @@ def update_room_type(
     capacity: Optional[int] = Form(None),
     children_capacity: Optional[int] = Form(None),
     extra_bed_price: Optional[float] = Form(None),
+    extra_adult_price: Optional[float] = Form(None),
+    extra_child_price: Optional[float] = Form(None),
     channel_manager_id: Optional[str] = Form(None),
     online_inventory: Optional[int] = Form(None),
     description: Optional[str] = Form(None),
@@ -278,6 +282,8 @@ def update_room_type(
     if total_inventory is not None: db_room_type.total_inventory = total_inventory
     if capacity is not None: db_room_type.adults_capacity = capacity
     if children_capacity is not None: db_room_type.children_capacity = children_capacity
+    if extra_adult_price is not None: db_room_type.extra_adult_price = extra_adult_price
+    if extra_child_price is not None: db_room_type.extra_child_price = extra_child_price
     if channel_manager_id is not None and channel_manager_id != "": db_room_type.channel_manager_id = channel_manager_id
     if online_inventory is not None: db_room_type.online_inventory = online_inventory
     if air_conditioning is not None: db_room_type.air_conditioning = air_conditioning
@@ -372,6 +378,8 @@ def update_room_type(
                     channel_manager_id=plan.get("channel_manager_id"),
                     base_price=float(plan.get("base_price", 0.0)),
                     price_offset=float(plan.get("price_offset", 0.0)),
+                    extra_adult_price=float(plan.get("extra_adult_price")) if plan.get("extra_adult_price") is not None else None,
+                    extra_child_price=float(plan.get("extra_child_price")) if plan.get("extra_child_price") is not None else None,
                     branch_id=db_room_type.branch_id
                 )
                 db.add(db_plan)
