@@ -221,3 +221,35 @@ def push_restriction(room_code: str, start_date: date, end_date: date = None,
     
     logger.info(f"[AIOSELL] Pushing Restrictions: Room={room_code}, StopSell={stop_sell}")
     return _send_push(payload, "Restrictions", API_URL_INVENTORY)
+
+
+def push_mark_noshow(booking_id: str, channel: str = "booking.com"):
+    """
+    Marks a booking as no-show in Aiosell CM API v2.
+    Endpoint: POST https://live.aiosell.com/api/v2/cm/marknoshow/{PARTNER_ID}
+    Currently supports 'booking.com' and 'gommt' (Goibibo & Make My Trip) as channel.
+    """
+    from app.utils.aiosell_config import is_aiosell_active
+    if not is_aiosell_active():
+        print("[AIOSELL] Push Mark No-Show skipped. Channel Manager is disabled.")
+        return False
+        
+    url = f"https://live.aiosell.com/api/v2/cm/marknoshow/{PARTNER_ID}"
+    
+    clean_channel = str(channel).strip().lower()
+    if "booking" in clean_channel:
+        norm_channel = "booking.com"
+    elif "mmt" in clean_channel or "goibibo" in clean_channel or "make" in clean_channel or "gommt" in clean_channel:
+        norm_channel = "gommt"
+    else:
+        norm_channel = clean_channel
+        
+    payload = {
+        "hotelCode": HOTEL_CODE,
+        "bookingId": str(booking_id),
+        "channel": norm_channel
+    }
+    
+    logger.info(f"[AIOSELL] Pushing Mark No-Show: BookingID={booking_id}, Channel={norm_channel}, Hotel={HOTEL_CODE}")
+    return _send_push(payload, "Mark No-Show", url)
+

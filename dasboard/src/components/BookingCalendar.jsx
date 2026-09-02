@@ -181,10 +181,20 @@ const BookingCalendar = ({ rooms, bookings, roomTypeObjects, onBookRoom }) => {
         }
         totalOccupied += matchCount;
       } else {
-        // Soft-allocated booking: use b.num_rooms
-        const rt = roomTypeObjects.find(rt => rt.id === Number(b.room_type_id));
-        if (rt && rt.name.trim().toLowerCase() === group.name.trim().toLowerCase()) {
-          totalOccupied += (Number(b.num_rooms) || 1);
+        // Soft-allocated booking: check room_types_breakdown first, fallback to b.room_type_id
+        if (b.room_types_breakdown && Array.isArray(b.room_types_breakdown) && b.room_types_breakdown.length > 0) {
+          const match = b.room_types_breakdown.find(bd => 
+            (bd.room_type_id && Number(bd.room_type_id) === Number(group.id)) ||
+            (bd.name && bd.name.trim().toLowerCase() === group.name.trim().toLowerCase())
+          );
+          if (match) {
+            totalOccupied += (Number(match.count) || 1);
+          }
+        } else {
+          const rt = roomTypeObjects.find(rt => rt.id === Number(b.room_type_id));
+          if (rt && rt.name.trim().toLowerCase() === group.name.trim().toLowerCase()) {
+            totalOccupied += (Number(b.num_rooms) || 1);
+          }
         }
       }
     });

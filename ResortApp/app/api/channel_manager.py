@@ -9,7 +9,7 @@ import logging
 from app.database import get_db
 from app.models.booking import Booking, BookingRoom
 from app.models.room import RoomType, Room
-from app.api.booking import get_or_create_guest_user, format_display_id
+from app.api.booking import get_or_create_guest_user, format_display_id, parse_display_id
 
 logger = logging.getLogger(__name__)
 
@@ -411,6 +411,35 @@ def _handle_new_booking(payload: dict, db: Session, branch_id: int):
     
     db_booking.display_id = format_display_id(db_booking.id, branch_id=branch_id)
     db.commit()
+
+    # Auto-allocate physical room links for EACH room in payload
+    if rooms:
+        for r_data in rooms:
+            r_code = r_data.get("roomCode")
+            r_type = _map_room_type(db, r_code, branch_id)
+            target_type_id = r_type.id if r_type else room_type_id
+            
+            if target_type_id:
+                # Find an available physical room for this room type during stay dates
+                sub_q = db.query(BookingRoom.room_id).join(Booking).filter(
+                    Booking.status.in_(["Booked", "CheckedIn"]),
+                    Booking.check_in < check_out,
+                    Booking.check_out > check_in
+                )
+                avail_room = db.query(Room).filter(
+                    Room.room_type_id == target_type_id,
+                    Room.id.not_in(sub_q)
+                ).first()
+                
+                if avail_room:
+                    db.add(BookingRoom(booking_id=db_booking.id, room_id=avail_room.id))
+                    logger.info(f"[AIOSELL WEBHOOK] Auto-assigned Room {avail_room.number} (Type ID {target_type_id}) to Booking {db_booking.display_id}")
+                else:
+                    # Fallback: link first room of that type
+                    any_room = db.query(Room).filter(Room.room_type_id == target_type_id).first()
+                    if any_room:
+                        db.add(BookingRoom(booking_id=db_booking.id, room_id=any_room.id))
+        db.commit()
     
     logger.info(f"[AIOSELL WEBHOOK] Created Booking {db_booking.display_id} from {res_id}")
     return {"success": True, "booking_id": db_booking.id, "display_id": db_booking.display_id}
@@ -531,3 +560,61 @@ def _handle_cancel_booking(payload: dict, db: Session):
     db.commit()
     logger.info(f"[AIOSELL WEBHOOK] Cancelled Booking {booking.display_id} from {res_id}")
     return {"success": True, "message": "Cancelled"}
+
+
+@router.post("/mark-no-show")
+async def api_mark_noshow(
+    booking_id: str = Query(...),
+    db: Session = Depends(get_db)
+):
+    """
+    Mark a booking as No-Show internally, clear physical rooms,
+    and push No-Show notice to Aiosell CM API v2.
+    """
+    numeric_id, _ = parse_display_id(str(booking_id))
+    target_id = numeric_id if numeric_id is not None else (int(booking_id) if str(booking_id).isdigit() else None)
+    
+    booking = None
+    if target_id:
+        booking = db.query(Booking).filter(Booking.id == target_id).first()
+    if not booking:
+        booking = db.query(Booking).filter(
+            (Booking.display_id == str(booking_id)) | (Booking.external_id == str(booking_id))
+        ).first()
+        
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+        
+    booking.status = "No Show"
+    
+    # Clear physical room links if assigned
+    if booking.booking_rooms:
+        for br in booking.booking_rooms:
+            if br.room and br.room.status == "Booked":
+                br.room.status = "Available"
+        db.query(BookingRoom).filter(BookingRoom.booking_id == booking.id).delete()
+        
+    db.commit()
+    
+    # Trigger Aiosell Mark No-Show if external_id exists or channel is active
+    aiosell_result = False
+    ext_id = booking.external_id or booking.display_id or str(booking.id)
+    if ext_id:
+        from app.core.aiosell_client import push_mark_noshow
+        aiosell_result = push_mark_noshow(ext_id, booking.source or "booking.com")
+        
+    # Trigger inventory push so room availability updates back on OTAs
+    if booking.room_type_id:
+        from app.core.aiosell_triggers import trigger_inventory_push
+        try:
+            trigger_inventory_push(booking.room_type_id)
+        except Exception as e:
+            logger.error(f"Inventory push error after no-show: {e}")
+            
+    logger.info(f"[NO-SHOW] Marked Booking {booking.display_id or booking.id} as No Show. Aiosell result: {aiosell_result}")
+    return {
+        "success": True,
+        "message": f"Booking {booking.display_id or booking.id} marked as No Show",
+        "aiosell_pushed": aiosell_result
+    }
+

@@ -26,7 +26,7 @@ import {
   RefreshCw, Grid, Coffee, ClipboardList, Package, ExternalLink,
   Utensils, Settings, ChevronDown, UserCheck, Box, PlusCircle,
   CheckCircle2, XCircle, Zap, LogOut, Star, Eye, MessageSquare, Building2,
-  Briefcase, Heart, CreditCard, FileText, Edit
+  Briefcase, Heart, CreditCard, FileText, Edit, UserX
 } from "lucide-react";
 
 ChartJS.register(ArcElement, Tooltip, Legend);
@@ -2842,20 +2842,19 @@ const CheckInModal = ({
                         <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-1">Room Category</p>
                         <p className="font-bold text-indigo-600 text-[10px] sm:text-sm">
                           {(() => {
-                            // 1. Direct room_type_name from API (if backend resolves it)
+                            if (booking.room_types_breakdown && Array.isArray(booking.room_types_breakdown) && booking.room_types_breakdown.length > 0) {
+                              return booking.room_types_breakdown.map(b => `${b.count || 1}x ${b.name || 'Room'}`).join(', ');
+                            }
                             if (booking.room_type_name) return booking.room_type_name;
-                            // 2. Lookup by room_type_id using roomTypeObjects list
                             const byTypeId = booking.room_type_id
                               ? roomTypeObjects?.find(rt => rt.id === booking.room_type_id)?.name
                               : null;
                             if (byTypeId) return byTypeId;
-                            // 3. From assigned rooms
                             const firstRoom = booking.rooms?.[0];
                             const byRoomType = firstRoom?.room_type_id
                               ? roomTypeObjects?.find(rt => rt.id === firstRoom.room_type_id)?.name
                               : null;
                             if (byRoomType) return byRoomType;
-                            // 4. Fallback to room.type string if valid
                             if (firstRoom?.type && firstRoom.type !== 'undefined') return firstRoom.type;
                             return 'Any Category';
                           })()}
@@ -6238,6 +6237,40 @@ const Bookings = () => {
     }
   };
 
+  const markNoShowBooking = async (b) => {
+    const displayId = generateBookingId(b);
+    if (
+      !window.confirm(
+        `Are you sure you want to mark booking ${displayId} (${b.guest_name || "Guest"}) as NO SHOW?\n\nThis will update status to No Show, release physical room availability, and notify Aiosell Channel Manager.`
+      )
+    )
+      return;
+    try {
+      const response = await API.post(
+        `/channel-manager/mark-no-show?booking_id=${b.id}`,
+        {},
+        authHeader()
+      );
+      showBannerMessage(
+        "success",
+        `Booking ${displayId} marked as No Show successfully! ${response.data?.aiosell_pushed ? "(Synced with Aiosell)" : ""}`
+      );
+      setBookings((prevBookings) =>
+        prevBookings.map((item) =>
+          item.id === b.id && item.is_package === b.is_package
+            ? { ...item, status: "No Show" }
+            : item
+        )
+      );
+    } catch (err) {
+      console.error("Mark No Show error:", err);
+      showBannerMessage(
+        "error",
+        err.response?.data?.detail || "Failed to mark booking as No Show."
+      );
+    }
+  };
+
   const RoomSelection = React.memo(
     ({ rooms, selectedRoomNumbers, onRoomToggle }) => {
       return (
@@ -7232,6 +7265,15 @@ const Bookings = () => {
                                     <Trash2 className="w-5 h-5" />
                                   </button>
                                 )}
+                                {!["checkedout", "cancelled", "noshow"].includes(b.status?.toLowerCase().replace(/[-_]/g, "")) && (
+                                   <button
+                                     onClick={() => markNoShowBooking(b)}
+                                     className="w-10 h-10 bg-amber-100 text-amber-700 hover:bg-amber-600 hover:text-white rounded-xl border-2 border-amber-300 hover:border-amber-600 transition-all shadow-md flex items-center justify-center font-bold"
+                                     title="Mark No-Show (Sync Aiosell)"
+                                   >
+                                     <UserX className="w-5 h-5" />
+                                   </button>
+                                 )}
                                 {b.guest_email && (
                                   <button
                                     onClick={() => shareViaEmail(b)}
