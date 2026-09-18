@@ -1,6 +1,9 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
+import axios from "axios";
+import { getApiBaseUrl } from "./utils/env";
+import SuspendedLockScreen from "./components/SuspendedLockScreen";
 import { NotificationProvider } from "./contexts/NotificationContext";
 import { jwtDecode } from "jwt-decode";
 import { BranchProvider } from "./contexts/BranchContext";
@@ -68,8 +71,50 @@ const getRouterBasename = () => {
 
 function App() {
   const basename = getRouterBasename();
+  const [isLocked, setIsLocked] = useState(false);
+  const [lockData, setLockData] = useState(null);
+
+  useEffect(() => {
+    const checkLockStatus = async () => {
+      try {
+        const baseUrl = getApiBaseUrl();
+        const res = await axios.get(`${baseUrl}/api/system-lock/status`);
+        if (res.data?.is_locked) {
+          setIsLocked(true);
+          setLockData(res.data);
+        } else {
+          setIsLocked(false);
+        }
+      } catch (err) {
+        if (err.response?.status === 423) {
+          setIsLocked(true);
+          setLockData(err.response?.data?.state || {});
+        }
+      }
+    };
+
+    checkLockStatus();
+
+    const handleSuspendedEvent = (e) => {
+      setIsLocked(true);
+      setLockData(e.detail || {});
+    };
+
+    window.addEventListener("system-suspended", handleSuspendedEvent);
+    return () => window.removeEventListener("system-suspended", handleSuspendedEvent);
+  }, []);
+
   return (
     <Router basename={basename}>
+      {isLocked && (
+        <SuspendedLockScreen
+          initialLockData={lockData}
+          onUnlocked={() => {
+            setIsLocked(false);
+            setLockData(null);
+          }}
+        />
+      )}
       <BranchProvider>
         <NotificationProvider>
           <Routes>

@@ -246,6 +246,10 @@ async def absolute_path_redirect_middleware(request: Request, call_next):
 
 app.add_middleware(PerformanceMiddleware)
 
+# System Service Suspension Lock Middleware
+from app.middleware.lock_middleware import LockEnforcementMiddleware
+app.add_middleware(LockEnforcementMiddleware)
+
 # Static file directories - use absolute paths so they work regardless of working directory
 _MAIN_DIR = os.path.dirname(os.path.abspath(__file__))
 _UPLOADS_DIR = os.path.join(os.path.dirname(_MAIN_DIR), "uploads")
@@ -283,6 +287,8 @@ if userend_build_path.exists():
         )
 
 # API Routes
+from app.api import system_lock
+app.include_router(system_lock.router, prefix="/api", tags=["System Service Suspension Lock"])
 app.include_router(settings_router, prefix="/api/settings", tags=["Settings"])
 app.include_router(auth.router, prefix="/api", tags=["Authentication"])
 app.include_router(user.router, prefix="/api", tags=["Users"])

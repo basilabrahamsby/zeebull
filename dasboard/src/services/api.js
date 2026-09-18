@@ -99,6 +99,23 @@ API.interceptors.response.use(
       });
     }
 
+    // Handle 423 (Locked / Service Suspended)
+    if (error.response?.status === 423 || error.response?.data?.code === "SERVICE_SUSPENDED") {
+      console.warn("Service is suspended due to pending settlement.");
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("system-suspended", {
+            detail: error.response?.data?.state || error.response?.data || {}
+          })
+        );
+      }
+      return Promise.reject({
+        ...error,
+        message: error.response?.data?.detail || "Service suspended due to pending settlement.",
+        isSuspended: true,
+      });
+    }
+
     // For other errors, return as-is
     return Promise.reject(error);
   }

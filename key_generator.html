@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TeqMates - Activation Key Generator</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --card-bg: #161b22;
+      --border: #30363d;
+      --primary: #238636;
+      --primary-hover: #2ea043;
+      --accent: #58a6ff;
+      --danger: #f85149;
+      --text: #c9d1d9;
+      --text-muted: #8b949e;
+      --text-heading: #f0f6fc;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      display: flex;
+      min-height: 100vh;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      width: 100%;
+      max-width: 520px;
+      padding: 32px;
+      box-shadow: 0 16px 36px rgba(0,0,0,0.5);
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+    .badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 20px;
+      background: rgba(88, 166, 255, 0.15);
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      margin-bottom: 12px;
+      text-transform: uppercase;
+    }
+    h1 {
+      color: var(--text-heading);
+      font-size: 22px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    p.subtitle {
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+    .form-group {
+      margin-bottom: 20px;
+    }
+    label {
+      display: block;
+      color: var(--text-heading);
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    input {
+      width: 100%;
+      padding: 12px 14px;
+      background: #0d1117;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: #fff;
+      font-size: 15px;
+      font-family: monospace;
+      text-transform: uppercase;
+      transition: border-color 0.2s;
+    }
+    input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.2);
+    }
+    .btn {
+      width: 100%;
+      padding: 14px;
+      background: var(--primary);
+      color: #fff;
+      font-size: 15px;
+      font-weight: 600;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+    }
+    .btn:hover {
+      background: var(--primary-hover);
+    }
+    .btn:active {
+      transform: scale(0.99);
+    }
+    .result-box {
+      margin-top: 24px;
+      padding: 20px;
+      background: rgba(35, 134, 54, 0.1);
+      border: 1px solid rgba(35, 134, 54, 0.4);
+      border-radius: 8px;
+      display: none;
+    }
+    .result-label {
+      font-size: 12px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+    .key-display {
+      font-size: 20px;
+      font-family: monospace;
+      font-weight: 700;
+      color: #3fb950;
+      letter-spacing: 1px;
+      word-break: break-all;
+      margin-bottom: 16px;
+      user-select: all;
+    }
+    .btn-action-group {
+      display: flex;
+      gap: 10px;
+    }
+    .btn-secondary {
+      flex: 1;
+      padding: 10px;
+      background: #21262d;
+      color: var(--text-heading);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      text-align: center;
+      transition: background 0.2s;
+    }
+    .btn-secondary:hover {
+      background: #30363d;
+    }
+    .footer {
+      margin-top: 24px;
+      font-size: 12px;
+      color: var(--text-muted);
+      text-align: center;
+      border-top: 1px solid var(--border);
+      padding-top: 16px;
+    }
+    details {
+      margin-top: 16px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    summary {
+      cursor: pointer;
+      color: var(--accent);
+      margin-bottom: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <span class="badge">Internal Support Tool</span>
+      <h1>Activation Key Generator</h1>
+      <p class="subtitle">Generate unique unlock keys for suspended client portals</p>
+    </div>
+
+    <div class="form-group">
+      <label for="refInput">System Lock Reference Code</label>
+      <input type="text" id="refInput" placeholder="e.g. ZEB-2026-A8F2" autocomplete="off" />
+    </div>
+
+    <details>
+      <summary>Master Signing Secret (Advanced)</summary>
+      <div class="form-group" style="margin-top: 8px;">
+        <input type="text" id="secretInput" value="TEQMATES_ZEEBULL_MASTER_LOCK_SECRET_2026#!" style="font-size: 12px;" />
+      </div>
+    </details>
+
+    <button class="btn" onclick="generateKey()">Generate Activation Key</button>
+
+    <div class="result-box" id="resultBox">
+      <div class="result-label">Unique Activation Key</div>
+      <div class="key-display" id="keyDisplay">ACT-XXXX-XXXX-XXXX-XXXX</div>
+      <div class="btn-action-group">
+        <button class="btn-secondary" id="copyBtn" onclick="copyKey()">📋 Copy Key</button>
+        <a class="btn-secondary" id="waBtn" href="#" target="_blank">💬 WhatsApp</a>
+      </div>
+    </div>
+
+    <div class="footer">
+      TeqMates Software Solutions &bull; Cryptographic Offline Generator
+    </div>
+  </div>
+
+  <script>
+    async function hmacSha256(keyStr, messageStr) {
+      const enc = new TextEncoder();
+      const keyData = enc.encode(keyStr);
+      const msgData = enc.encode(messageStr);
+
+      const cryptoKey = await crypto.subtle.importKey(
+        'raw',
+        keyData,
+        { name: 'HMAC', hash: 'SHA-256' },
+        false,
+        ['sign']
+      );
+
+      const signature = await crypto.subtle.sign('HMAC', cryptoKey, msgData);
+      const hashArray = Array.from(new Uint8Array(signature));
+      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    async function generateKey() {
+      const ref = document.getElementById('refInput').value.trim().toUpperCase();
+      const secret = document.getElementById('secretInput').value.trim();
+
+      if (!ref) {
+        alert('Please enter the Lock Reference Code provided by the client.');
+        return;
+      }
+
+      try {
+        const hex = await hmacSha256(secret, ref);
+        const raw16 = hex.slice(0, 16).toUpperCase();
+        const formattedKey = `ACT-${raw16.slice(0,4)}-${raw16.slice(4,8)}-${raw16.slice(8,12)}-${raw16.slice(12,16)}`;
+
+        document.getElementById('keyDisplay').innerText = formattedKey;
+        document.getElementById('resultBox').style.display = 'block';
+
+        const waMsg = encodeURIComponent(`Hello! Here is your activation key for system unlock: ${formattedKey}\n\nPlease paste it into your admin lock screen to restore service.`);
+        document.getElementById('waBtn').href = `https://wa.me/?text=${waMsg}`;
+      } catch (err) {
+        alert('Error generating key: ' + err.message);
+      }
+    }
+
+    function copyKey() {
+      const key = document.getElementById('keyDisplay').innerText;
+      navigator.clipboard.writeText(key).then(() => {
+        const btn = document.getElementById('copyBtn');
+        btn.innerText = '✅ Copied!';
+        setTimeout(() => { btn.innerText = '📋 Copy Key'; }, 2000);
+      });
+    }
+
+    // Auto-generate on pressing Enter
+    document.getElementById('refInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') generateKey();
+    });
+  </script>
+</body>
+</html>
